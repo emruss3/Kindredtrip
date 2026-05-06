@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v2_rich_fields";
+const VERSION = "get_packages_v3_limit_1000";
 
 function corsHeaders() {
   return {
@@ -26,7 +26,7 @@ serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       search_id = url.searchParams.get("search_id");
-      limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25", 10), 100);
+      limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25", 10), 1000);
       offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
       only_priced = url.searchParams.get("only_priced") === "true";
       const sb = url.searchParams.get("sort_by");
@@ -34,7 +34,7 @@ serve(async (req) => {
     } else if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       search_id = body.search_id ?? null;
-      limit = Math.min(body.limit ?? 25, 100);
+      limit = Math.min(body.limit ?? 25, 1000);
       offset = body.offset ?? 0;
       only_priced = body.only_priced === true;
       if (["score", "price_asc", "price_desc"].includes(body.sort_by)) sort_by = body.sort_by;

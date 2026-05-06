@@ -289,16 +289,30 @@
 
   document.getElementById("year").textContent = new Date().getFullYear();
 
-  // Caribbean photo pool — mapped to countries by hash
+  // Caribbean / tropical photo pool — varied so each resort gets a unique image
   const PHOTO_POOL = [
-    "1559128010-7c1ad6e1b6a5", // tropical beach
-    "1540541338287-41700207dee6", // turquoise cay
-    "1535262971677-7b1c41a18f97", // palm caribbean
-    "1571003123894-1f0594d2b5d9", // palm tree
-    "1506929562872-bb421503ef21", // turquoise water
-    "1518614368389-0aa1e02fbb4c", // beach drone
-    "1518509562904-e7ef99cddc85", // sand
-    "1571919743851-c4df8b6ee133", // beach chairs
+    "1507525428034-b723cf961d3e",  // beach palm overlook
+    "1559128010-7c1ad6e1b6a5",     // tropical beach
+    "1540541338287-41700207dee6",  // turquoise cay
+    "1535262971677-7b1c41a18f97",  // palm caribbean
+    "1571003123894-1f0594d2b5d9",  // palm tree
+    "1506929562872-bb421503ef21",  // turquoise water
+    "1571919743851-c4df8b6ee133",  // beach chairs
+    "1518509562904-e7ef99cddc85",  // sand
+    "1518614368389-0aa1e02fbb4c",  // beach drone
+    "1580541631971-a1a09cc1cdc5",  // jamaica green
+    "1505881502353-a1986add3762",  // pool resort
+    "1542359649-31e03cd4d909",     // beach overhead
+    "1531253450048-9bba2bbd3f59",  // beach cliff
+    "1559827260-dc66d52bef19",     // beach hut
+    "1483683804023-6ccdb62f86ef",  // tropical
+    "1504253163759-c23fccaebb55",  // resort palm
+    "1520454974749-611b7248ffdb",  // beach ocean
+    "1517457373958-b7bdd4587205",  // resort pool
+    "1512100356356-de1b84283e18",  // turquoise lagoon
+    "1553535912-5cd7569655e1",     // tropical beach
+    "1562883676-8c7feb83f09b",     // sea cliff
+    "1597212624256-eaa9d4da5c46",  // beach view
   ];
 
   function hashStr(s) {
@@ -306,8 +320,9 @@
     for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
     return Math.abs(h);
   }
-  function photoForCountry(country, w = 480) {
-    const id = PHOTO_POOL[hashStr(country || "default") % PHOTO_POOL.length];
+  function photoForResort(resort, w = 480) {
+    const seed = resort?.resort_id || resort?.resort_name || "default";
+    const id = PHOTO_POOL[hashStr(seed) % PHOTO_POOL.length];
     return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
   }
 
@@ -377,7 +392,21 @@
   };
 
   // Sidebar UI state
-  const sidebarShowAll = new Set();  // group keys with "show all" expanded
+  const sidebarShowAll = new Set();   // group keys with "show all" expanded
+  const sidebarOpenOverride = new Map();  // group key -> true (forced open) | false (forced closed)
+
+  function onSidebarToggle(key, summaryEl) {
+    // <details> click also fires this - we read .open AFTER the toggle
+    const details = summaryEl.parentElement;
+    // setTimeout to read post-toggle state
+    requestAnimationFrame(() => {
+      sidebarOpenOverride.set(key, details.open);
+    });
+  }
+  function isOpenFor(key, defaultOpen) {
+    if (sidebarOpenOverride.has(key)) return sidebarOpenOverride.get(key);
+    return defaultOpen;
+  }
 
   // Tag definitions — what we surface in the sidebar (in display order)
   const KIDS_AMENITY_PRIORITY = [
@@ -701,7 +730,7 @@
   async function fetchAndRender() {
     setStatus("Loading ranked trips…", { spinner: true });
     const data = await callFn(
-      `get_packages?search_id=${lastSearchId}&limit=100&only_priced=true&sort_by=${lastSortBy}`,
+      `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
     allPackages = (data.packages || []).map((p) => {
@@ -810,9 +839,10 @@
       ? `<button class="tag-show-more" onclick="toggleShowAll('${showKey}')">${showAll ? "Show less" : `Show all ${sorted.length}`}</button>`
       : "";
 
+    const isOpen = isOpenFor("country", true);
     return `
-      <details class="sidebar-block" open>
-        <summary>
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary ontoggle="onSidebarToggle('country', this)" onclick="onSidebarToggle('country', this)">
           <span>Country${filters.country ? ` <span class="summary-active">1</span>` : ""}</span>
         </summary>
         <div class="sidebar-block-body">
@@ -826,7 +856,6 @@
   function renderTagBlock(title, group, priority, sourceGroup, blockKey) {
     const key = blockKey || group;
     const allCounts = tagCounts(sourceGroup);
-    // Only show tags that exist in the data
     const present = priority
       .map((tag) => [tag, allCounts[tag] || 0])
       .filter(([, n]) => n > 0);
@@ -836,8 +865,6 @@
     const visible = showAll ? present : present.slice(0, 6);
 
     const activeSet = filters[group];
-    const activeCount = visible.filter(([t]) => activeSet.has(t)).length +
-      (showAll ? 0 : present.slice(6).filter(([t]) => activeSet.has(t)).length);
 
     const rows = visible.map(([tag, count]) => {
       const active = activeSet.has(tag) ? " active" : "";
@@ -853,11 +880,12 @@
       ? `<button class="tag-show-more" onclick="toggleShowAll('${key}')">${showAll ? "Show less" : `Show all ${present.length}`}</button>`
       : "";
 
-    const isOpen = key === "amenities" || key === "rooms" || activeSet.size > 0;
+    const defaultOpen = key === "amenities" || key === "rooms" || activeSet.size > 0;
+    const isOpen = isOpenFor(key, defaultOpen);
     return `
       <details class="sidebar-block"${isOpen ? " open" : ""}>
-        <summary>
-          <span>${title}${activeCount > 0 ? ` <span class="summary-active">${activeSet.size}</span>` : ""}</span>
+        <summary onclick="onSidebarToggle('${key}', this)">
+          <span>${title}${activeSet.size > 0 ? ` <span class="summary-active">${activeSet.size}</span>` : ""}</span>
         </summary>
         <div class="sidebar-block-body">
           ${rows}
@@ -890,9 +918,10 @@
       ? `<button class="tag-show-more" onclick="toggleShowAll('${key}')">${showAll ? "Show less" : `Show all ${sorted.length}`}</button>`
       : "";
 
+    const isOpen = isOpenFor(key, filters.brands.size > 0);
     return `
-      <details class="sidebar-block"${filters.brands.size > 0 ? " open" : ""}>
-        <summary>
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary onclick="onSidebarToggle('${key}', this)">
           <span>Hotel brand${filters.brands.size > 0 ? ` <span class="summary-active">${filters.brands.size}</span>` : ""}</span>
         </summary>
         <div class="sidebar-block-body">
@@ -906,10 +935,12 @@
   function renderPriceBlock(bounds) {
     const min = filters.priceMin ?? "";
     const max = filters.priceMax ?? "";
-    const isOpen = filters.priceMin != null || filters.priceMax != null;
+    const defaultOpen = filters.priceMin != null || filters.priceMax != null;
+    const isOpen = isOpenFor("price", defaultOpen);
+    const isActive = filters.priceMin != null || filters.priceMax != null;
     return `
       <details class="sidebar-block"${isOpen ? " open" : ""}>
-        <summary><span>Total price${isOpen ? ` <span class="summary-active">1</span>` : ""}</span></summary>
+        <summary onclick="onSidebarToggle('price', this)"><span>Total price${isActive ? ` <span class="summary-active">1</span>` : ""}</span></summary>
         <div class="sidebar-block-body">
           <div class="range-row">
             <input type="number" placeholder="Min $" value="${min}" oninput="setPriceMin(this.value)" />
@@ -923,10 +954,10 @@
   }
 
   function renderRatingBlock() {
-    const isOpen = filters.ratingMin > 0;
+    const isOpen = isOpenFor("rating", filters.ratingMin > 0);
     return `
       <details class="sidebar-block"${isOpen ? " open" : ""}>
-        <summary><span>Min rating${isOpen ? ` <span class="summary-active">1</span>` : ""}</span></summary>
+        <summary onclick="onSidebarToggle('rating', this)"><span>Min rating${filters.ratingMin > 0 ? ` <span class="summary-active">1</span>` : ""}</span></summary>
         <div class="sidebar-block-body">
           <input type="range" min="0" max="95" step="5" value="${filters.ratingMin}" class="rating-slider" oninput="setRatingMin(this.value)" />
           <div class="rating-display">
@@ -1055,7 +1086,7 @@
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
-    const photoUrl = photoForCountry(r.country, 480);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name }, 480);
 
     return `
       <article class="card">
