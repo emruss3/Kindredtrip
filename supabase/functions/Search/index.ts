@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "Search_v9_auto_invokes_batch";
+const VERSION = "Search_v10_forwards_included_countries";
 
 type SearchRequest = {
   origin_iata: string;
@@ -18,6 +18,7 @@ type SearchRequest = {
   require_direct_flight?: boolean;
   require_connecting_rooms?: boolean;
   excluded_countries?: string[];
+  included_countries?: string[];
 
   // NEW: allow client to disable auto-invoke for testing or advanced flows
   skip_auto_process?: boolean;
@@ -107,7 +108,11 @@ serve(async (req) => {
             Authorization: `Bearer ${serviceRoleKey}`,
             apikey: serviceRoleKey,
           },
-          body: JSON.stringify({ search_id, excluded_countries: body.excluded_countries ?? [] }),
+          body: JSON.stringify({
+            search_id,
+            excluded_countries: body.excluded_countries ?? [],
+            included_countries: body.included_countries ?? [],
+          }),
         });
         // deno-lint-ignore no-explicit-any
         const er = (globalThis as any).EdgeRuntime;

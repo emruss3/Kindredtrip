@@ -309,6 +309,82 @@ button { font-family: inherit; }
   pointer-events: auto;
 }
 
+/* Homepage destination chips row */
+#dest-row { align-items: center; }
+.dest-hint {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-left: 4px;
+}
+.toggle.dest-more {
+  background: transparent;
+  border-style: dashed;
+  font-weight: 500;
+}
+
+/* Destinations picker modal */
+.dest-picker {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 23, 33, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-5);
+}
+.dest-picker[hidden] { display: none; }
+.dest-picker-inner {
+  background: #fff;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-xl);
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+}
+.dest-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px solid var(--line);
+}
+.dest-picker-header strong {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.dest-picker-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink);
+}
+.dest-picker-close:hover { background: var(--line-soft); }
+.dest-picker-grid {
+  padding: var(--s-5) var(--s-6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow-y: auto;
+}
+.dest-picker-footer {
+  padding: var(--s-4) var(--s-6);
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-3);
+}
+
 /* ---------- Hero ---------- */
 .hero {
   position: relative;
@@ -1605,6 +1681,28 @@ input[type="range"].rating-slider::-moz-range-thumb {
   border-radius: var(--r-pill);
   color: var(--ink-1);
   z-index: 1;
+}
+.modal-photo-attr {
+  position: absolute;
+  bottom: 8px; left: 8px; right: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  z-index: 1;
+  line-height: 1.3;
+  pointer-events: auto;
+}
+.modal-photo-attr a { color: #fff; text-decoration: underline; }
+.card-photo-attr {
+  position: absolute;
+  bottom: 6px; right: 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  letter-spacing: 0.02em;
+  font-weight: 500;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .modal-close {

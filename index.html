@@ -167,7 +167,28 @@
         <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
         <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
       </div>
+
+      <div class="search-extras" id="dest-row">
+        <span class="search-extras-label">Destinations</span>
+        <span id="dest-chips"></span>
+        <button type="button" class="toggle dest-more" onclick="openDestPicker()">+ More</button>
+        <span class="dest-hint" id="dest-hint">Anywhere in the Caribbean</span>
+      </div>
     </form>
+
+    <div id="dest-picker" class="dest-picker" hidden>
+      <div class="dest-picker-inner">
+        <div class="dest-picker-header">
+          <strong>Choose destinations</strong>
+          <button type="button" class="dest-picker-close" onclick="closeDestPicker()" aria-label="Close">×</button>
+        </div>
+        <div class="dest-picker-grid" id="dest-picker-grid"></div>
+        <div class="dest-picker-footer">
+          <button type="button" class="btn btn-secondary" onclick="filters.country.clear(); syncHomepageDestinationChips(); renderDestPicker();">Clear</button>
+          <button type="button" class="btn btn-primary" onclick="closeDestPicker()">Done</button>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -300,7 +321,8 @@
         KindredTrips
       </div>
       <p class="footer-disclosure">
-        Caribbean family travel, ranked by what fits your family. Independent. Family-run.
+        Caribbean family travel, ranked by what fits your family. Independent. Family-run.<br/><br/>
+        Place data and resort photos provided by <a href="https://maps.google.com" target="_blank" rel="noopener">Google</a>.
       </p>
     </div>
     <div class="footer-col">
@@ -401,13 +423,87 @@
     cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
   });
 
-  // Featured destination clicks → run a search and post-filter to that country
+  // Featured destination clicks → toggle that country into homepage selection,
+  // then scroll to the search form so the user sees the chip selected.
   document.querySelectorAll("[data-country]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      window.__includedCountry = btn.dataset.country;
-      runSearch();
+      const country = btn.dataset.country;
+      if (filters.country.has(country)) filters.country.delete(country);
+      else filters.country.add(country);
+      syncHomepageDestinationChips();
+      document.getElementById("hero").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
+
+  // List of major Caribbean destinations (top countries by family resort count)
+  // Populated dynamically from the data once we have results, falls back to this list otherwise
+  const DEFAULT_DESTINATIONS = [
+    "Mexico", "Dominican Republic", "Jamaica", "Cuba", "Bahamas",
+    "Turks and Caicos", "Aruba", "Barbados", "Saint Lucia",
+    "Cayman Islands", "Antigua and Barbuda", "Grenada", "Curacao",
+    "Puerto Rico", "Trinidad and Tobago", "Saint Vincent and the Grenadines",
+    "Belize", "Costa Rica", "Honduras", "Panama",
+  ];
+
+  function homepageDestinations() {
+    if (allPackages.length > 0) {
+      const set = new Set();
+      allPackages.forEach((p) => { if (p.resorts?.country) set.add(p.resorts.country); });
+      return Array.from(set).sort();
+    }
+    return DEFAULT_DESTINATIONS;
+  }
+
+  function syncHomepageDestinationChips() {
+    const chipsEl = document.getElementById("dest-chips");
+    if (!chipsEl) return;
+    const selected = Array.from(filters.country);
+    const visible = selected.length > 0
+      ? selected
+      : ["Mexico", "Dominican Republic", "Jamaica", "Bahamas", "Turks and Caicos"];
+
+    chipsEl.innerHTML = visible.map((country) => {
+      const active = filters.country.has(country) ? " active" : "";
+      const safe = country.replace(/'/g, "\\'");
+      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination('${safe}')">${escapeHtml(country)}</button>`;
+    }).join("");
+
+    const hintEl = document.getElementById("dest-hint");
+    if (hintEl) {
+      hintEl.textContent = filters.country.size === 0
+        ? "Anywhere in the Caribbean"
+        : `${filters.country.size} selected`;
+      hintEl.style.display = filters.country.size > 0 ? "none" : "";
+    }
+  }
+
+  function toggleHomepageDestination(country) {
+    if (filters.country.has(country)) filters.country.delete(country);
+    else filters.country.add(country);
+    syncHomepageDestinationChips();
+  }
+
+  function openDestPicker() {
+    renderDestPicker();
+    document.getElementById("dest-picker").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  function closeDestPicker() {
+    document.getElementById("dest-picker").hidden = true;
+    document.body.style.overflow = "";
+  }
+  function renderDestPicker() {
+    const grid = document.getElementById("dest-picker-grid");
+    const list = homepageDestinations();
+    grid.innerHTML = list.map((country) => {
+      const active = filters.country.has(country) ? " active" : "";
+      const safe = country.replace(/'/g, "\\'");
+      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination('${safe}'); renderDestPicker();">${escapeHtml(country)}</button>`;
+    }).join("");
+  }
+
+  // Initial population
+  syncHomepageDestinationChips();
 
   // Topbar scroll behavior
   const topbar = document.getElementById("topbar");
@@ -495,7 +591,7 @@
 
   // Filter state
   const filters = {
-    country: null,
+    country: new Set(),       // multi-select countries
     amenities: new Set(),
     rooms: new Set(),
     styles: new Set(),
@@ -595,23 +691,27 @@
   }
 
   function packageMatchesFilters(pkg) {
+    return packageMatchesFiltersExcluding(pkg, null);
+  }
+
+  function packageMatchesFiltersExcluding(pkg, exclude) {
     const r = pkg.resorts || {};
-    if (filters.country && r.country !== filters.country) return false;
-    if (filters.priceMin != null && (pkg.total_price || 0) < filters.priceMin) return false;
-    if (filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
-    if (filters.ratingMin > 0 && (r.avg_user_rating || 0) < filters.ratingMin) return false;
-    if (filters.brands.size > 0 && !filters.brands.has(r.hotel_brand || "")) return false;
+    if (exclude !== "country" && filters.country.size > 0 && !filters.country.has(r.country)) return false;
+    if (exclude !== "price"   && filters.priceMin != null && (pkg.total_price || 0) < filters.priceMin) return false;
+    if (exclude !== "price"   && filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
+    if (exclude !== "rating"  && filters.ratingMin > 0 && (r.avg_user_rating || 0) < filters.ratingMin) return false;
+    if (exclude !== "brands"  && filters.brands.size > 0 && !filters.brands.has(r.hotel_brand || "")) return false;
 
     const t = pkg._tags;
-    for (const tag of filters.amenities) if (!t.amenities.includes(tag)) return false;
-    for (const tag of filters.rooms) if (!t.rooms.includes(tag)) return false;
-    for (const tag of filters.styles) if (!t.styles.includes(tag)) return false;
-    for (const tag of filters.highlights) if (!t.highlights.includes(tag)) return false;
+    if (exclude !== "amenities")  for (const tag of filters.amenities)  if (!t.amenities.includes(tag)) return false;
+    if (exclude !== "rooms")      for (const tag of filters.rooms)      if (!t.rooms.includes(tag)) return false;
+    if (exclude !== "styles")     for (const tag of filters.styles)     if (!t.styles.includes(tag)) return false;
+    if (exclude !== "highlights") for (const tag of filters.highlights) if (!t.highlights.includes(tag)) return false;
     return true;
   }
 
   function activeFilterCount() {
-    return (filters.country ? 1 : 0) +
+    return filters.country.size +
       filters.amenities.size + filters.rooms.size + filters.styles.size +
       filters.highlights.size + filters.brands.size +
       (filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
@@ -619,7 +719,7 @@
   }
 
   function clearAllFilterState() {
-    filters.country = null;
+    filters.country.clear();
     filters.amenities.clear();
     filters.rooms.clear();
     filters.styles.clear();
@@ -629,6 +729,7 @@
     filters.priceMax = null;
     filters.ratingMin = 0;
     sidebarShowAll.clear();
+    syncHomepageDestinationChips();
   }
   function clearAllFilters() {
     clearAllFilterState();
@@ -642,9 +743,10 @@
   }
 
   function setCountryFilter(country) {
-    filters.country = filters.country === country ? null : country;
+    if (filters.country.has(country)) filters.country.delete(country);
+    else filters.country.add(country);
+    syncHomepageDestinationChips();
     renderResults();
-    document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function setRatingMin(value) {
@@ -805,10 +907,9 @@
         excluded_countries: [],
         ...flags,
       };
-      // Featured destination → applied as a post-search country filter
-      if (window.__includedCountry) {
-        filters.country = window.__includedCountry;
-        window.__includedCountry = null;
+      // Homepage country selection feeds both server-side filter and post-search sidebar
+      if (filters.country.size > 0) {
+        body.included_countries = Array.from(filters.country);
       }
 
       lastSearchSummary = body;
@@ -870,10 +971,12 @@
     return set.size;
   }
 
-  // Aggregate counts of tags across allPackages (used for sidebar)
-  function tagCounts(group) {
+  // Aggregate counts of tags across allPackages, EXCLUDING the named filter group
+  // (so when user has selected "Mexico" in country, country counts don't all go to 0).
+  function tagCounts(group, excludeGroup) {
     const counts = {};
     allPackages.forEach((p) => {
+      if (!packageMatchesFiltersExcluding(p, excludeGroup)) return;
       const tags = p._tags?.[group] || [];
       tags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; });
     });
@@ -883,6 +986,7 @@
   function brandCounts() {
     const counts = {};
     allPackages.forEach((p) => {
+      if (!packageMatchesFiltersExcluding(p, "brands")) return;
       const b = p.resorts?.hotel_brand;
       if (!b) return;
       counts[b] = (counts[b] || 0) + 1;
@@ -893,6 +997,7 @@
   function countryCountsAgg() {
     const counts = {};
     allPackages.forEach((p) => {
+      if (!packageMatchesFiltersExcluding(p, "country")) return;
       const c = p.resorts?.country;
       if (!c) return;
       counts[c] = (counts[c] || 0) + 1;
@@ -967,7 +1072,7 @@
     const visible = showAll ? sorted : sorted.slice(0, 8);
 
     const rows = visible.map(([country, count]) => {
-      const active = filters.country === country ? " active" : "";
+      const active = filters.country.has(country) ? " active" : "";
       const safeCountry = country.replace(/'/g, "\\'");
       return `<button class="tag-row${active}" onclick="setCountryFilter('${safeCountry}')">
         <span class="tag-checkbox"></span>
@@ -984,7 +1089,7 @@
     return `
       <details class="sidebar-block"${isOpen ? " open" : ""}>
         <summary ontoggle="onSidebarToggle('country', this)" onclick="onSidebarToggle('country', this)">
-          <span>Country${filters.country ? ` <span class="summary-active">1</span>` : ""}</span>
+          <span>Country${filters.country.size > 0 ? ` <span class="summary-active">${filters.country.size}</span>` : ""}</span>
         </summary>
         <div class="sidebar-block-body">
           ${rows}
@@ -996,7 +1101,7 @@
 
   function renderTagBlock(title, group, priority, sourceGroup, blockKey) {
     const key = blockKey || group;
-    const allCounts = tagCounts(sourceGroup);
+    const allCounts = tagCounts(sourceGroup, group);
     const present = priority
       .map((tag) => [tag, allCounts[tag] || 0])
       .filter(([, n]) => n > 0);
@@ -1113,9 +1218,10 @@
 
   function renderActiveFilterPills() {
     const pills = [];
-    if (filters.country) {
-      pills.push(`<button class="active-filter-pill" onclick="setCountryFilter('${filters.country.replace(/'/g, "\\'")}')">${escapeHtml(filters.country)}<span class="x">×</span></button>`);
-    }
+    filters.country.forEach((country) => {
+      const safe = country.replace(/'/g, "\\'");
+      pills.push(`<button class="active-filter-pill" onclick="setCountryFilter('${safe}')">${escapeHtml(country)}<span class="x">×</span></button>`);
+    });
     [["amenities", filters.amenities], ["rooms", filters.rooms], ["styles", filters.styles], ["highlights", filters.highlights], ["brands", filters.brands]].forEach(([group, set]) => {
       set.forEach((tag) => {
         const safe = tag.replace(/'/g, "\\'");
@@ -1246,11 +1352,13 @@
 
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
 
+    const usingGooglePhoto = Array.isArray(r.photo_refs) && r.photo_refs.length > 0;
     return `
       <article class="card" onclick="openResortModal('${p.package_id}')">
         <div class="card-photo">
           <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
+          ${usingGooglePhoto ? `<div class="card-photo-attr">via Google</div>` : ""}
         </div>
         <div class="card-body">
           <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
@@ -1328,6 +1436,7 @@
       <div class="modal-photo">
         <img src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
         ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
+        ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
       </div>
       <button class="modal-close" onclick="closeModal()" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
