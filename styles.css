@@ -1397,6 +1397,228 @@ input[type="range"].rating-slider::-moz-range-thumb {
 }
 @media (max-width: 480px) { .footer-bottom { padding: var(--s-5) var(--s-5) 0; } }
 
+/* ---------- Resort detail modal ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 23, 33, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-5);
+}
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
+  transform: translateY(20px) scale(0.98);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+.modal-overlay.open .modal { transform: translateY(0) scale(1); }
+.modal::-webkit-scrollbar { width: 6px; }
+.modal::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+
+.modal-photo {
+  position: relative;
+  height: 280px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+.modal-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.modal-photo::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(10,23,33,0.10) 0%, transparent 30%, transparent 70%, rgba(10,23,33,0.30) 100%);
+}
+.modal-photo-tag {
+  position: absolute;
+  top: var(--s-5); left: var(--s-5);
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  color: var(--ink-1);
+  z-index: 1;
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--s-4); right: var(--s-4);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 0.15s, transform 0.15s;
+  font-family: inherit;
+}
+.modal-close:hover { background: #fff; transform: scale(1.05); }
+.modal-close svg { width: 16px; height: 16px; }
+
+.modal-body {
+  padding: var(--s-8) var(--s-8) var(--s-6);
+}
+@media (max-width: 600px) { .modal-body { padding: var(--s-6) var(--s-5); } }
+
+.modal-header {
+  margin-bottom: var(--s-6);
+}
+.modal-header h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 500;
+  margin: 0 0 var(--s-2);
+  letter-spacing: -0.022em;
+  line-height: 1.15;
+}
+.modal-header .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.modal-header .meta .rating {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 600; color: var(--ink-1);
+}
+.modal-header .meta .rating svg { width: 12px; height: 12px; fill: var(--sand); }
+.modal-header .meta .dot { color: var(--ink-4); margin: 0 -2px; }
+
+.modal-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+  padding: var(--s-4) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 var(--s-6);
+}
+@media (max-width: 600px) { .modal-stats { grid-template-columns: repeat(2, 1fr); gap: var(--s-4); } }
+.modal-stats .item {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.modal-stats .label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.modal-stats .value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.modal-stats .value.muted { color: var(--ink-3); font-weight: 500; }
+
+.modal-section {
+  margin-bottom: var(--s-6);
+}
+.modal-section h4 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  margin: 0 0 var(--s-3);
+}
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-soft);
+  color: var(--ink-1);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.tag-pill.kid {
+  background: var(--sea-tint);
+  color: var(--sea-deep);
+  border-color: var(--sea-soft);
+  font-weight: 600;
+}
+.tag-pill.play {
+  background: var(--sand-soft);
+  color: var(--sand-deep);
+  border-color: #ead7af;
+  font-weight: 600;
+}
+
+.modal-pricing {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-5);
+  margin-bottom: var(--s-5);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-4);
+  align-items: center;
+}
+@media (max-width: 600px) { .modal-pricing { grid-template-columns: 1fr; } }
+.modal-pricing .price-from {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink-3);
+  letter-spacing: 0.10em; margin-bottom: 4px;
+}
+.modal-pricing .price-total {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.modal-pricing .breakdown {
+  font-size: 13px; color: var(--ink-2); margin-top: var(--s-2);
+}
+.modal-pricing .breakdown b { color: var(--ink-1); font-weight: 600; }
+
+.modal-footer-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+  margin-top: var(--s-3);
+  line-height: 1.5;
+}
+
 /* ---------- Animations ---------- */
 .fade-in {
   opacity: 0;

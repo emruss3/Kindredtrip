@@ -242,6 +242,10 @@
   </section>
 </main>
 
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalIfBackdrop(event)">
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+</div>
+
 <footer class="site-footer">
   <div class="footer-inner">
     <div>
@@ -1037,7 +1041,7 @@
     for (const def of KIDS_BADGES) {
       if (tags.amenities.includes(def.tag) && !seenLabels.has(def.label)) {
         seenLabels.add(def.label);
-        const cls = def.warm ? "badge warm" : "badge";
+        const cls = def.warm ? "badge play" : "badge kid";
         badges.push(`<span class="${cls}">${def.label}</span>`);
         if (badges.length >= 4) break;
       }
@@ -1045,9 +1049,9 @@
 
     // Family room callouts
     if (badges.length < 5) {
-      if (tags.rooms.includes("Family Suite")) badges.push(`<span class="badge">Family suites</span>`);
-      else if (tags.rooms.includes("2 Bedroom Suites")) badges.push(`<span class="badge">2-bedroom suites</span>`);
-      else if (tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) badges.push(`<span class="badge">Connecting rooms</span>`);
+      if (tags.rooms.includes("Family Suite")) badges.push(`<span class="badge kid">Family suites</span>`);
+      else if (tags.rooms.includes("2 Bedroom Suites")) badges.push(`<span class="badge kid">2-bedroom suites</span>`);
+      else if (tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) badges.push(`<span class="badge kid">Connecting rooms</span>`);
     }
 
     // Style badges
@@ -1089,7 +1093,7 @@
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name }, 480);
 
     return `
-      <article class="card">
+      <article class="card" onclick="openResortModal('${p.package_id}')">
         <div class="card-photo">
           <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
@@ -1109,11 +1113,160 @@
               <b>${fmtMoney(p.hotel_price)}</b> hotel
             </div>
           </div>
-          <button class="btn btn-primary" onclick="bookHotel('${p.package_id}')">See hotel rates →</button>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">See hotel rates →</button>
         </div>
       </article>
     `;
   }
+
+  // -------- Resort detail modal --------
+  function openResortModal(packageId) {
+    const pkg = allPackages.find((p) => p.package_id === packageId);
+    if (!pkg) return;
+    const r = pkg.resorts || {};
+    const tags = pkg._tags || extractTags(pkg);
+
+    const allKidTagsInOrder = KIDS_AMENITY_PRIORITY.filter((t) => tags.amenities.includes(t));
+    const activityTags = ACTIVITY_PRIORITY.filter((t) => tags.amenities.includes(t));
+    const playTagSet = new Set(["Waterpark For Little Kids", "Waterpark For Big Kids", "Lazy River", "Pool Slide", "Flowrider", "Heated Pool"]);
+
+    const ratingStr = r.avg_user_rating != null
+      ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r.avg_user_rating}/100${r.review_count ? ` (${r.review_count.toLocaleString()})` : ""}</span>`
+      : "";
+    const flightLine = [
+      pkg.stops != null ? (pkg.stops === 0 ? "Direct flight" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
+      pkg.duration_hours ? `${pkg.duration_hours}h flight` : null,
+    ].filter(Boolean).join(" · ");
+
+    const meta = [
+      r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
+      ratingStr,
+      r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
+      pkg.dest_airport_iata ? `Fly to ${escapeHtml(pkg.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
+    ].filter(Boolean).join(`<span class="dot">·</span>`);
+
+    const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name }, 1200);
+
+    const renderTagList = (tagsList, plays = new Set()) => {
+      if (!tagsList || tagsList.length === 0) return "";
+      return tagsList.map((t) => {
+        const cls = plays.has(t) ? "tag-pill play" : "tag-pill";
+        return `<span class="${cls}">${escapeHtml(t)}</span>`;
+      }).join("");
+    };
+
+    const renderKidTagList = (tagsList) => {
+      return tagsList.map((t) => {
+        const cls = playTagSet.has(t) ? "tag-pill play" : "tag-pill kid";
+        return `<span class="${cls}">${escapeHtml(t)}</span>`;
+      }).join("");
+    };
+
+    const stats = [];
+    if (r.rooms_count) stats.push({ label: "Rooms", value: r.rooms_count.toLocaleString() });
+    if (r.year_renovated) stats.push({ label: "Renovated", value: r.year_renovated });
+    else if (r.year_built) stats.push({ label: "Built", value: r.year_built });
+    if (r.hotel_brand) stats.push({ label: "Brand", value: r.hotel_brand });
+    if (r.beds) stats.push({ label: "Beds", value: r.beds });
+    while (stats.length < 4) stats.push({ label: "", value: "—", muted: true });
+
+    const html = `
+      <div class="modal-photo">
+        <img src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
+        ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-body">
+        <div class="modal-header">
+          <h2 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h2>
+          <div class="meta">${meta}</div>
+        </div>
+
+        ${stats.length > 0 ? `
+        <div class="modal-stats">
+          ${stats.slice(0, 4).map(s => `
+            <div class="item">
+              <div class="label">${escapeHtml(s.label || "")}</div>
+              <div class="value${s.muted ? " muted" : ""}">${escapeHtml(String(s.value || "—"))}</div>
+            </div>
+          `).join("")}
+        </div>
+        ` : ""}
+
+        ${allKidTagsInOrder.length ? `
+        <div class="modal-section">
+          <h4>For kids</h4>
+          <div class="tag-grid">${renderKidTagList(allKidTagsInOrder)}</div>
+        </div>
+        ` : ""}
+
+        ${tags.rooms.length ? `
+        <div class="modal-section">
+          <h4>Room options</h4>
+          <div class="tag-grid">${renderTagList(tags.rooms)}</div>
+        </div>
+        ` : ""}
+
+        ${tags.styles.length ? `
+        <div class="modal-section">
+          <h4>Resort style</h4>
+          <div class="tag-grid">${renderTagList(tags.styles)}</div>
+        </div>
+        ` : ""}
+
+        ${activityTags.length ? `
+        <div class="modal-section">
+          <h4>Activities &amp; amenities</h4>
+          <div class="tag-grid">${renderTagList(activityTags)}</div>
+        </div>
+        ` : ""}
+
+        ${tags.highlights.length ? `
+        <div class="modal-section">
+          <h4>Highlights</h4>
+          <div class="tag-grid">${renderTagList(tags.highlights)}</div>
+        </div>
+        ` : ""}
+
+        <div class="modal-pricing">
+          <div>
+            <div class="price-from">Estimated total for your family</div>
+            <div class="price-total">${fmtMoney(pkg.total_price)}</div>
+            <div class="breakdown">
+              <b>${fmtMoney(pkg.flight_price)}</b> flights · <b>${fmtMoney(pkg.hotel_price)}</b> hotel
+            </div>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+        </div>
+
+        <p class="modal-footer-note">Prices shown are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner.</p>
+      </div>
+    `;
+
+    const modal = document.getElementById("modal");
+    modal.innerHTML = html;
+    document.getElementById("modal-overlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+    modal.scrollTop = 0;
+  }
+
+  function closeModal() {
+    document.getElementById("modal-overlay").classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  function closeModalIfBackdrop(e) {
+    if (e.target === e.currentTarget) closeModal();
+  }
+
+  // ESC closes modal
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("modal-overlay").classList.contains("open")) {
+      closeModal();
+    }
+  });
 
   async function bookHotel(packageId) {
     try {
