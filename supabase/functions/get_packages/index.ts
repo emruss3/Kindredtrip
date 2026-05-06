@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v1";
+const VERSION = "get_packages_v2_rich_fields";
 
 function corsHeaders() {
   return {
@@ -97,9 +97,19 @@ serve(async (req) => {
           avg_user_rating,
           review_count,
           hotel_brand,
+          hotel_style,
           amenities_text,
+          special_room_options_text,
+          food_beach_party_text,
+          beds,
+          rooms_count,
+          year_built,
+          year_renovated,
+          beach_quality_score,
           on_beach,
           accepts_infants,
+          babysitting_available,
+          creche_min_age,
           kids_club_available,
           kids_club_min_age,
           kids_club_max_age,
@@ -111,7 +121,8 @@ serve(async (req) => {
           swim_up_rooms,
           data_quality,
           direct_flight,
-          guaranteed_connecting_rooms
+          guaranteed_connecting_rooms,
+          high_rise
         )
       `, { count: "exact" })
       .eq("search_id", search_id);

@@ -48,7 +48,59 @@
       <div class="search-card-grid">
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="origin">From</label>
-          <input id="origin" type="text" maxlength="3" value="BNA" placeholder="Airport code" required autocomplete="off" />
+          <input id="origin" type="text" list="origin-airports" value="BNA" placeholder="Airport code" required autocomplete="off" />
+          <datalist id="origin-airports">
+            <option value="ATL">Atlanta (ATL)</option>
+            <option value="AUS">Austin (AUS)</option>
+            <option value="BNA">Nashville (BNA)</option>
+            <option value="BOS">Boston (BOS)</option>
+            <option value="BWI">Baltimore (BWI)</option>
+            <option value="CLE">Cleveland (CLE)</option>
+            <option value="CLT">Charlotte (CLT)</option>
+            <option value="CMH">Columbus (CMH)</option>
+            <option value="CVG">Cincinnati (CVG)</option>
+            <option value="DCA">Washington Reagan (DCA)</option>
+            <option value="DEN">Denver (DEN)</option>
+            <option value="DFW">Dallas/Fort Worth (DFW)</option>
+            <option value="DTW">Detroit (DTW)</option>
+            <option value="EWR">Newark (EWR)</option>
+            <option value="FLL">Fort Lauderdale (FLL)</option>
+            <option value="IAD">Washington Dulles (IAD)</option>
+            <option value="IAH">Houston (IAH)</option>
+            <option value="IND">Indianapolis (IND)</option>
+            <option value="JFK">New York JFK (JFK)</option>
+            <option value="LAS">Las Vegas (LAS)</option>
+            <option value="LAX">Los Angeles (LAX)</option>
+            <option value="LGA">New York LaGuardia (LGA)</option>
+            <option value="MCI">Kansas City (MCI)</option>
+            <option value="MCO">Orlando (MCO)</option>
+            <option value="MDW">Chicago Midway (MDW)</option>
+            <option value="MEM">Memphis (MEM)</option>
+            <option value="MIA">Miami (MIA)</option>
+            <option value="MKE">Milwaukee (MKE)</option>
+            <option value="MSP">Minneapolis (MSP)</option>
+            <option value="MSY">New Orleans (MSY)</option>
+            <option value="ORD">Chicago O'Hare (ORD)</option>
+            <option value="PDX">Portland (PDX)</option>
+            <option value="PHL">Philadelphia (PHL)</option>
+            <option value="PHX">Phoenix (PHX)</option>
+            <option value="PIT">Pittsburgh (PIT)</option>
+            <option value="RDU">Raleigh-Durham (RDU)</option>
+            <option value="SAN">San Diego (SAN)</option>
+            <option value="SAT">San Antonio (SAT)</option>
+            <option value="SEA">Seattle (SEA)</option>
+            <option value="SFO">San Francisco (SFO)</option>
+            <option value="SLC">Salt Lake City (SLC)</option>
+            <option value="STL">St. Louis (STL)</option>
+            <option value="TPA">Tampa (TPA)</option>
+            <option value="YEG">Edmonton (YEG)</option>
+            <option value="YHZ">Halifax (YHZ)</option>
+            <option value="YOW">Ottawa (YOW)</option>
+            <option value="YUL">Montreal (YUL)</option>
+            <option value="YVR">Vancouver (YVR)</option>
+            <option value="YYC">Calgary (YYC)</option>
+            <option value="YYZ">Toronto Pearson (YYZ)</option>
+          </datalist>
         </div>
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="date_start">Check-in</label>
@@ -277,13 +329,10 @@
     cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
   });
 
-  // Featured destination clicks → set country, scroll, search
+  // Featured destination clicks → run a search and post-filter to that country
   document.querySelectorAll("[data-country]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const country = btn.dataset.country;
-      const ex = document.getElementById("excluded");
-      // Use included_countries via excluded inversion - simpler: just set country in a hidden field and pass to search
-      window.__includedCountry = country;
+      window.__includedCountry = btn.dataset.country;
       runSearch();
     });
   });
@@ -312,8 +361,163 @@
   let lastSearchId = null;
   let lastSearchSummary = null;
   let allPackages = [];
-  let activeCountryFilter = null;
   let lastSortBy = "price_asc";
+
+  // Filter state
+  const filters = {
+    country: null,
+    amenities: new Set(),
+    rooms: new Set(),
+    styles: new Set(),
+    highlights: new Set(),
+    brands: new Set(),
+    priceMin: null,
+    priceMax: null,
+    ratingMin: 0,
+  };
+
+  // Sidebar UI state
+  const sidebarShowAll = new Set();  // group keys with "show all" expanded
+
+  // Tag definitions — what we surface in the sidebar (in display order)
+  const KIDS_AMENITY_PRIORITY = [
+    "Kids Club for Under 4",
+    "Kids Club",
+    "Teen Club",
+    "Babysitting",
+    "Waterpark For Little Kids",
+    "Waterpark For Big Kids",
+    "Lazy River",
+    "Pool Slide",
+    "Heated Pool",
+    "Mini Golf",
+    "Arcade",
+    "Flowrider",
+    "Adult Pool",
+  ];
+  const ACTIVITY_PRIORITY = [
+    "Beach", "Snorkelling", "Diving", "Tennis", "Golf Course",
+    "Horseback Riding", "Hiking", "Fishing", "Watersports Equipment Rentals",
+    "Bicycles Available", "Yoga Classes", "Archery", "Windsurfing",
+  ];
+  const ROOM_PRIORITY = [
+    "Family Suite", "2 Bedroom Suites", "Connecting Rooms",
+    "Plunge Pool Rooms", "Swim Up Rooms", "Beach Front Rooms",
+    "Villas", "Over Water Rooms",
+  ];
+  const STYLE_PRIORITY = [
+    "Family", "Family Resort", "Luxury", "Mid-Range", "Boutique",
+    "Modern", "Quiet", "Trendy", "Charming", "Hidden Gem", "Romantic",
+    "Ocean View",
+  ];
+  const HIGHLIGHT_PRIORITY = [
+    "Great Beach", "Great Food", "Great for Parties",
+  ];
+
+  // Badge categories for cards (priority + label for display)
+  const KIDS_BADGES = [
+    { tag: "Kids Club for Under 4", label: "Kids club (toddlers)", warm: true },
+    { tag: "Kids Club", label: "Kids club" },
+    { tag: "Teen Club", label: "Teen club" },
+    { tag: "Babysitting", label: "Babysitting" },
+    { tag: "Waterpark For Little Kids", label: "Water park", warm: true },
+    { tag: "Waterpark For Big Kids", label: "Water park", warm: true },
+    { tag: "Lazy River", label: "Lazy river", warm: true },
+    { tag: "Pool Slide", label: "Pool slide", warm: true },
+    { tag: "Mini Golf", label: "Mini golf" },
+    { tag: "Arcade", label: "Arcade" },
+    { tag: "Flowrider", label: "Flowrider", warm: true },
+    { tag: "Heated Pool", label: "Heated pool" },
+  ];
+
+  function tokenize(s) {
+    if (!s) return [];
+    return s.split(",").map((t) => t.trim()).filter(Boolean);
+  }
+
+  function extractTags(pkg) {
+    const r = pkg.resorts || {};
+    return {
+      amenities: tokenize(r.amenities_text),
+      rooms: tokenize(r.special_room_options_text),
+      styles: tokenize(r.hotel_style),
+      highlights: tokenize(r.food_beach_party_text),
+    };
+  }
+
+  function packageMatchesFilters(pkg) {
+    const r = pkg.resorts || {};
+    if (filters.country && r.country !== filters.country) return false;
+    if (filters.priceMin != null && (pkg.total_price || 0) < filters.priceMin) return false;
+    if (filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
+    if (filters.ratingMin > 0 && (r.avg_user_rating || 0) < filters.ratingMin) return false;
+    if (filters.brands.size > 0 && !filters.brands.has(r.hotel_brand || "")) return false;
+
+    const t = pkg._tags;
+    for (const tag of filters.amenities) if (!t.amenities.includes(tag)) return false;
+    for (const tag of filters.rooms) if (!t.rooms.includes(tag)) return false;
+    for (const tag of filters.styles) if (!t.styles.includes(tag)) return false;
+    for (const tag of filters.highlights) if (!t.highlights.includes(tag)) return false;
+    return true;
+  }
+
+  function activeFilterCount() {
+    return (filters.country ? 1 : 0) +
+      filters.amenities.size + filters.rooms.size + filters.styles.size +
+      filters.highlights.size + filters.brands.size +
+      (filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
+      (filters.ratingMin > 0 ? 1 : 0);
+  }
+
+  function clearAllFilterState() {
+    filters.country = null;
+    filters.amenities.clear();
+    filters.rooms.clear();
+    filters.styles.clear();
+    filters.highlights.clear();
+    filters.brands.clear();
+    filters.priceMin = null;
+    filters.priceMax = null;
+    filters.ratingMin = 0;
+    sidebarShowAll.clear();
+  }
+  function clearAllFilters() {
+    clearAllFilterState();
+    renderResults();
+  }
+
+  function toggleTag(group, tag) {
+    const set = filters[group];
+    if (set.has(tag)) set.delete(tag); else set.add(tag);
+    renderResults();
+  }
+
+  function setCountryFilter(country) {
+    filters.country = filters.country === country ? null : country;
+    renderResults();
+    document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function setRatingMin(value) {
+    filters.ratingMin = parseInt(value, 10) || 0;
+    document.getElementById("rating-display-num").textContent = filters.ratingMin > 0 ? filters.ratingMin : "Any";
+    // Don't full re-render on every tick; debounce
+    clearTimeout(window.__ratingTimer);
+    window.__ratingTimer = setTimeout(renderResults, 200);
+  }
+
+  function setPriceMin(value) {
+    const n = parseInt(value, 10);
+    filters.priceMin = isNaN(n) || n <= 0 ? null : n;
+    clearTimeout(window.__priceTimer);
+    window.__priceTimer = setTimeout(renderResults, 250);
+  }
+  function setPriceMax(value) {
+    const n = parseInt(value, 10);
+    filters.priceMax = isNaN(n) || n <= 0 ? null : n;
+    clearTimeout(window.__priceTimer);
+    window.__priceTimer = setTimeout(renderResults, 250);
+  }
 
   function setStatus(msg, opts = {}) {
     const el = document.getElementById("status");
@@ -434,7 +638,7 @@
   async function runSearch() {
     const submitBtn = document.getElementById("submit-btn");
     submitBtn.disabled = true;
-    activeCountryFilter = null;
+    clearAllFilterState();
     renderSkeleton();
     setStatus("Creating search…", { spinner: true });
 
@@ -449,17 +653,12 @@
         date_end: document.getElementById("date_end").value,
         adults: parseInt(document.getElementById("adults").value, 10) || 2,
         child_ages: parseChildAges(document.getElementById("child_ages").value),
-        excluded_countries: parseList(document.getElementById("excluded")?.value || ""),
+        excluded_countries: [],
         ...flags,
       };
+      // Featured destination → applied as a post-search country filter
       if (window.__includedCountry) {
-        body.included_countries = [window.__includedCountry];
-        // Search edge function doesn't accept included_countries in body directly,
-        // it's passed through to process_search_batch via auto-invoke. Without
-        // server-side support for included_countries on Search, fall back to
-        // post-filter (client-side activeCountryFilter).
-        activeCountryFilter = window.__includedCountry;
-        delete body.included_countries;
+        filters.country = window.__includedCountry;
         window.__includedCountry = null;
       }
 
@@ -505,7 +704,10 @@
       `get_packages?search_id=${lastSearchId}&limit=100&only_priced=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
-    allPackages = data.packages || [];
+    allPackages = (data.packages || []).map((p) => {
+      p._tags = extractTags(p);
+      return p;
+    });
     setStatus(`${data.summary.fully_priced} priced trips across ${countCountries(allPackages)} countries.`);
     renderResults();
   }
@@ -516,10 +718,44 @@
     return set.size;
   }
 
+  // Aggregate counts of tags across allPackages (used for sidebar)
+  function tagCounts(group) {
+    const counts = {};
+    allPackages.forEach((p) => {
+      const tags = p._tags?.[group] || [];
+      tags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; });
+    });
+    return counts;
+  }
+
+  function brandCounts() {
+    const counts = {};
+    allPackages.forEach((p) => {
+      const b = p.resorts?.hotel_brand;
+      if (!b) return;
+      counts[b] = (counts[b] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function countryCountsAgg() {
+    const counts = {};
+    allPackages.forEach((p) => {
+      const c = p.resorts?.country;
+      if (!c) return;
+      counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function priceBounds() {
+    const prices = allPackages.map((p) => p.total_price).filter((n) => n != null);
+    if (prices.length === 0) return { min: 0, max: 0 };
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  }
+
   function renderResults() {
-    const filtered = activeCountryFilter
-      ? allPackages.filter((p) => p.resorts && p.resorts.country === activeCountryFilter)
-      : allPackages;
+    const filtered = allPackages.filter(packageMatchesFilters);
     const visible = filtered.slice(0, 25);
 
     const main = document.getElementById("results-main");
@@ -528,52 +764,214 @@
     sidebar.innerHTML = renderSidebar();
     main.innerHTML =
       renderResultBar(filtered.length) +
+      renderActiveFilterPills() +
       (visible.length === 0
-        ? `<div class="empty"><h3>No trips match those filters.</h3><p>Try clearing the country filter or widening your search.</p></div>`
+        ? `<div class="empty"><h3>No trips match those filters.</h3><p>Try clearing some filters to see more options.</p></div>`
         : visible.map(renderCard).join(""));
   }
 
   function renderSidebar() {
-    const countryCounts = {};
-    allPackages.forEach((p) => {
-      const c = p.resorts && p.resorts.country;
-      if (!c) return;
-      countryCounts[c] = (countryCounts[c] || 0) + 1;
-    });
-    const sorted = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+    if (allPackages.length === 0) return "";
+    const bounds = priceBounds();
+
+    return [
+      renderCountryBlock(),
+      renderTagBlock("Kids amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities"),
+      renderTagBlock("Room options", "rooms", ROOM_PRIORITY, "rooms"),
+      renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles"),
+      renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights"),
+      renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities"),
+      renderBrandBlock(),
+      renderPriceBlock(bounds),
+      renderRatingBlock(),
+    ].join("");
+  }
+
+  function renderCountryBlock() {
+    const counts = countryCountsAgg();
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     if (sorted.length === 0) return "";
 
-    const allRow = `<button class="sidebar-row${activeCountryFilter === null ? " active" : ""}" onclick="onCountryFilter(null)">
-      <span>All countries</span>
-      <span class="sidebar-count">${allPackages.length}</span>
-    </button>`;
+    const showKey = "country";
+    const showAll = sidebarShowAll.has(showKey);
+    const visible = showAll ? sorted : sorted.slice(0, 8);
 
-    const rows = sorted.map(([country, count]) => {
-      const active = activeCountryFilter === country ? " active" : "";
+    const rows = visible.map(([country, count]) => {
+      const active = filters.country === country ? " active" : "";
       const safeCountry = country.replace(/'/g, "\\'");
-      return `<button class="sidebar-row${active}" onclick="onCountryFilter('${safeCountry}')">
-        <span>${escapeHtml(country)}</span>
-        <span class="sidebar-count">${count}</span>
+      return `<button class="tag-row${active}" onclick="setCountryFilter('${safeCountry}')">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(country)}</span>
+        <span class="tag-count">${count}</span>
       </button>`;
     }).join("");
 
-    const clearBtn = activeCountryFilter
-      ? `<button class="sidebar-clear" onclick="onCountryFilter(null)">Clear filter ✕</button>`
+    const showMore = sorted.length > 8
+      ? `<button class="tag-show-more" onclick="toggleShowAll('${showKey}')">${showAll ? "Show less" : `Show all ${sorted.length}`}</button>`
       : "";
 
     return `
-      <div class="sidebar-block">
-        <h4>Country</h4>
-        <div class="sidebar-list">${allRow}${rows}</div>
-        ${clearBtn}
-      </div>
+      <details class="sidebar-block" open>
+        <summary>
+          <span>Country${filters.country ? ` <span class="summary-active">1</span>` : ""}</span>
+        </summary>
+        <div class="sidebar-block-body">
+          ${rows}
+          ${showMore}
+        </div>
+      </details>
     `;
+  }
+
+  function renderTagBlock(title, group, priority, sourceGroup, blockKey) {
+    const key = blockKey || group;
+    const allCounts = tagCounts(sourceGroup);
+    // Only show tags that exist in the data
+    const present = priority
+      .map((tag) => [tag, allCounts[tag] || 0])
+      .filter(([, n]) => n > 0);
+    if (present.length === 0) return "";
+
+    const showAll = sidebarShowAll.has(key);
+    const visible = showAll ? present : present.slice(0, 6);
+
+    const activeSet = filters[group];
+    const activeCount = visible.filter(([t]) => activeSet.has(t)).length +
+      (showAll ? 0 : present.slice(6).filter(([t]) => activeSet.has(t)).length);
+
+    const rows = visible.map(([tag, count]) => {
+      const active = activeSet.has(tag) ? " active" : "";
+      const safeTag = tag.replace(/'/g, "\\'");
+      return `<button class="tag-row${active}" onclick="toggleTag('${group}','${safeTag}')">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(tag)}</span>
+        <span class="tag-count">${count}</span>
+      </button>`;
+    }).join("");
+
+    const showMore = present.length > 6
+      ? `<button class="tag-show-more" onclick="toggleShowAll('${key}')">${showAll ? "Show less" : `Show all ${present.length}`}</button>`
+      : "";
+
+    const isOpen = key === "amenities" || key === "rooms" || activeSet.size > 0;
+    return `
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary>
+          <span>${title}${activeCount > 0 ? ` <span class="summary-active">${activeSet.size}</span>` : ""}</span>
+        </summary>
+        <div class="sidebar-block-body">
+          ${rows}
+          ${showMore}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderBrandBlock() {
+    const counts = brandCounts();
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return "";
+
+    const key = "brands";
+    const showAll = sidebarShowAll.has(key);
+    const visible = showAll ? sorted : sorted.slice(0, 6);
+
+    const rows = visible.map(([brand, count]) => {
+      const active = filters.brands.has(brand) ? " active" : "";
+      const safe = brand.replace(/'/g, "\\'");
+      return `<button class="tag-row${active}" onclick="toggleTag('brands','${safe}')">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(brand)}</span>
+        <span class="tag-count">${count}</span>
+      </button>`;
+    }).join("");
+
+    const showMore = sorted.length > 6
+      ? `<button class="tag-show-more" onclick="toggleShowAll('${key}')">${showAll ? "Show less" : `Show all ${sorted.length}`}</button>`
+      : "";
+
+    return `
+      <details class="sidebar-block"${filters.brands.size > 0 ? " open" : ""}>
+        <summary>
+          <span>Hotel brand${filters.brands.size > 0 ? ` <span class="summary-active">${filters.brands.size}</span>` : ""}</span>
+        </summary>
+        <div class="sidebar-block-body">
+          ${rows}
+          ${showMore}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderPriceBlock(bounds) {
+    const min = filters.priceMin ?? "";
+    const max = filters.priceMax ?? "";
+    const isOpen = filters.priceMin != null || filters.priceMax != null;
+    return `
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary><span>Total price${isOpen ? ` <span class="summary-active">1</span>` : ""}</span></summary>
+        <div class="sidebar-block-body">
+          <div class="range-row">
+            <input type="number" placeholder="Min $" value="${min}" oninput="setPriceMin(this.value)" />
+            <span class="range-dash">–</span>
+            <input type="number" placeholder="Max $" value="${max}" oninput="setPriceMax(this.value)" />
+          </div>
+          <div class="range-help">Total trip cost for your family. Range: ${fmtMoney(bounds.min)} – ${fmtMoney(bounds.max)}.</div>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderRatingBlock() {
+    const isOpen = filters.ratingMin > 0;
+    return `
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary><span>Min rating${isOpen ? ` <span class="summary-active">1</span>` : ""}</span></summary>
+        <div class="sidebar-block-body">
+          <input type="range" min="0" max="95" step="5" value="${filters.ratingMin}" class="rating-slider" oninput="setRatingMin(this.value)" />
+          <div class="rating-display">
+            <span>Any</span>
+            <span><b id="rating-display-num">${filters.ratingMin > 0 ? filters.ratingMin : "Any"}</b> / 100</span>
+            <span>95+</span>
+          </div>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderActiveFilterPills() {
+    const pills = [];
+    if (filters.country) {
+      pills.push(`<button class="active-filter-pill" onclick="setCountryFilter('${filters.country.replace(/'/g, "\\'")}')">${escapeHtml(filters.country)}<span class="x">×</span></button>`);
+    }
+    [["amenities", filters.amenities], ["rooms", filters.rooms], ["styles", filters.styles], ["highlights", filters.highlights], ["brands", filters.brands]].forEach(([group, set]) => {
+      set.forEach((tag) => {
+        const safe = tag.replace(/'/g, "\\'");
+        pills.push(`<button class="active-filter-pill" onclick="toggleTag('${group}','${safe}')">${escapeHtml(tag)}<span class="x">×</span></button>`);
+      });
+    });
+    if (filters.priceMin != null || filters.priceMax != null) {
+      const lbl = `${fmtMoney(filters.priceMin || 0)} – ${filters.priceMax ? fmtMoney(filters.priceMax) : "any"}`;
+      pills.push(`<button class="active-filter-pill" onclick="filters.priceMin=null;filters.priceMax=null;renderResults();">${lbl}<span class="x">×</span></button>`);
+    }
+    if (filters.ratingMin > 0) {
+      pills.push(`<button class="active-filter-pill" onclick="filters.ratingMin=0;renderResults();">${filters.ratingMin}+ rating<span class="x">×</span></button>`);
+    }
+    if (pills.length === 0) return "";
+    return `<div class="active-filters">${pills.join("")}<button class="active-filters-clear" onclick="clearAllFilters()">Clear all</button></div>`;
+  }
+
+  function toggleShowAll(key) {
+    if (sidebarShowAll.has(key)) sidebarShowAll.delete(key);
+    else sidebarShowAll.add(key);
+    renderResults();
   }
 
   function renderResultBar(matchingCount) {
     const total = allPackages.length;
-    const summaryText = activeCountryFilter
-      ? `${matchingCount} trip${matchingCount === 1 ? "" : "s"} in ${escapeHtml(activeCountryFilter)} (of ${total} total)`
+    const filterCount = activeFilterCount();
+    const summaryText = filterCount > 0
+      ? `${matchingCount} trip${matchingCount === 1 ? "" : "s"} match · ${total} total found`
       : `Showing top ${Math.min(25, matchingCount)} of ${total} priced trips`;
     return `
       <div class="result-bar">
@@ -598,33 +996,48 @@
     fetchAndRender().catch((e) => showError(e.message));
   }
 
-  function onCountryFilter(country) {
-    activeCountryFilter = country;
-    renderResults();
-    document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   function renderCard(p) {
     const r = p.resorts || {};
+    const tags = p._tags;
     const badges = [];
 
-    if (r.kids_club_available) {
-      const range = (r.kids_club_min_age != null && r.kids_club_max_age != null)
-        ? ` (${r.kids_club_min_age}–${r.kids_club_max_age})`
-        : "";
-      badges.push(`<span class="badge">Kids club${range}</span>`);
+    // Kid-specific badges first (priority order from KIDS_BADGES)
+    const seenLabels = new Set();
+    for (const def of KIDS_BADGES) {
+      if (tags.amenities.includes(def.tag) && !seenLabels.has(def.label)) {
+        seenLabels.add(def.label);
+        const cls = def.warm ? "badge warm" : "badge";
+        badges.push(`<span class="${cls}">${def.label}</span>`);
+        if (badges.length >= 4) break;
+      }
     }
-    if (r.on_beach) badges.push(`<span class="badge">On the beach</span>`);
-    if (r.accepts_infants) badges.push(`<span class="badge">Accepts infants</span>`);
-    if (r.water_park) badges.push(`<span class="badge warm">Water park</span>`);
-    if (r.swim_up_rooms) badges.push(`<span class="badge">Swim-up rooms</span>`);
-    if (r.connecting_rooms_available) badges.push(`<span class="badge">Connecting rooms</span>`);
-    if (r.direct_flight || p.stops === 0) badges.push(`<span class="badge">Direct flight</span>`);
-    if (p.warnings) badges.push(`<span class="badge warn">${escapeHtml(String(p.warnings))}</span>`);
 
-    if (badges.length === 0) {
-      badges.push(`<span class="badge muted">Family-fit details coming soon</span>`);
+    // Family room callouts
+    if (badges.length < 5) {
+      if (tags.rooms.includes("Family Suite")) badges.push(`<span class="badge">Family suites</span>`);
+      else if (tags.rooms.includes("2 Bedroom Suites")) badges.push(`<span class="badge">2-bedroom suites</span>`);
+      else if (tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) badges.push(`<span class="badge">Connecting rooms</span>`);
     }
+
+    // Style badges
+    if (badges.length < 6) {
+      if (tags.styles.includes("Family Resort")) badges.push(`<span class="badge muted">Family resort</span>`);
+      else if (tags.styles.includes("Luxury")) badges.push(`<span class="badge muted">Luxury</span>`);
+    }
+
+    // Direct flight signal from package data
+    if (badges.length < 6 && (p.stops === 0 || r.direct_flight)) {
+      badges.push(`<span class="badge">Direct flight</span>`);
+    }
+
+    // Highlights
+    if (badges.length < 6) {
+      if (tags.highlights.includes("Great Beach")) badges.push(`<span class="badge">Great beach</span>`);
+      else if (tags.highlights.includes("Great Food")) badges.push(`<span class="badge">Great food</span>`);
+    }
+
+    if (p.warnings) badges.push(`<span class="badge warn">${escapeHtml(String(p.warnings))}</span>`);
+    if (badges.length === 0) badges.push(`<span class="badge muted">No family-fit data</span>`);
 
     const ratingStr = r.avg_user_rating != null
       ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r.avg_user_rating}/100</span>`
@@ -638,6 +1051,7 @@
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
       ratingStr,
+      r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
