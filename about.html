@@ -4,10 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>About — KindredTrips</title>
-<meta name="description" content="KindredTrips is a Caribbean family-vacation discovery tool that ranks complete trips by total cost — flights plus hotel — for your exact family." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="description" content="KindredTrips ranks Caribbean family vacations by what fits your family — flight + hotel together, across every destination." />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -19,7 +16,7 @@
       <span>KindredTrips</span>
     </a>
     <nav class="topbar-nav" aria-label="Primary">
-      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/#why" class="nav-link">How it works</a>
       <a href="/about.html" class="nav-link">About</a>
       <a href="/contact.html" class="nav-link">Contact</a>
     </nav>
@@ -28,35 +25,54 @@
 
 <main class="page">
   <h1>About KindredTrips.</h1>
-  <p class="lede">A simple tool for one specific job: planning a Caribbean family vacation without 14 browser tabs.</p>
+  <p class="lede">Caribbean family travel, ranked by what fits your family. We compare across destinations — so you don't have to pick one before you see prices.</p>
 
   <h2>What we do</h2>
-  <p>KindredTrips searches every family-friendly resort in the Caribbean and every Caribbean airport at the same time, then ranks the complete trip — flights plus hotel — by total cost for <em>your</em> family. We surface only the resorts that fit kids, infants, and connecting rooms, with the family-fit details (kids-club ages, on-the-beach, accepts-infants) front and center.</p>
+  <p>You tell us your origin airport, dates, and who's coming. We search 974 family resorts across 35 Caribbean countries and 79 destination airports — for your exact travelers and dates — and rank the results by total flight + hotel cost.</p>
+  <p>Family-fit details are surfaced, not buried: kids-club minimum age, on-the-beach, accepts-infants, connecting rooms guaranteed, water park for little kids, lazy river. The things that decide whether a resort actually works for your family.</p>
 
-  <h2>Why we built it</h2>
-  <p>Every other booking tool optimizes for one piece at a time. <strong>Booking.com</strong> is great for hotels but assumes you've already picked a destination. <strong>Skyscanner</strong> is great for flights but doesn't know what you're staying at. The big OTAs let you bundle — but only one destination at a time.</p>
-  <p>For a family trip, the choice that matters is total cost <em>across destinations</em>. A direct flight to Punta Cana might beat a connection to Aruba even if the resort is more expensive, because the flights are cheaper. KindredTrips does that math for you.</p>
+  <h2>What's different</h2>
+  <p>Every other vacation tool makes you pick the destination first, then optimize within it. We do the opposite: <strong>tell us your constraints, we'll tell you which Caribbean destination, resort, and flight combo wins.</strong></p>
+  <p>The difference shows up in real numbers. A direct flight to Punta Cana plus a 4-star resort often beats a connection to Aruba plus a "cheaper" property — once you add the flights, the math flips. We do that comparison across every Caribbean country at once, so the trip your family takes is actually the best one for your constraints.</p>
 
   <h2>How it works</h2>
   <ul>
-    <li>You tell us where you're flying from, when you want to go, and who's coming.</li>
-    <li>We search 974 family resorts across 35 Caribbean countries and price the full trip for your exact family size.</li>
-    <li>You see the top options ranked by total cost, with family-fit details front and center.</li>
-    <li>Click "See hotel rates" to book on a partner site. We earn a commission on confirmed bookings, at no extra cost to you.</li>
+    <li><strong>You tell us who's coming.</strong> Origin, dates, adults, kids' ages. Toggle on must-haves like a kids club or direct-only flights.</li>
+    <li><strong>We search every resort.</strong> 974 properties get priced for your exact family in seconds — no destination commitment.</li>
+    <li><strong>You filter and book.</strong> Narrow by amenities your kids will actually use. Click through to book on a trusted partner. We route, we don't sell.</li>
+  </ul>
+
+  <h2>What we are NOT</h2>
+  <ul>
+    <li>Not a discount or coupon site.</li>
+    <li>Not an OTA pretending to be a curator.</li>
+    <li>Not a travel agency — we don't book your trip; we route you to a partner who does.</li>
+    <li>Not lifestyle content. No "10 things to pack!" listicles.</li>
+    <li>Not pretending to know everything. We say "estimated" when prices are estimated.</li>
   </ul>
 
   <h2>Where we are</h2>
-  <p>This is an early version. The resort dataset is loaded; the family-fit details (kids-club ages, on-beach status, etc.) are being added one resort at a time. If a result looks wrong or a detail is missing, please <a href="/contact.html">tell us</a> — that's how we get better.</p>
+  <p>This is an early version. The resort dataset is loaded; family-fit details are being filled in resort by resort. If a result looks wrong or a detail is missing, please <a href="/contact.html">tell us</a> — that's how we get better.</p>
 
   <h2>What's next</h2>
   <ul>
-    <li>Real-time pricing through direct partnerships with Booking.com, Expedia, and Priceline.</li>
-    <li>Saved trips and price alerts.</li>
-    <li>Family-fit details on every resort.</li>
+    <li>Live rates from direct partnerships with Booking.com, Expedia, and Priceline.</li>
+    <li>Real resort photos — not stock — for every property.</li>
+    <li>Saved trips and price alerts for the search you're watching.</li>
   </ul>
 </main>
 
 <footer class="site-footer">
+  <div class="footer-disclosures">
+    <div>
+      <h5>Why we're free</h5>
+      <p>KindredTrips earns a referral fee when you book through our partners (Booking.com, airlines, etc.). The price you pay is identical — we don't add fees. We don't take payments directly; you book on the partner's site, they handle your reservation.</p>
+    </div>
+    <div>
+      <h5>About our rankings</h5>
+      <p>We sort by what fits your family — a mix of total trip cost, family-fit factors, and resort quality. We don't sort by which partner pays us the most. You can change the sort order any time using the dropdown above results.</p>
+    </div>
+  </div>
   <div class="footer-inner">
     <div>
       <div class="footer-brand">
@@ -64,13 +80,13 @@
         KindredTrips
       </div>
       <p class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+        Caribbean family travel, ranked by what fits your family. Independent. Family-run.
       </p>
     </div>
     <div class="footer-col">
       <h5>Product</h5>
       <ul>
-        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#why">What's different</a></li>
         <li><a href="/#destinations">Destinations</a></li>
         <li><a href="/about.html">How it works</a></li>
       </ul>
@@ -87,13 +103,13 @@
       <h5>Legal</h5>
       <ul>
         <li><a href="/privacy.html">Privacy</a></li>
-        <li><a href="/contact.html">Affiliate disclosure</a></li>
+        <li><a href="/privacy.html#affiliate">Affiliate disclosure</a></li>
       </ul>
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
-    <span>Made for families. Caribbean only, on purpose.</span>
+    <span>© <span id="year"></span> KindredTrips</span>
+    <span>Caribbean only — on purpose.</span>
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>

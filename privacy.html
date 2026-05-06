@@ -4,10 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Privacy — KindredTrips</title>
-<meta name="description" content="How KindredTrips handles your data." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="description" content="What KindredTrips collects, what we don't, and how affiliate links work." />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -19,7 +16,7 @@
       <span>KindredTrips</span>
     </a>
     <nav class="topbar-nav" aria-label="Primary">
-      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/#why" class="nav-link">How it works</a>
       <a href="/about.html" class="nav-link">About</a>
       <a href="/contact.html" class="nav-link">Contact</a>
     </nav>
@@ -28,13 +25,13 @@
 
 <main class="page">
   <h1>Privacy.</h1>
-  <p class="lede">Plain-English summary of what we collect, why, and what we don't do.</p>
+  <p class="lede">In plain English: what we collect, what we don't, and how we make money. No accounts, no tracking pixels, no resale of your data.</p>
 
   <h2>What we collect</h2>
   <ul>
-    <li><strong>Search inputs</strong> — origin airport, dates, family size, and filters you set. We store these to run the search and to improve the product over time.</li>
-    <li><strong>Outbound clicks</strong> — when you click "See hotel rates," we log which trip you clicked and the price displayed at the time. This is how booking partners attribute commission to us.</li>
-    <li><strong>A session ID</strong> — a random identifier stored in your browser's local storage to link your clicks back to your search. It is not tied to your name or email.</li>
+    <li><strong>Search inputs</strong> — origin airport, dates, family size, and filters you set. We use these to run the search and to improve the product.</li>
+    <li><strong>Outbound clicks</strong> — when you click "See hotel rates," we log which trip you clicked and the price displayed at the time. Booking partners use this to attribute commission to us.</li>
+    <li><strong>A session ID</strong> — a random identifier in your browser's local storage that links your clicks to your search. Not tied to your name or email.</li>
   </ul>
 
   <h2>What we don't collect</h2>
@@ -45,16 +42,17 @@
   </ul>
 
   <h2>Cookies</h2>
-  <p>We use a single piece of local storage (the session ID above) to associate your search with your booking clicks. We do not use third-party cookies on this site. The booking partners we redirect you to (Booking.com, Expedia, Priceline) have their own privacy policies and cookies — you'll be subject to those once you click through.</p>
+  <p>We use one piece of local storage (the session ID above) to associate your search with your booking clicks. We don't use third-party cookies. The booking partners we redirect you to (Booking.com, Expedia, Priceline) have their own privacy policies and cookies — you'll be subject to those once you click through.</p>
 
-  <h2>How affiliate partnerships work</h2>
-  <p>When you click through to a booking partner, we pass an affiliate identifier so the partner can credit any resulting booking to KindredTrips. This is how we make money. You don't pay anything extra; the partner pays us a small percentage of their booking fee.</p>
+  <h2 id="affiliate">How affiliate partnerships work</h2>
+  <p>When you click through to a booking partner, we pass an affiliate identifier so the partner can credit any resulting booking to KindredTrips. This is how we make money. The price you pay is identical — we don't add fees. The partner pays us a small percentage of their booking fee.</p>
+  <p>We sort search results by what fits your family — a mix of total trip cost, family-fit factors, and resort quality. We <strong>do not</strong> sort by which partner pays us the most.</p>
 
-  <h2>Data we may share with partners</h2>
-  <p>The booking partner receives the destination and dates you searched for as part of the redirect URL. They do not receive any other personal information from us.</p>
+  <h2>Data we share with partners</h2>
+  <p>The booking partner receives the destination, dates, and party size you searched for as part of the redirect URL. They do not receive any other personal information from us.</p>
 
   <h2>How long we keep data</h2>
-  <p>Search inputs and click logs are kept indefinitely so we can improve the product and analyze trends. They are stored on Supabase (US-East). They are not exported or shared.</p>
+  <p>Search inputs and click logs are kept indefinitely so we can improve the product and analyze trends. They live on Supabase (US-East). They are not exported or shared.</p>
 
   <h2>Your rights</h2>
   <p>If you'd like us to delete your search history, <a href="/contact.html">email us</a> with your session ID (visible in your browser's local storage under <code>kt_session_id</code>) and we'll remove it.</p>
@@ -66,6 +64,16 @@
 </main>
 
 <footer class="site-footer">
+  <div class="footer-disclosures">
+    <div>
+      <h5>Why we're free</h5>
+      <p>KindredTrips earns a referral fee when you book through our partners (Booking.com, airlines, etc.). The price you pay is identical — we don't add fees. We don't take payments directly; you book on the partner's site, they handle your reservation.</p>
+    </div>
+    <div>
+      <h5>About our rankings</h5>
+      <p>We sort by what fits your family — a mix of total trip cost, family-fit factors, and resort quality. We don't sort by which partner pays us the most. You can change the sort order any time using the dropdown above results.</p>
+    </div>
+  </div>
   <div class="footer-inner">
     <div>
       <div class="footer-brand">
@@ -73,13 +81,13 @@
         KindredTrips
       </div>
       <p class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+        Caribbean family travel, ranked by what fits your family. Independent. Family-run.
       </p>
     </div>
     <div class="footer-col">
       <h5>Product</h5>
       <ul>
-        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#why">What's different</a></li>
         <li><a href="/#destinations">Destinations</a></li>
         <li><a href="/about.html">How it works</a></li>
       </ul>
@@ -96,13 +104,13 @@
       <h5>Legal</h5>
       <ul>
         <li><a href="/privacy.html">Privacy</a></li>
-        <li><a href="/contact.html">Affiliate disclosure</a></li>
+        <li><a href="/privacy.html#affiliate">Affiliate disclosure</a></li>
       </ul>
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
-    <span>Made for families. Caribbean only, on purpose.</span>
+    <span>© <span id="year"></span> KindredTrips</span>
+    <span>Caribbean only — on purpose.</span>
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>

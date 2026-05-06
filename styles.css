@@ -1,35 +1,44 @@
 /* KindredTrips — design system v2 */
 
 :root {
-  /* Palette — disciplined neutral + single confident accent */
+  /* Brand palette — KindredTrips visual identity */
   --bg: #fafaf7;
-  --bg-soft: #f4f3ee;
+  --bg-soft: #f4f4ef;
   --bg-deep: #0d1d29;
 
-  --ink: #0a1721;
-  --ink-1: #1d2733;
-  --ink-2: #4a5360;
-  --ink-3: #7a8492;
-  --ink-4: #b0b8c2;
+  --ink: #1a1d23;             /* was --text */
+  --ink-1: #2a2e35;            /* slight lift from ink */
+  --ink-2: #5e6470;            /* was --text-soft */
+  --ink-3: #8a8f99;            /* was --text-muted */
+  --ink-4: #b0b4bd;
 
-  --line: #e7e5de;
-  --line-soft: #efede6;
-  --line-strong: #d3d0c5;
+  --line: #e6e3db;             /* was --border */
+  --line-soft: #eee9dc;
+  --line-strong: #d4cfbf;
 
-  --sea: #1d6878;
-  --sea-deep: #0e4452;
-  --sea-soft: #d3e6ea;
-  --sea-tint: #eaf3f5;
+  /* Accent: deep teal — "considered + trustworthy" */
+  --sea: #0a6e8b;              /* was --accent */
+  --sea-deep: #085a72;         /* was --accent-hover */
+  --sea-soft: #e3f1f6;         /* was --accent-soft */
+  --sea-tint: #eef6f9;
 
-  --sand: #c08a3e;
-  --sand-soft: #f7ecd6;
-  --sand-deep: #6e4d18;
+  /* Semantic: positive signal */
+  --good: #2d7a47;
+  --good-soft: #e8f5ec;
 
-  --coral: #c9544a;
-  --coral-soft: #f6e0dc;
+  /* Semantic: attention / "pricing estimated" / play badges */
+  --warn: #c2691a;
+  --warn-soft: #fdf2e3;
 
   --card: #ffffff;
   --glass: rgba(255, 255, 255, 0.94);
+
+  /* Legacy aliases (kept so older selectors don't break) */
+  --sand: var(--warn);
+  --sand-soft: var(--warn-soft);
+  --sand-deep: #7a4310;
+  --coral: var(--warn);
+  --coral-soft: var(--warn-soft);
 
   /* Shadow scale */
   --shadow-xs: 0 1px 2px rgba(10, 23, 33, 0.05);
@@ -64,32 +73,60 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: "Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 22px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "ss01", "cv11";
 }
 
 img { max-width: 100%; display: block; }
 
-h1, h2 {
-  font-family: "Fraunces", "Charter", "Iowan Old Style", Georgia, serif;
-  font-weight: 500;
-  letter-spacing: -0.022em;
+h1 {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 38px;
+  line-height: 44px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--ink);
-  line-height: 1.08;
   margin: 0;
 }
-h3, h4 {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+h2 {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0;
+}
+h3 {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 20px;
+  line-height: 26px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
-  line-height: 1.2;
   margin: 0;
+}
+h4 {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* Micro / label — used for eyebrows, summary labels, etc. */
+.label, label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 a { color: var(--sea-deep); text-decoration: none; }
@@ -128,7 +165,7 @@ button { font-family: inherit; }
 @media (max-width: 720px) { .topbar-inner { padding: var(--s-3) var(--s-5); } }
 
 .logo {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -139,15 +176,15 @@ button { font-family: inherit; }
 }
 .logo-mark {
   width: 28px; height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--sea) 0%, var(--sea-deep) 100%);
+  border-radius: 6px;
+  background: var(--sea);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-size: 14px;
   font-weight: 700;
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   letter-spacing: 0;
 }
 
@@ -338,12 +375,15 @@ button { font-family: inherit; }
 
 .hero h1 {
   color: #fff;
-  font-size: clamp(40px, 6.2vw, 72px);
-  font-weight: 500;
+  font-size: 38px;
+  line-height: 44px;
+  font-weight: 600;
   margin: 0 0 var(--s-5);
-  max-width: 17ch;
-  letter-spacing: -0.025em;
-  line-height: 1.04;
+  max-width: 22ch;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 980px) {
+  .hero h1 { font-size: 52px; line-height: 60px; }
 }
 .hero h1 em {
   font-style: normal;
@@ -351,8 +391,8 @@ button { font-family: inherit; }
   font-weight: 400;
 }
 .hero p.lede {
-  font-size: clamp(16px, 1.4vw, 18px);
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.80);
   margin: 0 0 var(--s-10);
   max-width: 54ch;
   line-height: 1.6;
@@ -516,16 +556,16 @@ button { font-family: inherit; }
 .stat:last-child { border-right: none; }
 @media (max-width: 720px) { .stat:nth-child(2n) { border-right: none; } }
 .stat-num {
-  font-family: "Fraunces", Georgia, serif;
-  font-size: clamp(32px, 3.6vw, 44px);
-  font-weight: 500;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 36px;
+  font-weight: 600;
   color: var(--ink);
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .stat-label {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-2);
   font-weight: 500;
 }
@@ -544,25 +584,28 @@ button { font-family: inherit; }
 }
 .section-eyebrow {
   display: inline-block;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.04em;
   color: var(--ink-2);
   margin-bottom: var(--s-3);
 }
 .section-head h2 {
-  font-size: clamp(28px, 3.2vw, 42px);
-  font-weight: 500;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
   margin: 0 0 var(--s-3);
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 980px) {
+  .section-head h2 { font-size: 32px; line-height: 38px; }
 }
 .section-head p {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--ink-2);
   margin: 0;
-  line-height: 1.6;
+  line-height: 22px;
 }
 
 /* ---------- Feature grid ---------- */
@@ -627,7 +670,7 @@ button { font-family: inherit; }
   padding: var(--s-6) var(--s-2) var(--s-6) 0;
 }
 .step-num {
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink-2);
@@ -695,7 +738,7 @@ button { font-family: inherit; }
   color: #fff;
 }
 .dest-name {
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 2px;
@@ -772,7 +815,7 @@ button { font-family: inherit; }
   padding: var(--s-5);
 }
 .sidebar-block h4 {
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -847,7 +890,7 @@ details.sidebar-block > summary {
   align-items: center;
   justify-content: space-between;
   user-select: none;
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1158,11 +1201,11 @@ input[type="range"].rating-slider::-moz-range-thumb {
   .card-body { border-right: none; border-bottom: 1px solid var(--line-soft); padding: var(--s-5); }
 }
 .card-body h3 {
-  font-size: 19px;
+  font-size: 20px;
+  line-height: 26px;
   font-weight: 600;
   margin: 0;
-  letter-spacing: -0.012em;
-  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 .card-meta {
@@ -1193,31 +1236,42 @@ input[type="range"].rating-slider::-moz-range-thumb {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   padding: 3px 9px 4px;
   border-radius: var(--r-pill);
   background: var(--bg-soft);
   color: var(--ink-1);
   border: 1px solid var(--line);
   white-space: nowrap;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
+}
+.badge .emoji { font-size: 11px; }
+.badge.good {
+  background: var(--good-soft);
+  color: var(--good);
+  border-color: #c5e0cd;
+  font-weight: 600;
 }
 .badge.kid {
-  background: var(--sea-tint);
+  background: var(--sea-soft);
   color: var(--sea-deep);
-  border-color: var(--sea-soft);
+  border-color: #c5dde5;
+  font-weight: 600;
 }
-.badge.play, .badge.warm {
-  background: var(--sand-soft);
-  color: var(--sand-deep);
-  border-color: #ead7af;
+.badge.warn, .badge.play, .badge.warm {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: #f0d9b3;
+  font-weight: 600;
 }
-.badge.warn {
-  background: var(--coral-soft);
-  color: #8a2a1f;
-  border-color: #e8c4be;
+.badge.rating {
+  background: #fff;
+  color: var(--ink-1);
+  border-color: var(--line-strong);
+  font-weight: 600;
 }
+.badge.rating .star { color: var(--warn); }
 .badge.muted {
   background: var(--bg-soft);
   color: var(--ink-3);
@@ -1247,12 +1301,12 @@ input[type="range"].rating-slider::-moz-range-thumb {
   margin-bottom: 4px;
 }
 .price-total {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
   font-size: 32px;
-  font-weight: 500;
+  font-weight: 600;
   margin: 0;
   color: var(--ink);
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -1293,10 +1347,10 @@ input[type="range"].rating-slider::-moz-range-thumb {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  background: var(--sea-deep);
-  border-color: var(--sea-deep);
+  background: var(--sea);
+  border-color: var(--sea);
 }
-.btn-primary:hover { background: #052e38; border-color: #052e38; }
+.btn-primary:hover { background: var(--sea-deep); border-color: var(--sea-deep); }
 
 .btn-lg { padding: 14px 28px; font-size: 15px; }
 .btn-secondary {
@@ -1392,9 +1446,33 @@ input[type="range"].rating-slider::-moz-range-thumb {
 .site-footer {
   background: #fff;
   border-top: 1px solid var(--line);
-  padding: var(--s-16) 0 var(--s-8);
+  padding: var(--s-12) 0 var(--s-8);
   font-size: 14px;
   color: var(--ink-2);
+}
+.footer-disclosures {
+  max-width: 1200px;
+  margin: 0 auto var(--s-12);
+  padding: 0 var(--s-8);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-10);
+}
+@media (max-width: 720px) { .footer-disclosures { grid-template-columns: 1fr; gap: var(--s-6); padding: 0 var(--s-5); } }
+.footer-disclosures h5 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin: 0 0 var(--s-2);
+}
+.footer-disclosures p {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--ink-2);
+  margin: 0;
+  max-width: 50ch;
 }
 .footer-inner {
   max-width: 1200px;
@@ -1403,11 +1481,13 @@ input[type="range"].rating-slider::-moz-range-thumb {
   display: grid;
   grid-template-columns: 1.6fr 1fr 1fr 1fr;
   gap: var(--s-8);
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-8);
 }
 @media (max-width: 880px) { .footer-inner { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 480px) { .footer-inner { grid-template-columns: 1fr; padding: 0 var(--s-5); } }
+@media (max-width: 480px) { .footer-inner { grid-template-columns: 1fr; padding-left: var(--s-5); padding-right: var(--s-5); } }
 .footer-brand {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
   font-size: 22px;
   font-weight: 600;
   color: var(--ink);
@@ -1424,13 +1504,13 @@ input[type="range"].rating-slider::-moz-range-thumb {
   color: var(--ink-3);
 }
 .footer-col h5 {
-  font-family: "Inter", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-1);
-  margin: 0 0 var(--s-4);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  margin: 0 0 var(--s-3);
 }
 .footer-col ul {
   list-style: none;
@@ -1556,11 +1636,14 @@ input[type="range"].rating-slider::-moz-range-thumb {
   margin-bottom: var(--s-6);
 }
 .modal-header h2 {
-  font-size: clamp(24px, 3vw, 32px);
-  font-weight: 500;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
   margin: 0 0 var(--s-2);
-  letter-spacing: -0.022em;
-  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 720px) {
+  .modal-header h2 { font-size: 30px; line-height: 36px; }
 }
 .modal-header .meta {
   display: flex;
@@ -1662,10 +1745,10 @@ input[type="range"].rating-slider::-moz-range-thumb {
   letter-spacing: 0.10em; margin-bottom: 4px;
 }
 .modal-pricing .price-total {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
   font-size: 36px;
-  font-weight: 500;
-  letter-spacing: -0.025em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;

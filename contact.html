@@ -4,10 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Contact — KindredTrips</title>
-<meta name="description" content="Get in touch with KindredTrips." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="description" content="Email KindredTrips with bugs, missing details, or resort suggestions." />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -19,7 +16,7 @@
       <span>KindredTrips</span>
     </a>
     <nav class="topbar-nav" aria-label="Primary">
-      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/#why" class="nav-link">How it works</a>
       <a href="/about.html" class="nav-link">About</a>
       <a href="/contact.html" class="nav-link">Contact</a>
     </nav>
@@ -28,26 +25,36 @@
 
 <main class="page">
   <h1>Contact.</h1>
-  <p class="lede">Found a bug, missing detail, or want to suggest a resort? We'd love to hear from you.</p>
+  <p class="lede">Found a bug, missing detail, or want to suggest a resort we should add? We'd genuinely like to hear from you.</p>
 
   <h2>Email</h2>
   <p><a href="mailto:hello@kindredtrips.com">hello@kindredtrips.com</a></p>
 
   <h2>What's helpful to include</h2>
   <ul>
-    <li>What you were searching for (origin airport, dates, family size).</li>
+    <li>What you were searching for — origin airport, dates, family size.</li>
     <li>What went wrong, or what felt off.</li>
     <li>If a resort detail looked incorrect — the resort name and what's wrong.</li>
     <li>Screenshots help, but aren't required.</li>
   </ul>
 
   <h2>Press &amp; partnerships</h2>
-  <p>For press or partnership inquiries, email the address above with "Press" or "Partnership" in the subject line.</p>
+  <p>Email the address above with "Press" or "Partnership" in the subject line.</p>
 
-  <p style="margin-top: 32px; color: var(--ink-3); font-size: 13px;">We try to reply within a few business days. KindredTrips is a small operation — thank you for your patience.</p>
+  <p style="margin-top: 32px; color: var(--ink-3); font-size: 13px;">We try to reply within a few business days. KindredTrips is small — thank you for your patience.</p>
 </main>
 
 <footer class="site-footer">
+  <div class="footer-disclosures">
+    <div>
+      <h5>Why we're free</h5>
+      <p>KindredTrips earns a referral fee when you book through our partners (Booking.com, airlines, etc.). The price you pay is identical — we don't add fees. We don't take payments directly; you book on the partner's site, they handle your reservation.</p>
+    </div>
+    <div>
+      <h5>About our rankings</h5>
+      <p>We sort by what fits your family — a mix of total trip cost, family-fit factors, and resort quality. We don't sort by which partner pays us the most. You can change the sort order any time using the dropdown above results.</p>
+    </div>
+  </div>
   <div class="footer-inner">
     <div>
       <div class="footer-brand">
@@ -55,13 +62,13 @@
         KindredTrips
       </div>
       <p class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+        Caribbean family travel, ranked by what fits your family. Independent. Family-run.
       </p>
     </div>
     <div class="footer-col">
       <h5>Product</h5>
       <ul>
-        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#why">What's different</a></li>
         <li><a href="/#destinations">Destinations</a></li>
         <li><a href="/about.html">How it works</a></li>
       </ul>
@@ -78,13 +85,13 @@
       <h5>Legal</h5>
       <ul>
         <li><a href="/privacy.html">Privacy</a></li>
-        <li><a href="/contact.html">Affiliate disclosure</a></li>
+        <li><a href="/privacy.html#affiliate">Affiliate disclosure</a></li>
       </ul>
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
-    <span>Made for families. Caribbean only, on purpose.</span>
+    <span>© <span id="year"></span> KindredTrips</span>
+    <span>Caribbean only — on purpose.</span>
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
