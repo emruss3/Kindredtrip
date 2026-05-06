@@ -293,22 +293,22 @@
         <span class="dest-hint" id="dest-hint">Anywhere in the Caribbean</span>
       </div>
     </form>
-
-    <div id="dest-picker" class="dest-picker" hidden>
-      <div class="dest-picker-inner">
-        <div class="dest-picker-header">
-          <strong>Choose destinations</strong>
-          <button type="button" class="dest-picker-close" onclick="closeDestPicker()" aria-label="Close">×</button>
-        </div>
-        <div class="dest-picker-grid" id="dest-picker-grid"></div>
-        <div class="dest-picker-footer">
-          <button type="button" class="btn btn-secondary" onclick="filters.country.clear(); syncHomepageDestinationChips(); renderDestPicker();">Clear</button>
-          <button type="button" class="btn btn-primary" onclick="closeDestPicker()">Done</button>
-        </div>
-      </div>
-    </div>
   </div>
 </section>
+
+<div id="dest-picker" class="dest-picker" hidden onclick="if(event.target===this)closeDestPicker()">
+  <div class="dest-picker-inner">
+    <div class="dest-picker-header">
+      <strong>Choose destinations</strong>
+      <button type="button" class="dest-picker-close" onclick="closeDestPicker()" aria-label="Close">×</button>
+    </div>
+    <div class="dest-picker-grid" id="dest-picker-grid"></div>
+    <div class="dest-picker-footer">
+      <button type="button" class="btn btn-secondary" onclick="filters.country.clear(); syncHomepageDestinationChips(); renderDestPicker();">Clear</button>
+      <button type="button" class="btn btn-primary" onclick="closeDestPicker()">Done</button>
+    </div>
+  </div>
+</div>
 
 <section class="stats-strip">
   <div class="stats-grid">
