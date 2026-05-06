@@ -20,7 +20,7 @@
       <span>KindredTrips</span>
     </a>
 
-    <button id="compact-search" class="compact-search" onclick="scrollToSearch()" aria-label="Edit search">
+    <button id="compact-search" class="compact-search" onclick="openSearchPopover()" aria-label="Edit search">
       <svg class="cs-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       <span class="cs-line" id="compact-search-line">Edit search</span>
       <span class="cs-edit">Edit</span>
@@ -33,6 +33,45 @@
     </nav>
   </div>
 </header>
+
+<div class="search-popover-backdrop" id="search-popover-backdrop" onclick="closeSearchPopover()"></div>
+<div class="search-popover" id="search-popover" role="dialog" aria-label="Edit search">
+  <form id="popover-form" onsubmit="event.preventDefault(); runSearchFromPopover();">
+    <div class="search-popover-grid">
+      <div class="search-field">
+        <label for="po_origin">From</label>
+        <input id="po_origin" type="text" list="origin-airports" placeholder="Airport code" required autocomplete="off" />
+      </div>
+      <div class="search-field">
+        <label for="po_date_start">Check-in</label>
+        <input id="po_date_start" type="date" required />
+      </div>
+      <div class="search-field">
+        <label for="po_date_end">Check-out</label>
+        <input id="po_date_end" type="date" required />
+      </div>
+      <div class="search-field">
+        <label for="po_adults">Adults</label>
+        <input id="po_adults" type="number" min="1" max="8" required />
+      </div>
+      <div class="search-field">
+        <label for="po_child_ages">Kids' ages</label>
+        <input id="po_child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
+      </div>
+      <button class="search-submit" type="submit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        Update
+      </button>
+    </div>
+    <div class="search-popover-extras">
+      <span class="label-mini">Family-fit</span>
+      <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
+      <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
+      <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
+      <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
+    </div>
+  </form>
+</div>
 
 <section class="hero" id="hero">
   <div class="hero-bg" aria-hidden="true"></div>
@@ -365,6 +404,64 @@
 
   function scrollToSearch() {
     document.getElementById("hero").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openSearchPopover() {
+    if (!lastSearchSummary) {
+      scrollToSearch();
+      return;
+    }
+    // Populate popover with current search values
+    document.getElementById("po_origin").value = lastSearchSummary.origin_iata || "";
+    document.getElementById("po_date_start").value = lastSearchSummary.date_start || "";
+    document.getElementById("po_date_end").value = lastSearchSummary.date_end || "";
+    document.getElementById("po_adults").value = lastSearchSummary.adults || 2;
+    document.getElementById("po_child_ages").value = (lastSearchSummary.child_ages || []).join(", ");
+    document.querySelectorAll("#popover-form .toggle input").forEach((cb) => {
+      const flag = cb.dataset.flag;
+      cb.checked = !!lastSearchSummary[flag];
+      cb.parentElement.classList.toggle("active", cb.checked);
+    });
+    document.getElementById("search-popover").classList.add("open");
+    document.getElementById("search-popover-backdrop").classList.add("open");
+    setTimeout(() => document.getElementById("po_origin").focus(), 60);
+  }
+
+  function closeSearchPopover() {
+    document.getElementById("search-popover").classList.remove("open");
+    document.getElementById("search-popover-backdrop").classList.remove("open");
+  }
+
+  // Wire toggle visual state on popover too
+  document.querySelectorAll("#popover-form .toggle").forEach((t) => {
+    const cb = t.querySelector("input");
+    cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
+  });
+
+  // ESC closes popover
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("search-popover").classList.contains("open")) {
+      closeSearchPopover();
+    }
+  });
+
+  async function runSearchFromPopover() {
+    // Mirror values to the hero form, then run the existing search
+    const f = (id) => document.getElementById(id);
+    f("origin").value = f("po_origin").value;
+    f("date_start").value = f("po_date_start").value;
+    f("date_end").value = f("po_date_end").value;
+    f("adults").value = f("po_adults").value;
+    f("child_ages").value = f("po_child_ages").value;
+    document.querySelectorAll(".search-extras input[type=checkbox]").forEach((heroCb) => {
+      const popCb = document.querySelector(`#popover-form input[data-flag="${heroCb.dataset.flag}"]`);
+      if (popCb) {
+        heroCb.checked = popCb.checked;
+        heroCb.parentElement.classList.toggle("active", heroCb.checked);
+      }
+    });
+    closeSearchPopover();
+    runSearch();
   }
 
   const SESSION_ID = (function () {
