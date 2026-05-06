@@ -1081,7 +1081,15 @@
   async function runSearch() {
     const submitBtn = document.getElementById("submit-btn");
     submitBtn.disabled = true;
+
+    // Snapshot the homepage country selection BEFORE clearing other filter
+    // state. We want country to persist into the results sidebar so the user
+    // can pull countries off / add more without re-searching.
+    const homepageCountries = Array.from(filters.country);
     clearAllFilterState();
+    homepageCountries.forEach((c) => filters.country.add(c));
+    syncHomepageDestinationChips();
+
     renderSkeleton();
     setStatus("Starting your search…", { spinner: true });
 
@@ -1203,9 +1211,61 @@
     return { min: Math.min(...prices), max: Math.max(...prices) };
   }
 
+  // Compute one ranking badge per visible package (max one), in priority order.
+  // Watch-outs (Cuba, etc.) are computed separately inside renderCard.
+  function computeRankingBadges(visible) {
+    const winners = new Map(); // package_id -> { label, cls }
+    if (!visible.length) return winners;
+
+    const num = (v) => (v == null ? Infinity : Number(v));
+    const kidScore = (p) => KIDS_AMENITY_PRIORITY.filter((t) => p._tags.amenities.includes(t)).length;
+    const familyFit = (p) => kidScore(p)
+      + (p._tags.rooms.includes("Family Suite") ? 2 : 0)
+      + (p._tags.rooms.includes("2 Bedroom Suites") ? 2 : 0)
+      + (p._tags.rooms.includes("Connecting Rooms") || p.resorts?.guaranteed_connecting_rooms ? 1 : 0)
+      + (p._tags.styles.includes("Family Resort") || p._tags.styles.includes("Family") ? 1 : 0);
+
+    // 1. Best value — lowest total_price
+    const bestValue = [...visible].sort((a, b) => num(a.total_price) - num(b.total_price))[0];
+    if (bestValue && bestValue.total_price != null) winners.set(bestValue.package_id, { label: "Best value", cls: "rank rank-best" });
+
+    // 2. Best kid amenities — most KIDS_AMENITY tags (require >= 3)
+    const kidScored = [...visible].sort((a, b) => kidScore(b) - kidScore(a));
+    if (kidScored[0] && kidScore(kidScored[0]) >= 3 && !winners.has(kidScored[0].package_id)) {
+      winners.set(kidScored[0].package_id, { label: "Best kid amenities", cls: "rank rank-kid" });
+    }
+
+    // 3. Strong family fit — highest familyFit score (require >= 4)
+    const familyScored = [...visible].sort((a, b) => familyFit(b) - familyFit(a));
+    if (familyScored[0] && familyFit(familyScored[0]) >= 4 && !winners.has(familyScored[0].package_id)) {
+      winners.set(familyScored[0].package_id, { label: "Strong family fit", cls: "rank rank-fit" });
+    }
+
+    // 4. Easy travel day — direct flight + lowest duration
+    const easy = visible.filter((p) => p.stops === 0).sort((a, b) => num(a.duration_hours) - num(b.duration_hours))[0];
+    if (easy && !winners.has(easy.package_id)) {
+      winners.set(easy.package_id, { label: "Easy travel day", cls: "rank rank-easy" });
+    }
+
+    // 5. Lower flight cost — cheapest flight_price
+    const cheapFlight = [...visible].sort((a, b) => num(a.flight_price) - num(b.flight_price))[0];
+    if (cheapFlight && cheapFlight.flight_price != null && !winners.has(cheapFlight.package_id)) {
+      winners.set(cheapFlight.package_id, { label: "Lower flight cost", cls: "rank rank-flight" });
+    }
+
+    // 6. Shortest travel — lowest stops then lowest duration
+    const shortest = [...visible].sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)))[0];
+    if (shortest && !winners.has(shortest.package_id) && shortest.stops != null) {
+      winners.set(shortest.package_id, { label: "Shortest travel", cls: "rank rank-short" });
+    }
+
+    return winners;
+  }
+
   function renderResults() {
     const filtered = allPackages.filter(packageMatchesFilters);
     const visible = filtered.slice(0, 25);
+    const rankBadges = computeRankingBadges(visible);
 
     const main = document.getElementById("results-main");
     const sidebar = document.getElementById("results-sidebar");
@@ -1217,7 +1277,7 @@
       renderActiveFilterPills() +
       (visible.length === 0
         ? `<div class="empty"><h3>Nothing matches those filters.</h3><p>Try clearing a filter or two — your constraints might be too tight.</p></div>`
-        : visible.map(renderCard).join(""));
+        : visible.map((p) => renderCard(p, rankBadges.get(p.package_id))).join(""));
   }
 
   function renderSidebar() {
@@ -1440,9 +1500,10 @@
   function renderResultBar(matchingCount) {
     const total = allPackages.length;
     const filterCount = activeFilterCount();
+    const showing = Math.min(25, matchingCount);
     const summaryText = filterCount > 0
-      ? `${matchingCount} of ${total} match your filters`
-      : `${total} trips ranked. Showing the top ${Math.min(25, matchingCount)}.`;
+      ? `${matchingCount} of ${total} match your filters. Showing the top ${showing} by total cost, travel friction, and family fit.`
+      : `${total} curated family resort trips ranked for your dates. Showing the top ${showing} by total cost, travel friction, and family fit.`;
     return `
       <div class="result-bar">
         <div>
@@ -1458,6 +1519,10 @@
           </select>
         </div>
       </div>
+      <details class="rank-explainer">
+        <summary>How we rank these</summary>
+        <p>KindredTrips ranks curated family resort options using estimated flight + hotel cost, travel time, stops, resort quality, and family-specific details like kids clubs, babysitting, room fit, and kid-friendly amenities.</p>
+      </details>
     `;
   }
 
@@ -1481,7 +1546,7 @@
     return `<span class="badge${cls ? " " + cls : ""}"><span class="emoji">${emoji}</span>${label}</span>`;
   }
 
-  function renderCard(p) {
+  function renderCard(p, rankBadge) {
     const r = p.resorts || {};
     const tags = p._tags;
     const badges = [];
@@ -1525,46 +1590,67 @@
       badges.push(`<span class="badge"><span class="emoji">🏊</span>Swim-up rooms</span>`);
     }
 
-    if (p.warnings) badges.push(`<span class="badge warn">${escapeHtml(String(p.warnings))}</span>`);
-    if (badges.length <= 1) badges.push(`<span class="badge muted">Family-fit details coming soon</span>`);
+    // Watch-out signals — secondary, separate from primary ranking badge
+    const watchouts = [];
+    if (r.country === "Cuba") watchouts.push("U.S. travel rules apply");
+    if (p.stops != null && p.stops >= 2) watchouts.push("Long travel day");
+    if (p.warnings) watchouts.push(String(p.warnings));
 
-    const ratingStr = "";
-    const stops = p.stops != null
+    // Sparse-data placeholder — only when we genuinely have no kid-fit signal
+    const hasKidSignal = seenLabels.size > 0
+      || tags.rooms.includes("Family Suite") || tags.rooms.includes("2 Bedroom Suites")
+      || tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms
+      || tags.styles.includes("Family") || tags.styles.includes("Family Resort");
+    if (!hasKidSignal) {
+      badges.push(`<span class="badge muted">Curated family resort</span>`);
+    }
+
+    const stopsStr = p.stops != null
       ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
       : null;
     const duration = p.duration_hours ? `${p.duration_hours}h` : null;
-    const flightLine = [stops, duration].filter(Boolean).join(" · ");
+    const flightLine = [stopsStr, duration].filter(Boolean).join(" · ");
 
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
-      ratingStr,
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
 
-    const usingGooglePhoto = Array.isArray(r.photo_refs) && r.photo_refs.length > 0;
+    const titleRow = `
+      <div class="card-title-row">
+        <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+        ${rankBadge ? `<span class="${rankBadge.cls}">${escapeHtml(rankBadge.label)}</span>` : ""}
+      </div>
+    `;
+
+    const watchoutRow = watchouts.length
+      ? `<div class="card-watchout">${watchouts.map(w => `<span class="badge warn"><span class="emoji">⚠</span>${escapeHtml(w)}</span>`).join("")}</div>`
+      : "";
+
     return `
       <article class="card" onclick="openResortModal('${p.package_id}')">
         <div class="card-photo">
           <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
-          ${usingGooglePhoto ? `<div class="card-photo-attr">via Google</div>` : ""}
         </div>
         <div class="card-body">
-          <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+          ${titleRow}
           <div class="card-meta">${meta}</div>
           <div class="badges">${badges.join("")}</div>
+          ${watchoutRow}
         </div>
         <div class="card-price">
-          <div style="width: 100%;">
+          <div class="price-block-top">
             <div class="price-from">Estimated total</div>
+            <div class="price-sub">flights + hotel</div>
             <p class="price-total">${fmtMoney(p.total_price)}</p>
             <div class="price-suffix">for your family</div>
             <div class="price-breakdown">
-              <b>${fmtMoney(p.flight_price)}</b> flights<br/>
-              <b>${fmtMoney(p.hotel_price)}</b> hotel
+              <div><b>${fmtMoney(p.flight_price)}</b> flights</div>
+              <div><b>${fmtMoney(p.hotel_price)}</b> hotel</div>
             </div>
           </div>
           <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">See hotel rates →</button>

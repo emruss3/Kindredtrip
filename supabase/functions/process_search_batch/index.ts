@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v10_autochain_pricing";
+const VERSION = "process_search_batch_v11_block_brazil";
 
-// Global never-include list. Intentionally empty today.
-const GLOBAL_BLOCKED_COUNTRIES: string[] = [];
+// Global never-include list. Brazil is in our dataset but is not Caribbean
+// and isn't part of the product positioning, so we keep it out by default.
+const GLOBAL_BLOCKED_COUNTRIES: string[] = ["Brazil"];
 
 serve(async (req) => {
   try {
