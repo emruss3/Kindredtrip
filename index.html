@@ -173,6 +173,10 @@
         <label for="po_child_ages">Kids' ages</label>
         <input id="po_child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
       </div>
+      <div class="search-field">
+        <label for="po_budget">Max budget</label>
+        <input id="po_budget" type="number" min="0" step="500" placeholder="Any" autocomplete="off" inputmode="numeric" />
+      </div>
       <button class="search-submit" type="submit">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         Update
@@ -271,6 +275,10 @@
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="child_ages">Kids' ages</label>
           <input id="child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
+        </div>
+        <div class="search-field" onclick="this.querySelector('input').focus()">
+          <label for="budget">Max budget</label>
+          <input id="budget" type="number" min="0" step="500" placeholder="Any" autocomplete="off" inputmode="numeric" />
         </div>
         <button id="submit-btn" class="search-submit" type="submit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -645,13 +653,16 @@
     return DEFAULT_DESTINATIONS;
   }
 
+  // Always show the default popular chips, plus any extras the user has
+  // selected via "+ More" — so adding a second country from the homepage
+  // doesn't make the others disappear.
+  const DEFAULT_CHIPS = ["Mexico", "Dominican Republic", "Jamaica", "Bahamas", "Turks and Caicos"];
+
   function syncHomepageDestinationChips() {
     const chipsEl = document.getElementById("dest-chips");
     if (!chipsEl) return;
     const selected = Array.from(filters.country);
-    const visible = selected.length > 0
-      ? selected
-      : ["Mexico", "Dominican Republic", "Jamaica", "Bahamas", "Turks and Caicos"];
+    const visible = Array.from(new Set([...DEFAULT_CHIPS, ...selected]));
 
     chipsEl.innerHTML = visible.map((country) => {
       const active = filters.country.has(country) ? " active" : "";
@@ -718,6 +729,7 @@
     document.getElementById("po_date_end").value = lastSearchSummary.date_end || "";
     document.getElementById("po_adults").value = lastSearchSummary.adults || 2;
     document.getElementById("po_child_ages").value = (lastSearchSummary.child_ages || []).join(", ");
+    document.getElementById("po_budget").value = lastSearchSummary.budget_total || "";
     document.querySelectorAll("#popover-form .toggle input").forEach((cb) => {
       const flag = cb.dataset.flag;
       cb.checked = !!lastSearchSummary[flag];
@@ -755,6 +767,7 @@
     f("date_end").value = f("po_date_end").value;
     f("adults").value = f("po_adults").value;
     f("child_ages").value = f("po_child_ages").value;
+    f("budget").value = f("po_budget").value;
     document.querySelectorAll(".search-extras input[type=checkbox]").forEach((heroCb) => {
       const popCb = document.querySelector(`#popover-form input[data-flag="${heroCb.dataset.flag}"]`);
       if (popCb) {
@@ -1082,12 +1095,16 @@
     const submitBtn = document.getElementById("submit-btn");
     submitBtn.disabled = true;
 
-    // Snapshot the homepage country selection BEFORE clearing other filter
-    // state. We want country to persist into the results sidebar so the user
-    // can pull countries off / add more without re-searching.
+    // Snapshot the homepage selections (country + budget) BEFORE clearing
+    // filter state. We want both to persist into the results sidebar so the
+    // user can pull countries off / change budget without re-searching.
     const homepageCountries = Array.from(filters.country);
+    const budgetRaw = parseInt(document.getElementById("budget").value, 10);
+    const homepageBudget = !isNaN(budgetRaw) && budgetRaw > 0 ? budgetRaw : null;
+
     clearAllFilterState();
     homepageCountries.forEach((c) => filters.country.add(c));
+    if (homepageBudget) filters.priceMax = homepageBudget;
     syncHomepageDestinationChips();
 
     renderSkeleton();
@@ -1107,6 +1124,7 @@
         excluded_countries: [],
         ...flags,
       };
+      if (homepageBudget) body.budget_total = homepageBudget;
       // Homepage country selection feeds both server-side filter and post-search sidebar
       if (filters.country.size > 0) {
         body.included_countries = Array.from(filters.country);
@@ -1316,12 +1334,22 @@
 
   function renderCountryBlock() {
     const counts = countryCountsAgg();
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    // Ensure every country the user has selected appears in the list — even
+    // if it returned 0 results — so they can see and unselect it.
+    filters.country.forEach((c) => { if (!(c in counts)) counts[c] = 0; });
+    const sorted = Object.entries(counts).sort((a, b) => {
+      // Selected countries pin to the top; ties broken by count desc
+      const aSel = filters.country.has(a[0]) ? 1 : 0;
+      const bSel = filters.country.has(b[0]) ? 1 : 0;
+      if (aSel !== bSel) return bSel - aSel;
+      return b[1] - a[1];
+    });
     if (sorted.length === 0) return "";
 
     const showKey = "country";
     const showAll = sidebarShowAll.has(showKey);
-    const visible = showAll ? sorted : sorted.slice(0, 8);
+    const minVisible = Math.max(8, filters.country.size);
+    const visible = showAll ? sorted : sorted.slice(0, minVisible);
 
     const rows = visible.map(([country, count]) => {
       const active = filters.country.has(country) ? " active" : "";
