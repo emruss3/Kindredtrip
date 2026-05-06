@@ -491,7 +491,7 @@
   let lastSearchId = null;
   let lastSearchSummary = null;
   let allPackages = [];
-  let lastSortBy = "price_asc";
+  let lastSortBy = "score";
 
   // Filter state
   const filters = {
@@ -1154,8 +1154,8 @@
         <div class="sort-controls">
           <label for="sort_by" style="font-weight: 500;">Sort by</label>
           <select id="sort_by" onchange="onSortChange(this.value)">
+            <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit for your family</option>
             <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total price</option>
-            <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best match</option>
             <option value="price_desc"${lastSortBy === "price_desc" ? " selected" : ""}>Highest total price</option>
           </select>
         </div>
