@@ -1,44 +1,51 @@
 /* KindredTrips — design system v2 */
 
 :root {
-  /* Brand palette — KindredTrips visual identity */
-  --bg: #fafaf7;
-  --bg-soft: #f4f4ef;
-  --bg-deep: #0d1d29;
+  /* KindredTrips brand palette
+     Deep Navy #0D2B45 · Aqua #37C6C9 · Coral #FF7F6E · Peach #FFC89F · Warm Cream #FFF6EA */
+  --bg: #FFF6EA;
+  --bg-soft: #faf0d8;
+  --bg-deep: #0D2B45;
 
-  --ink: #1a1d23;             /* was --text */
-  --ink-1: #2a2e35;            /* slight lift from ink */
-  --ink-2: #5e6470;            /* was --text-soft */
-  --ink-3: #8a8f99;            /* was --text-muted */
-  --ink-4: #b0b4bd;
+  --ink: #0D2B45;             /* deep navy — primary text + wordmark */
+  --ink-1: #163a5a;
+  --ink-2: #4a607a;
+  --ink-3: #7a8aa0;
+  --ink-4: #b3bbc8;
 
-  --line: #e6e3db;             /* was --border */
-  --line-soft: #eee9dc;
-  --line-strong: #d4cfbf;
+  --line: #ece1cb;
+  --line-soft: #f6ecd6;
+  --line-strong: #d8c9a8;
 
-  /* Accent: deep teal — "considered + trustworthy" */
-  --sea: #0a6e8b;              /* was --accent */
-  --sea-deep: #085a72;         /* was --accent-hover */
-  --sea-soft: #e3f1f6;         /* was --accent-soft */
-  --sea-tint: #eef6f9;
+  /* Aqua — links, icons, secondary accents */
+  --sea: #37C6C9;
+  --sea-deep: #2ba8ac;
+  --sea-soft: #d4f1f2;
+  --sea-tint: #eafafa;
 
-  /* Semantic: positive signal */
+  /* Coral — primary CTAs, key accents */
+  --coral: #FF7F6E;
+  --coral-deep: #e6644f;
+  --coral-soft: #ffe0d9;
+
+  /* Peach — warm support */
+  --peach: #FFC89F;
+  --peach-soft: #fff0e0;
+
+  /* Semantic */
   --good: #2d7a47;
   --good-soft: #e8f5ec;
-
-  /* Semantic: attention / "pricing estimated" / play badges */
   --warn: #c2691a;
   --warn-soft: #fdf2e3;
 
   --card: #ffffff;
   --glass: rgba(255, 255, 255, 0.94);
 
-  /* Legacy aliases (kept so older selectors don't break) */
-  --sand: var(--warn);
-  --sand-soft: var(--warn-soft);
+  /* Legacy aliases (kept so older selectors keep working) */
+  --sand: var(--peach);
+  --sand-soft: var(--peach-soft);
   --sand-deep: #7a4310;
-  --coral: var(--warn);
-  --coral-soft: var(--warn-soft);
+  /* (no --coral alias here — the canonical one above is the brand coral) */
 
   /* Shadow scale */
   --shadow-xs: 0 1px 2px rgba(10, 23, 33, 0.05);
@@ -73,7 +80,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
   font-size: 15px;
@@ -85,39 +92,44 @@ body {
 img { max-width: 100%; display: block; }
 
 h1 {
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-family: "Playfair Display", "Charter", Georgia, "Times New Roman", serif;
   font-size: 38px;
   line-height: 44px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  margin: 0;
-}
-h2 {
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-  margin: 0;
-}
-h3 {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 20px;
-  line-height: 26px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
   margin: 0;
 }
+h2 {
+  font-family: "Playfair Display", "Charter", Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin: 0;
+}
+h3 {
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin: 0;
+}
 h4 {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 15px;
   line-height: 20px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
+}
+
+.script {
+  font-family: "Caveat", "Brush Script MT", cursive;
+  font-weight: 500;
 }
 
 /* Micro / label — used for eyebrows, summary labels, etc. */
@@ -130,7 +142,7 @@ h4 {
 }
 
 a { color: var(--sea-deep); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a:hover { color: var(--coral-deep); text-decoration: underline; }
 
 button { font-family: inherit; }
 
@@ -165,28 +177,37 @@ button { font-family: inherit; }
 @media (max-width: 720px) { .topbar-inner { padding: var(--s-3) var(--s-5); } }
 
 .logo {
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
-  font-size: 22px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-size: 26px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-}
-.logo-mark {
-  width: 28px; height: 28px;
-  border-radius: 6px;
-  background: var(--sea);
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: 0;
+  align-items: baseline;
+  position: relative;
+  line-height: 1;
 }
+.logo .wm-kindred { color: var(--ink); }
+.logo .wm-trips { color: var(--sea); }
+.logo .wm-arc {
+  position: absolute;
+  bottom: -4px; left: 6%; right: 12%;
+  height: 5px;
+  pointer-events: none;
+}
+.logo .wm-arc path { stroke: var(--coral); stroke-width: 1.6; fill: none; }
+.logo .wm-spark {
+  position: absolute;
+  top: -10px; right: -14px;
+  width: 16px; height: 16px;
+  pointer-events: none;
+}
+.logo .wm-spark line { stroke: var(--coral); stroke-width: 1.5; stroke-linecap: round; }
+.logo .wm-spark circle { fill: var(--coral); }
+
+/* Legacy logo-mark (now hidden — kept so old refs don't break) */
+.logo-mark { display: none; }
 
 .topbar-nav {
   display: flex;
@@ -201,6 +222,21 @@ button { font-family: inherit; }
   padding: var(--s-2) var(--s-1);
 }
 .topbar-nav a:hover { color: var(--ink); text-decoration: none; }
+
+.topbar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: var(--coral);
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.topbar-cta:hover { background: var(--coral-deep); color: #fff; text-decoration: none; }
 .topbar-nav .pipe {
   height: 16px;
   width: 1px;
@@ -466,6 +502,16 @@ button { font-family: inherit; }
   color: rgba(255, 255, 255, 0.65);
   font-weight: 400;
 }
+.hero-tagline {
+  font-family: "Caveat", "Brush Script MT", cursive;
+  font-size: clamp(22px, 2.4vw, 28px);
+  color: var(--peach);
+  margin: 0 0 var(--s-5);
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+
 .hero p.lede {
   font-size: 16px;
   color: rgba(255, 255, 255, 0.80);
@@ -545,8 +591,8 @@ button { font-family: inherit; }
 .search-field input::placeholder { color: var(--ink-3); font-weight: 400; }
 
 .search-submit {
-  padding: 0;
-  background: var(--sea);
+  padding: 0 var(--s-6);
+  background: var(--coral);
   border: none;
   color: #fff;
   font-size: 14px;
@@ -556,12 +602,11 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
-  padding: 0 var(--s-6);
   min-height: 64px;
   transition: background 0.15s;
   letter-spacing: -0.005em;
 }
-.search-submit:hover { background: var(--sea-deep); }
+.search-submit:hover { background: var(--coral-deep); }
 .search-submit:disabled { opacity: 0.7; cursor: not-allowed; }
 @media (max-width: 880px) {
   .search-submit { grid-column: 1 / -1; min-height: 52px; padding: var(--s-3); }
@@ -1541,10 +1586,14 @@ details.rank-explainer > p {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  background: var(--sea);
-  border-color: var(--sea);
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #fff;
+  border-radius: var(--r-pill);
+  padding: 11px 22px;
+  font-weight: 600;
 }
-.btn-primary:hover { background: var(--sea-deep); border-color: var(--sea-deep); }
+.btn-primary:hover { background: var(--coral-deep); border-color: var(--coral-deep); }
 
 .btn-lg { padding: 14px 28px; font-size: 15px; }
 .btn-secondary {
@@ -1681,16 +1730,17 @@ details.rank-explainer > p {
 @media (max-width: 880px) { .footer-inner { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .footer-inner { grid-template-columns: 1fr; padding-left: var(--s-5); padding-right: var(--s-5); } }
 .footer-brand {
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
   font-size: 22px;
   font-weight: 600;
   color: var(--ink);
   margin-bottom: var(--s-3);
-  letter-spacing: -0.02em;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
+  letter-spacing: -0.005em;
+  display: inline-block;
 }
+.footer-brand .wm-kindred { color: var(--ink); }
+.footer-brand .wm-trips { color: var(--sea); }
 .footer-disclosure {
   max-width: 380px;
   line-height: 1.6;
