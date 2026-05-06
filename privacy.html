@@ -7,21 +7,27 @@
 <meta name="description" content="How KindredTrips handles your data." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 
-<header class="topbar">
-  <a href="/" class="logo" aria-label="KindredTrips home">Kindred<span>Trips</span></a>
-  <nav class="topbar-nav" aria-label="Primary">
-    <a href="/about.html">About</a>
-    <a href="/contact.html">Contact</a>
-  </nav>
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="logo" aria-label="KindredTrips home">
+      <span class="logo-mark">K</span>
+      <span>KindredTrips</span>
+    </a>
+    <nav class="topbar-nav" aria-label="Primary">
+      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/about.html" class="nav-link">About</a>
+      <a href="/contact.html" class="nav-link">Contact</a>
+    </nav>
+  </div>
 </header>
 
 <main class="page">
-  <h1>Privacy</h1>
+  <h1>Privacy.</h1>
   <p class="lede">Plain-English summary of what we collect, why, and what we don't do.</p>
 
   <h2>What we collect</h2>
@@ -56,25 +62,47 @@
   <h2>Changes to this policy</h2>
   <p>We may update this policy as the product evolves. The "last updated" date below will reflect any changes.</p>
 
-  <p style="margin-top: 32px; color: var(--ink-mute); font-size: 13px;">Last updated: May 2026.</p>
+  <p style="margin-top: 32px; color: var(--ink-3); font-size: 13px;">Last updated: May 2026.</p>
 </main>
 
 <footer class="site-footer">
   <div class="footer-inner">
     <div>
-      <div class="footer-brand">Kindred<span>Trips</span></div>
-      <div class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. When you click "See hotel rates" we send you to a partner site to complete your booking. We earn a commission on confirmed bookings at no extra cost to you. Prices shown are estimates — final pricing is set by the booking partner.
+      <div class="footer-brand">
+        <span class="logo-mark">K</span>
+        KindredTrips
       </div>
+      <p class="footer-disclosure">
+        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+      </p>
     </div>
-    <nav class="footer-links" aria-label="Footer">
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
-      <a href="/privacy.html">Privacy</a>
-    </nav>
-    <div class="footer-copy">
-      © <span id="year"></span> KindredTrips. All rights reserved.
+    <div class="footer-col">
+      <h5>Product</h5>
+      <ul>
+        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#destinations">Destinations</a></li>
+        <li><a href="/about.html">How it works</a></li>
+      </ul>
     </div>
+    <div class="footer-col">
+      <h5>Company</h5>
+      <ul>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/contact.html">Contact</a></li>
+        <li><a href="mailto:hello@kindredtrips.com">Press</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Legal</h5>
+      <ul>
+        <li><a href="/privacy.html">Privacy</a></li>
+        <li><a href="/contact.html">Affiliate disclosure</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
+    <span>Made for families. Caribbean only, on purpose.</span>
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>

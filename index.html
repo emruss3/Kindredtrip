@@ -4,110 +4,230 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KindredTrips — Caribbean family vacations, ranked by total trip cost</title>
-<meta name="description" content="Search every family resort in the Caribbean and every airport in one place. Ranked by total trip cost: flights plus hotel. Filters built for families: kids club, on the beach, accepts infants." />
+<meta name="description" content="Search every family resort in the Caribbean and every airport in one place. Ranked by total trip cost — flights plus hotel — for your exact family." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 
-<header class="topbar">
-  <a href="/" class="logo" aria-label="KindredTrips home">Kindred<span>Trips</span></a>
-  <nav class="topbar-nav" aria-label="Primary">
-    <a href="/about.html">About</a>
-    <a href="/contact.html">Contact</a>
-  </nav>
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="logo" aria-label="KindredTrips home">
+      <span class="logo-mark">K</span>
+      <span>KindredTrips</span>
+    </a>
+
+    <button id="compact-search" class="compact-search" onclick="scrollToSearch()" aria-label="Edit search">
+      <svg class="cs-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="cs-line" id="compact-search-line">Edit search</span>
+      <span class="cs-edit">Edit</span>
+    </button>
+
+    <nav class="topbar-nav" aria-label="Primary">
+      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/about.html" class="nav-link">About</a>
+      <a href="/contact.html" class="nav-link">Contact</a>
+    </nav>
+  </div>
 </header>
 
-<section class="hero">
+<section class="hero" id="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="hero-grain" aria-hidden="true"></div>
   <div class="hero-inner">
-    <div class="hero-eyebrow">Caribbean · Family-fit search</div>
-    <h1>One search. Every Caribbean resort. Ranked by total trip cost.</h1>
-    <p class="lede">Compare 974 family-friendly resorts and every Caribbean airport at once. We rank each option by what it actually costs your family — flights plus hotel — and surface only the resorts that fit kids, infants, and connecting rooms.</p>
+    <div>
+      <div class="hero-eyebrow fade-in">Caribbean · Family-fit search</div>
+      <h1 class="fade-in delay-1">One search.<br/>Every Caribbean resort.<br/><em>Ranked by total cost.</em></h1>
+      <p class="lede fade-in delay-2">Compare 974 family-friendly resorts and every Caribbean airport at once. We rank each option by what your trip will <em>actually</em> cost — flights plus hotel for your exact family — and surface only the resorts that fit kids, infants, and connecting rooms.</p>
+    </div>
 
-    <form id="search-form" class="form-card" onsubmit="event.preventDefault(); runSearch();">
-      <div class="form-grid">
-        <div>
-          <label for="origin">Departing from</label>
-          <input id="origin" type="text" maxlength="3" value="BNA" placeholder="BNA" required autocomplete="off" />
-          <div class="hint">3-letter airport code</div>
+    <form id="search-form" class="search-card fade-in delay-3" onsubmit="event.preventDefault(); runSearch();">
+      <div class="search-card-grid">
+        <div class="search-field" onclick="this.querySelector('input').focus()">
+          <label for="origin">From</label>
+          <input id="origin" type="text" maxlength="3" value="BNA" placeholder="Airport code" required autocomplete="off" />
         </div>
-        <div>
+        <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="date_start">Check-in</label>
           <input id="date_start" type="date" required />
         </div>
-        <div>
+        <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="date_end">Check-out</label>
           <input id="date_end" type="date" required />
         </div>
-        <div>
+        <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="adults">Adults</label>
           <input id="adults" type="number" min="1" max="8" value="2" required />
         </div>
+        <div class="search-field" onclick="this.querySelector('input').focus()">
+          <label for="child_ages">Kids' ages</label>
+          <input id="child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
+        </div>
+        <button id="submit-btn" class="search-submit" type="submit">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          Search trips
+        </button>
+      </div>
 
-        <div class="col-span-2">
-          <label for="child_ages">Children's ages</label>
-          <input id="child_ages" type="text" placeholder="e.g. 8, 5, 2" value="" autocomplete="off" />
-          <div class="hint">Comma-separated. Leave blank for adults-only.</div>
-        </div>
-        <div>
-          <label for="budget">Budget (USD)</label>
-          <input id="budget" type="number" min="0" step="500" placeholder="10,000" />
-        </div>
-        <div>
-          <label for="excluded">Exclude countries</label>
-          <input id="excluded" type="text" placeholder="e.g. Mexico" autocomplete="off" />
-          <div class="hint">Comma-separated.</div>
-        </div>
-
-        <div class="col-span-4">
-          <details class="advanced">
-            <summary>More filters</summary>
-            <div>
-              <label>Family-fit must-haves</label>
-              <div class="toggle-row" id="family-toggles">
-                <label class="toggle"><input type="checkbox" data-flag="require_kids_club" checked />Kids club</label>
-                <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
-                <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
-                <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
-              </div>
-              <div class="hint" style="margin-top:10px;">These filter the resort list at search time. Click to toggle.</div>
-            </div>
-          </details>
-        </div>
-
-        <div class="col-span-4">
-          <div class="form-actions">
-            <button id="submit-btn" class="btn btn-lg" type="submit">Search trips</button>
-            <span id="form-status" class="hint"></span>
-          </div>
-        </div>
+      <div class="search-extras">
+        <span class="search-extras-label">Family-fit</span>
+        <label class="toggle"><input type="checkbox" data-flag="require_kids_club" checked />Kids club</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
       </div>
     </form>
   </div>
 </section>
 
+<section class="stats-strip">
+  <div class="stats-grid">
+    <div class="stat"><div class="stat-num">974</div><div class="stat-label">Family-friendly resorts</div></div>
+    <div class="stat"><div class="stat-num">35</div><div class="stat-label">Caribbean countries</div></div>
+    <div class="stat"><div class="stat-num">79</div><div class="stat-label">Destination airports</div></div>
+    <div class="stat"><div class="stat-num">$0</div><div class="stat-label">Booking fees, ever</div></div>
+  </div>
+</section>
+
+<section class="section marketing-section" id="why">
+  <div class="section-head">
+    <div class="section-eyebrow">Why KindredTrips</div>
+    <h2>Built for the trip your family will actually take.</h2>
+    <p>The big booking sites optimize for one piece at a time. We optimize for the whole trip.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature">
+      <div class="feature-icon">◎</div>
+      <h3>Cross-destination ranking</h3>
+      <p>Compare a Punta Cana week against a Turks &amp; Caicos week against a Jamaica week — all in one ranked list. Not one destination at a time.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">✦</div>
+      <h3>Family filters that matter</h3>
+      <p>Kids-club minimum age, on-the-beach, accepts-infants, connecting rooms — the details OTAs bury six clicks deep.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">$</div>
+      <h3>True total cost</h3>
+      <p>Every result shows flights plus hotel for your exact family size. No surprise resort fees in the comparison view.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section tight marketing-section" style="background: var(--bg-warm); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+  <div class="section-head">
+    <div class="section-eyebrow">How it works</div>
+    <h2>Three steps. Five seconds.</h2>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h3>Tell us who's coming</h3>
+      <p>Origin airport, dates, adults, kids' ages. Optional family-fit toggles.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h3>We search every resort</h3>
+      <p>974 properties across 35 countries get priced for your exact family in seconds.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h3>Pick and book</h3>
+      <p>Ranked by total cost. Click through to a partner site to book. We never charge you a fee.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section marketing-section" id="destinations">
+  <div class="section-head">
+    <div class="section-eyebrow">Featured destinations</div>
+    <h2>Caribbean, every island.</h2>
+    <p>From the obvious to the underrated — we cover them all. Click any destination to start a search.</p>
+  </div>
+  <div class="dest-grid" id="dest-grid">
+    <button class="dest" data-country="Dominican Republic">
+      <img src="https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?auto=format&fit=crop&w=600&q=80" alt="Dominican Republic" loading="lazy" />
+      <div class="dest-content">
+        <div class="dest-name">Dominican Republic</div>
+        <div class="dest-meta">Punta Cana · La Romana · Samaná</div>
+      </div>
+    </button>
+    <button class="dest" data-country="Jamaica">
+      <img src="https://images.unsplash.com/photo-1580541631971-a1a09cc1cdc5?auto=format&fit=crop&w=600&q=80" alt="Jamaica" loading="lazy" />
+      <div class="dest-content">
+        <div class="dest-name">Jamaica</div>
+        <div class="dest-meta">Negril · Montego Bay · Ocho Rios</div>
+      </div>
+    </button>
+    <button class="dest" data-country="Bahamas">
+      <img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=600&q=80" alt="Bahamas" loading="lazy" />
+      <div class="dest-content">
+        <div class="dest-name">Bahamas</div>
+        <div class="dest-meta">Nassau · Exuma · Eleuthera</div>
+      </div>
+    </button>
+    <button class="dest" data-country="Turks and Caicos">
+      <img src="https://images.unsplash.com/photo-1535262971677-7b1c41a18f97?auto=format&fit=crop&w=600&q=80" alt="Turks and Caicos" loading="lazy" />
+      <div class="dest-content">
+        <div class="dest-name">Turks &amp; Caicos</div>
+        <div class="dest-meta">Providenciales · Grace Bay</div>
+      </div>
+    </button>
+  </div>
+</section>
+
 <div id="status" class="status"></div>
 
-<main class="results" id="results"></main>
+<main id="results-wrap" class="results-wrap" hidden>
+  <aside class="results-sidebar" id="results-sidebar">
+    <!-- Country filter, etc. populated dynamically -->
+  </aside>
+  <section class="results-main" id="results-main">
+    <!-- Result bar + cards populated dynamically -->
+  </section>
+</main>
 
 <footer class="site-footer">
   <div class="footer-inner">
     <div>
-      <div class="footer-brand">Kindred<span>Trips</span></div>
-      <div class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. When you click "See hotel rates" we send you to a partner site to complete your booking. We earn a commission on confirmed bookings at no extra cost to you. Prices shown are estimates — final pricing is set by the booking partner.
+      <div class="footer-brand">
+        <span class="logo-mark">K</span>
+        KindredTrips
       </div>
+      <p class="footer-disclosure">
+        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+      </p>
     </div>
-    <nav class="footer-links" aria-label="Footer">
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
-      <a href="/privacy.html">Privacy</a>
-    </nav>
-    <div class="footer-copy">
-      © <span id="year"></span> KindredTrips. All rights reserved.
+    <div class="footer-col">
+      <h5>Product</h5>
+      <ul>
+        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#destinations">Destinations</a></li>
+        <li><a href="/about.html">How it works</a></li>
+      </ul>
     </div>
+    <div class="footer-col">
+      <h5>Company</h5>
+      <ul>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/contact.html">Contact</a></li>
+        <li><a href="mailto:hello@kindredtrips.com">Press</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Legal</h5>
+      <ul>
+        <li><a href="/privacy.html">Privacy</a></li>
+        <li><a href="/contact.html">Affiliate disclosure</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
+    <span>Made for families. Caribbean only, on purpose.</span>
   </div>
 </footer>
 
@@ -116,6 +236,28 @@
   const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5cWJ0Y3Vvb3JjbG1pcmVwa3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3MzQ0MDMsImV4cCI6MjA4NjMxMDQwM30.LfZX0hMgJJQ5f-euBE4nRZnPQ4Kpc7IN3c1t9ht4Zbc";
 
   document.getElementById("year").textContent = new Date().getFullYear();
+
+  // Caribbean photo pool — mapped to countries by hash
+  const PHOTO_POOL = [
+    "1559128010-7c1ad6e1b6a5", // tropical beach
+    "1540541338287-41700207dee6", // turquoise cay
+    "1535262971677-7b1c41a18f97", // palm caribbean
+    "1571003123894-1f0594d2b5d9", // palm tree
+    "1506929562872-bb421503ef21", // turquoise water
+    "1518614368389-0aa1e02fbb4c", // beach drone
+    "1518509562904-e7ef99cddc85", // sand
+    "1571919743851-c4df8b6ee133", // beach chairs
+  ];
+
+  function hashStr(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  function photoForCountry(country, w = 480) {
+    const id = PHOTO_POOL[hashStr(country || "default") % PHOTO_POOL.length];
+    return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
+  }
 
   // Default check-in/out: ~90 days out, 7 nights
   (function setDefaultDates() {
@@ -129,11 +271,33 @@
   })();
 
   // Wire toggle visual state
-  document.querySelectorAll("#family-toggles .toggle").forEach((t) => {
+  document.querySelectorAll(".search-extras .toggle").forEach((t) => {
     const cb = t.querySelector("input");
     if (cb.checked) t.classList.add("active");
     cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
   });
+
+  // Featured destination clicks → set country, scroll, search
+  document.querySelectorAll("[data-country]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const country = btn.dataset.country;
+      const ex = document.getElementById("excluded");
+      // Use included_countries via excluded inversion - simpler: just set country in a hidden field and pass to search
+      window.__includedCountry = country;
+      runSearch();
+    });
+  });
+
+  // Topbar scroll behavior
+  const topbar = document.getElementById("topbar");
+  window.addEventListener("scroll", () => {
+    if (window.scrollY > 30) topbar.classList.add("scrolled");
+    else topbar.classList.remove("scrolled");
+  }, { passive: true });
+
+  function scrollToSearch() {
+    document.getElementById("hero").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const SESSION_ID = (function () {
     let id = localStorage.getItem("kt_session_id");
@@ -146,6 +310,7 @@
   })();
 
   let lastSearchId = null;
+  let lastSearchSummary = null;
   let allPackages = [];
   let activeCountryFilter = null;
   let lastSortBy = "price_asc";
@@ -154,14 +319,17 @@
     const el = document.getElementById("status");
     if (!msg) { el.innerHTML = ""; return; }
     if (opts.spinner) {
-      el.innerHTML = `<span class="spinner"></span>${escapeHtml(msg)}`;
+      el.innerHTML = `<span class="spinner"></span><span>${escapeHtml(msg)}</span>`;
     } else {
       el.textContent = msg;
     }
   }
 
   function showError(msg) {
-    document.getElementById("results").innerHTML = `<div class="err">${escapeHtml(msg)}</div>`;
+    document.body.classList.add("has-results");
+    document.getElementById("results-wrap").hidden = false;
+    document.getElementById("results-main").innerHTML = `<div class="err">${escapeHtml(msg)}</div>`;
+    document.getElementById("results-sidebar").innerHTML = "";
     setStatus("");
   }
 
@@ -209,24 +377,58 @@
   }
 
   function renderSkeleton(count = 4) {
-    const card = `
+    const main = document.getElementById("results-main");
+    const sidebar = document.getElementById("results-sidebar");
+    document.body.classList.add("has-results");
+    document.getElementById("results-wrap").hidden = false;
+
+    const sk = `
       <div class="skeleton-card">
-        <div>
-          <div class="skeleton" style="height:18px; width:62%; margin-bottom:8px;"></div>
-          <div class="skeleton" style="height:13px; width:42%; margin-bottom:14px;"></div>
-          <div style="display:flex; gap:6px;">
-            <div class="skeleton" style="height:20px; width:80px;"></div>
-            <div class="skeleton" style="height:20px; width:100px;"></div>
-            <div class="skeleton" style="height:20px; width:64px;"></div>
+        <div class="sk-img skeleton"></div>
+        <div class="sk-body">
+          <div class="skeleton" style="height:22px; width:70%;"></div>
+          <div class="skeleton" style="height:14px; width:50%;"></div>
+          <div style="display:flex; gap:6px; margin-top:auto;">
+            <div class="skeleton" style="height:22px; width:80px;"></div>
+            <div class="skeleton" style="height:22px; width:100px;"></div>
+            <div class="skeleton" style="height:22px; width:64px;"></div>
           </div>
         </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-          <div class="skeleton" style="height:24px; width:90px;"></div>
-          <div class="skeleton" style="height:13px; width:120px;"></div>
-          <div class="skeleton" style="height:38px; width:140px; border-radius:8px;"></div>
+        <div class="sk-price">
+          <div class="skeleton" style="height:36px; width:110px;"></div>
+          <div class="skeleton" style="height:14px; width:130px;"></div>
+          <div class="skeleton" style="height:42px; width:140px; border-radius:8px;"></div>
         </div>
       </div>`;
-    document.getElementById("results").innerHTML = card.repeat(count);
+    main.innerHTML = `
+      <div class="result-bar">
+        <div>
+          <div class="skeleton" style="height:34px; width:240px; margin-bottom:6px;"></div>
+          <div class="skeleton" style="height:16px; width:180px;"></div>
+        </div>
+      </div>
+      ${sk.repeat(count)}
+    `;
+    sidebar.innerHTML = `
+      <div class="sidebar-block">
+        <div class="skeleton" style="height:14px; width:80px; margin-bottom:14px;"></div>
+        ${'<div class="skeleton" style="height:30px; width:100%; margin-bottom:6px;"></div>'.repeat(6)}
+      </div>
+    `;
+  }
+
+  function updateCompactSearch(body) {
+    const line = document.getElementById("compact-search-line");
+    const adults = body.adults || 2;
+    const kids = body.child_ages?.length || 0;
+    const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const parts = [
+      `<b>${escapeHtml(body.origin_iata)}</b>`,
+      `${fmt(body.date_start)} – ${fmt(body.date_end)}`,
+      `${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}`,
+    ];
+    line.innerHTML = parts.join(" · ");
+    document.getElementById("topbar").classList.add("has-search");
   }
 
   async function runSearch() {
@@ -237,7 +439,7 @@
     setStatus("Creating search…", { spinner: true });
 
     try {
-      const flagInputs = document.querySelectorAll("#family-toggles input[type=checkbox]");
+      const flagInputs = document.querySelectorAll(".search-extras input[type=checkbox]");
       const flags = {};
       flagInputs.forEach((cb) => { flags[cb.dataset.flag] = cb.checked; });
 
@@ -247,15 +449,29 @@
         date_end: document.getElementById("date_end").value,
         adults: parseInt(document.getElementById("adults").value, 10) || 2,
         child_ages: parseChildAges(document.getElementById("child_ages").value),
-        excluded_countries: parseList(document.getElementById("excluded").value),
+        excluded_countries: parseList(document.getElementById("excluded")?.value || ""),
         ...flags,
       };
-      const budget = parseInt(document.getElementById("budget").value, 10);
-      if (!isNaN(budget) && budget > 0) body.budget_total = budget;
+      if (window.__includedCountry) {
+        body.included_countries = [window.__includedCountry];
+        // Search edge function doesn't accept included_countries in body directly,
+        // it's passed through to process_search_batch via auto-invoke. Without
+        // server-side support for included_countries on Search, fall back to
+        // post-filter (client-side activeCountryFilter).
+        activeCountryFilter = window.__includedCountry;
+        delete body.included_countries;
+        window.__includedCountry = null;
+      }
+
+      lastSearchSummary = body;
+      updateCompactSearch(body);
 
       const search = await callFn("Search", { method: "POST", body: JSON.stringify(body) });
       lastSearchId = search.search_id;
       if (!lastSearchId) throw new Error("No search_id returned");
+
+      // Smooth scroll to results area while skeleton shows
+      document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
 
       setStatus("Finding resorts that fit…", { spinner: true });
       let pkgData = null;
@@ -306,12 +522,52 @@
       : allPackages;
     const visible = filtered.slice(0, 25);
 
-    document.getElementById("results").innerHTML =
+    const main = document.getElementById("results-main");
+    const sidebar = document.getElementById("results-sidebar");
+
+    sidebar.innerHTML = renderSidebar();
+    main.innerHTML =
       renderResultBar(filtered.length) +
-      renderFilterStrip() +
       (visible.length === 0
-        ? `<div class="empty"><h3>No trips match your filters.</h3><p>Try clearing the country filter or widening your search.</p></div>`
+        ? `<div class="empty"><h3>No trips match those filters.</h3><p>Try clearing the country filter or widening your search.</p></div>`
         : visible.map(renderCard).join(""));
+  }
+
+  function renderSidebar() {
+    const countryCounts = {};
+    allPackages.forEach((p) => {
+      const c = p.resorts && p.resorts.country;
+      if (!c) return;
+      countryCounts[c] = (countryCounts[c] || 0) + 1;
+    });
+    const sorted = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return "";
+
+    const allRow = `<button class="sidebar-row${activeCountryFilter === null ? " active" : ""}" onclick="onCountryFilter(null)">
+      <span>All countries</span>
+      <span class="sidebar-count">${allPackages.length}</span>
+    </button>`;
+
+    const rows = sorted.map(([country, count]) => {
+      const active = activeCountryFilter === country ? " active" : "";
+      const safeCountry = country.replace(/'/g, "\\'");
+      return `<button class="sidebar-row${active}" onclick="onCountryFilter('${safeCountry}')">
+        <span>${escapeHtml(country)}</span>
+        <span class="sidebar-count">${count}</span>
+      </button>`;
+    }).join("");
+
+    const clearBtn = activeCountryFilter
+      ? `<button class="sidebar-clear" onclick="onCountryFilter(null)">Clear filter ✕</button>`
+      : "";
+
+    return `
+      <div class="sidebar-block">
+        <h4>Country</h4>
+        <div class="sidebar-list">${allRow}${rows}</div>
+        ${clearBtn}
+      </div>
+    `;
   }
 
   function renderResultBar(matchingCount) {
@@ -326,45 +582,13 @@
           <div class="summary-line">${summaryText}</div>
         </div>
         <div class="sort-controls">
-          <label for="sort_by" style="margin: 0;">Sort by</label>
+          <label for="sort_by" style="font-weight: 500;">Sort by</label>
           <select id="sort_by" onchange="onSortChange(this.value)">
             <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total price</option>
             <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best match</option>
             <option value="price_desc"${lastSortBy === "price_desc" ? " selected" : ""}>Highest total price</option>
           </select>
         </div>
-      </div>
-    `;
-  }
-
-  function renderFilterStrip() {
-    // Top countries by frequency
-    const countryCounts = {};
-    allPackages.forEach((p) => {
-      const c = p.resorts && p.resorts.country;
-      if (!c) return;
-      countryCounts[c] = (countryCounts[c] || 0) + 1;
-    });
-    const sortedCountries = Object.entries(countryCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
-
-    if (sortedCountries.length === 0) return "";
-
-    const chips = sortedCountries.map(([country, count]) => {
-      const active = activeCountryFilter === country ? " active" : "";
-      return `<button class="chip${active}" onclick="onCountryFilter('${country.replace(/'/g, "\\'")}')">${escapeHtml(country)} <span style="opacity:0.7;">${count}</span></button>`;
-    }).join("");
-
-    const clearBtn = activeCountryFilter
-      ? `<button class="chip" onclick="onCountryFilter(null)" style="margin-left:auto;">Clear filter ✕</button>`
-      : "";
-
-    return `
-      <div class="filter-strip">
-        <span class="filter-strip-label">Country</span>
-        ${chips}
-        ${clearBtn}
       </div>
     `;
   }
@@ -377,6 +601,7 @@
   function onCountryFilter(country) {
     activeCountryFilter = country;
     renderResults();
+    document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderCard(p) {
@@ -402,7 +627,7 @@
     }
 
     const ratingStr = r.avg_user_rating != null
-      ? `<span class="rating">★ ${r.avg_user_rating}/100</span>`
+      ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r.avg_user_rating}/100</span>`
       : "";
     const stops = p.stops != null
       ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
@@ -416,23 +641,30 @@
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
+    const photoUrl = photoForCountry(r.country, 480);
+
     return `
       <article class="card">
-        <div class="card-main">
+        <div class="card-photo">
+          <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
+          <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
+        </div>
+        <div class="card-body">
           <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
           <div class="card-meta">${meta}</div>
           <div class="badges">${badges.join("")}</div>
         </div>
-        <div class="price-block">
-          <div>
+        <div class="card-price">
+          <div style="width: 100%;">
             <div class="price-from">From</div>
             <p class="price-total">${fmtMoney(p.total_price)}</p>
+            <div class="price-suffix">total for your family</div>
             <div class="price-breakdown">
-              <b>${fmtMoney(p.flight_price)}</b> flights · <b>${fmtMoney(p.hotel_price)}</b> hotel<br/>
-              total for your family
+              <b>${fmtMoney(p.flight_price)}</b> flights<br/>
+              <b>${fmtMoney(p.hotel_price)}</b> hotel
             </div>
           </div>
-          <button class="btn btn-secondary" onclick="bookHotel('${p.package_id}')">See hotel rates →</button>
+          <button class="btn btn-primary" onclick="bookHotel('${p.package_id}')">See hotel rates →</button>
         </div>
       </article>
     `;

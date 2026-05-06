@@ -7,28 +7,34 @@
 <meta name="description" content="KindredTrips is a Caribbean family-vacation discovery tool that ranks complete trips by total cost — flights plus hotel — for your exact family." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 
-<header class="topbar">
-  <a href="/" class="logo" aria-label="KindredTrips home">Kindred<span>Trips</span></a>
-  <nav class="topbar-nav" aria-label="Primary">
-    <a href="/about.html">About</a>
-    <a href="/contact.html">Contact</a>
-  </nav>
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="logo" aria-label="KindredTrips home">
+      <span class="logo-mark">K</span>
+      <span>KindredTrips</span>
+    </a>
+    <nav class="topbar-nav" aria-label="Primary">
+      <a href="/about.html" class="nav-link">How it works</a>
+      <a href="/about.html" class="nav-link">About</a>
+      <a href="/contact.html" class="nav-link">Contact</a>
+    </nav>
+  </div>
 </header>
 
 <main class="page">
-  <h1>About KindredTrips</h1>
+  <h1>About KindredTrips.</h1>
   <p class="lede">A simple tool for one specific job: planning a Caribbean family vacation without 14 browser tabs.</p>
 
   <h2>What we do</h2>
   <p>KindredTrips searches every family-friendly resort in the Caribbean and every Caribbean airport at the same time, then ranks the complete trip — flights plus hotel — by total cost for <em>your</em> family. We surface only the resorts that fit kids, infants, and connecting rooms, with the family-fit details (kids-club ages, on-the-beach, accepts-infants) front and center.</p>
 
   <h2>Why we built it</h2>
-  <p>Every other booking tool optimizes for one piece at a time. Booking.com is great for hotels but assumes you've already picked a destination. Skyscanner is great for flights but doesn't know what you're staying at. The big OTAs let you bundle — but only one destination at a time.</p>
+  <p>Every other booking tool optimizes for one piece at a time. <strong>Booking.com</strong> is great for hotels but assumes you've already picked a destination. <strong>Skyscanner</strong> is great for flights but doesn't know what you're staying at. The big OTAs let you bundle — but only one destination at a time.</p>
   <p>For a family trip, the choice that matters is total cost <em>across destinations</em>. A direct flight to Punta Cana might beat a connection to Aruba even if the resort is more expensive, because the flights are cheaper. KindredTrips does that math for you.</p>
 
   <h2>How it works</h2>
@@ -40,7 +46,7 @@
   </ul>
 
   <h2>Where we are</h2>
-  <p>This is an early version (v0.1). The resort dataset is loaded; the family-fit details (kids-club ages, on-beach status, etc.) are being added one resort at a time. If a result looks wrong or a detail is missing, please <a href="/contact.html">tell us</a> — that's how we get better.</p>
+  <p>This is an early version. The resort dataset is loaded; the family-fit details (kids-club ages, on-beach status, etc.) are being added one resort at a time. If a result looks wrong or a detail is missing, please <a href="/contact.html">tell us</a> — that's how we get better.</p>
 
   <h2>What's next</h2>
   <ul>
@@ -53,19 +59,41 @@
 <footer class="site-footer">
   <div class="footer-inner">
     <div>
-      <div class="footer-brand">Kindred<span>Trips</span></div>
-      <div class="footer-disclosure">
-        KindredTrips is a Caribbean family-vacation discovery tool. When you click "See hotel rates" we send you to a partner site to complete your booking. We earn a commission on confirmed bookings at no extra cost to you. Prices shown are estimates — final pricing is set by the booking partner.
+      <div class="footer-brand">
+        <span class="logo-mark">K</span>
+        KindredTrips
       </div>
+      <p class="footer-disclosure">
+        KindredTrips is a Caribbean family-vacation discovery tool. Click "See hotel rates" to book on a partner site. We earn commission on confirmed bookings at no extra cost to you.
+      </p>
     </div>
-    <nav class="footer-links" aria-label="Footer">
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
-      <a href="/privacy.html">Privacy</a>
-    </nav>
-    <div class="footer-copy">
-      © <span id="year"></span> KindredTrips. All rights reserved.
+    <div class="footer-col">
+      <h5>Product</h5>
+      <ul>
+        <li><a href="/#why">Why KindredTrips</a></li>
+        <li><a href="/#destinations">Destinations</a></li>
+        <li><a href="/about.html">How it works</a></li>
+      </ul>
     </div>
+    <div class="footer-col">
+      <h5>Company</h5>
+      <ul>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/contact.html">Contact</a></li>
+        <li><a href="mailto:hello@kindredtrips.com">Press</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Legal</h5>
+      <ul>
+        <li><a href="/privacy.html">Privacy</a></li>
+        <li><a href="/contact.html">Affiliate disclosure</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span id="year"></span> KindredTrips. All rights reserved.</span>
+    <span>Made for families. Caribbean only, on purpose.</span>
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
