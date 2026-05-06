@@ -476,13 +476,15 @@ button { font-family: inherit; }
 
 /* Search card overlaid on hero */
 .search-card {
-  background: var(--glass);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: var(--r-lg);
   padding: var(--s-5);
-  box-shadow: var(--shadow-xl);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45) inset,
+    0 24px 60px -20px rgba(10, 23, 33, 0.55);
   color: var(--ink);
 }
 .search-card-grid {
@@ -516,12 +518,12 @@ button { font-family: inherit; }
 .search-field:focus-within { background: var(--bg-soft); }
 .search-field:last-of-type { border-right: none; }
 .search-field label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: var(--ink-2);
+  color: var(--ink-1);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   cursor: text;
 }
 .search-field input,
@@ -541,7 +543,7 @@ button { font-family: inherit; }
 
 .search-submit {
   padding: 0;
-  background: var(--ink);
+  background: var(--sea);
   border: none;
   color: #fff;
   font-size: 14px;
@@ -556,7 +558,7 @@ button { font-family: inherit; }
   transition: background 0.15s;
   letter-spacing: -0.005em;
 }
-.search-submit:hover { background: var(--ink-1); }
+.search-submit:hover { background: var(--sea-deep); }
 .search-submit:disabled { opacity: 0.7; cursor: not-allowed; }
 @media (max-width: 880px) {
   .search-submit { grid-column: 1 / -1; min-height: 52px; padding: var(--s-3); }
@@ -737,24 +739,58 @@ button { font-family: inherit; }
   padding: 0 var(--s-8);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--s-6);
+  gap: var(--s-8);
   position: relative;
 }
-@media (max-width: 880px) { .steps { grid-template-columns: 1fr; padding: 0 var(--s-5); } }
+@media (max-width: 880px) { .steps { grid-template-columns: 1fr; padding: 0 var(--s-5); gap: var(--s-6); } }
+
+/* Connecting line behind the step circles, drawn with a horizontal dashed border. */
+.steps::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--s-6) + 18px);
+  left: calc(var(--s-8) + 36px);
+  right: calc(var(--s-8) + 36px);
+  height: 1px;
+  background-image: linear-gradient(to right, var(--line-strong) 60%, transparent 60%);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  z-index: 0;
+}
+@media (max-width: 880px) { .steps::before { display: none; } }
+
 .step {
   position: relative;
-  padding: var(--s-6) var(--s-2) var(--s-6) 0;
+  padding: var(--s-6) 0;
+  z-index: 1;
+}
+.step-circle {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid var(--sea);
+  color: var(--sea);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--s-4);
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 1;
 }
 .step-num {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--ink-2);
-  letter-spacing: 0.12em;
-  margin-bottom: var(--s-4);
-  display: inline-block;
-  padding-bottom: var(--s-2);
-  border-bottom: 1px solid var(--ink);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  margin-bottom: var(--s-2);
+  display: block;
 }
 .step h3 {
   font-size: 22px;
@@ -967,11 +1003,11 @@ details.sidebar-block > summary {
   justify-content: space-between;
   user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-transform: none;
 }
 details.sidebar-block > summary::-webkit-details-marker { display: none; }
 details.sidebar-block > summary::after {
