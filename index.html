@@ -1004,6 +1004,34 @@
     return "$" + Math.round(n).toLocaleString("en-US");
   }
 
+  // "0:27:00" or "1:05:00" → "27 min" / "1h 5m"
+  function fmtTransfer(notes) {
+    if (!notes) return null;
+    const m = String(notes).match(/^(\d+):(\d{1,2})(?::\d{1,2})?$/);
+    if (!m) return null;
+    const h = parseInt(m[1], 10), mins = parseInt(m[2], 10);
+    if (h === 0) return `${mins} min`;
+    if (mins === 0) return `${h}h`;
+    return `${h}h ${mins}m`;
+  }
+
+  // 42587 → "42k"; 1402 → "1.4k"; 230 → "230"
+  function fmtReviews(n) {
+    if (n == null) return null;
+    if (n >= 10000) return `${Math.round(n / 1000)}k`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+    return String(n);
+  }
+
+  // Rooms count → vibe descriptor
+  function fmtSize(rooms) {
+    if (!rooms) return null;
+    if (rooms <= 75) return "Boutique";
+    if (rooms >= 800) return `${rooms.toLocaleString()} rooms (mega-resort)`;
+    if (rooms >= 400) return `${rooms.toLocaleString()} rooms`;
+    return `${rooms.toLocaleString()} rooms`;
+  }
+
   async function callFn(path, init = {}) {
     const headers = {
       "Content-Type": "application/json",
@@ -1579,10 +1607,12 @@
     const tags = p._tags;
     const badges = [];
 
-    // Always-on rating chip
+    // Always-on rating chip — includes review count when we have it
     const r5 = ratingTo5(r.avg_user_rating);
+    const rc = fmtReviews(r.review_count);
     if (r5 != null) {
-      badges.push(`<span class="badge rating"><span class="star">★</span>${r5.toFixed(1)}</span>`);
+      const reviews = rc ? ` <span class="reviews">· ${rc} reviews</span>` : "";
+      badges.push(`<span class="badge rating"><span class="star">★</span>${r5.toFixed(1)}${reviews}</span>`);
     }
 
     // Direct flight (good)
@@ -1639,10 +1669,14 @@
     const duration = p.duration_hours ? `${p.duration_hours}h` : null;
     const flightLine = [stopsStr, duration].filter(Boolean).join(" · ");
 
+    const transferStr = fmtTransfer(r.airport_transfer_notes);
+    const sizeStr = fmtSize(r.rooms_count);
+
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
-      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
+      sizeStr ? escapeHtml(sizeStr) : null,
+      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}${transferStr ? ` · ${escapeHtml(transferStr)} from airport` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
@@ -1698,18 +1732,22 @@
     const activityTags = ACTIVITY_PRIORITY.filter((t) => tags.amenities.includes(t));
     const playTagSet = new Set(["Waterpark For Little Kids", "Waterpark For Big Kids", "Lazy River", "Pool Slide", "Flowrider", "Heated Pool"]);
 
-    const ratingStr = r.avg_user_rating != null
-      ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r.avg_user_rating}/100${r.review_count ? ` (${r.review_count.toLocaleString()})` : ""}</span>`
+    const r5Modal = ratingTo5(r.avg_user_rating);
+    const reviewsModal = fmtReviews(r.review_count);
+    const ratingStr = r5Modal != null
+      ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r5Modal.toFixed(1)}${reviewsModal ? ` · ${reviewsModal} reviews` : ""}</span>`
       : "";
     const flightLine = [
       pkg.stops != null ? (pkg.stops === 0 ? "Direct flight" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
       pkg.duration_hours ? `${pkg.duration_hours}h flight` : null,
+      fmtTransfer(r.airport_transfer_notes) ? `${fmtTransfer(r.airport_transfer_notes)} from airport` : null,
     ].filter(Boolean).join(" · ");
 
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
       ratingStr,
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
+      fmtSize(r.rooms_count) ? escapeHtml(fmtSize(r.rooms_count)) : null,
       pkg.dest_airport_iata ? `Fly to ${escapeHtml(pkg.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
@@ -1731,11 +1769,13 @@
     };
 
     const stats = [];
+    const transfer = fmtTransfer(r.airport_transfer_notes);
+    if (transfer) stats.push({ label: "Airport transfer", value: transfer });
     if (r.rooms_count) stats.push({ label: "Rooms", value: r.rooms_count.toLocaleString() });
     if (r.year_renovated) stats.push({ label: "Renovated", value: r.year_renovated });
     else if (r.year_built) stats.push({ label: "Built", value: r.year_built });
-    if (r.hotel_brand) stats.push({ label: "Brand", value: r.hotel_brand });
     if (r.beds) stats.push({ label: "Beds", value: r.beds });
+    if (r.hotel_brand) stats.push({ label: "Brand", value: r.hotel_brand });
     while (stats.length < 4) stats.push({ label: "", value: "—", muted: true });
 
     const html = `

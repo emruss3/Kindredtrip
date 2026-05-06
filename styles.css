@@ -1456,6 +1456,7 @@ details.rank-explainer > p {
   font-weight: 600;
 }
 .badge.rating .star { color: var(--warn); }
+.badge.rating .reviews { color: var(--ink-3); font-weight: 500; margin-left: 1px; }
 .badge.muted {
   background: var(--bg-soft);
   color: var(--ink-3);

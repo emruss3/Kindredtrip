@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v4_photos";
+const VERSION = "get_packages_v5_transfer_time";
 
 function corsHeaders() {
   return {
@@ -105,6 +105,7 @@ serve(async (req) => {
           rooms_count,
           year_built,
           year_renovated,
+          airport_transfer_notes,
           beach_quality_score,
           on_beach,
           accepts_infants,
