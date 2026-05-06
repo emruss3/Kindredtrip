@@ -44,7 +44,11 @@ serve(async (req) => {
       headers: {
         ...corsHeaders(),
         "content-type": r.headers.get("content-type") ?? "image/jpeg",
-        "cache-control": "public, max-age=86400, immutable",
+        // Browser: cache for 30 days. CDN (Vercel/Cloudflare/Supabase): cache for 30 days.
+        // immutable: tell browser not to revalidate during freshness window.
+        "cache-control": "public, max-age=2592000, s-maxage=2592000, immutable",
+        // Vercel-specific override: same 30 days at the edge.
+        "cdn-cache-control": "public, max-age=2592000",
       },
     });
   } catch (e) {

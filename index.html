@@ -393,11 +393,12 @@
     return Math.abs(h);
   }
   function photoForResort(resort, w = 480, photoIndex = 0) {
-    // Real Google Places photo when available
+    // Real Google Places photo when available — served via Vercel CDN-fronted /photo
+    // (rewrites to the Supabase resort_photo proxy; Vercel caches at the edge for 30 days).
     const refs = resort?.photo_refs;
     if (Array.isArray(refs) && refs.length > 0) {
       const ref = refs[photoIndex % refs.length];
-      return `${SUPABASE_URL}/functions/v1/resort_photo?ref=${encodeURIComponent(ref)}&w=${w}`;
+      return `/photo?ref=${encodeURIComponent(ref)}&w=${w}`;
     }
     // Fallback: stock Caribbean image hashed by resort_id
     const seed = resort?.resort_id || resort?.resort_name || "default";

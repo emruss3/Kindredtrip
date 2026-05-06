@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/photo",
+      "destination": "https://wyqbtcuoorclmirepkuo.supabase.co/functions/v1/resort_photo"
+    }
+  ]
+}
