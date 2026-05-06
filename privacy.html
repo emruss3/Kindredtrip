@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy — KindredTrips</title>
+<meta name="description" content="How KindredTrips handles your data." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/" class="logo" aria-label="KindredTrips home">Kindred<span>Trips</span></a>
+  <nav class="topbar-nav" aria-label="Primary">
+    <a href="/about.html">About</a>
+    <a href="/contact.html">Contact</a>
+  </nav>
+</header>
+
+<main class="page">
+  <h1>Privacy</h1>
+  <p class="lede">Plain-English summary of what we collect, why, and what we don't do.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Search inputs</strong> — origin airport, dates, family size, and filters you set. We store these to run the search and to improve the product over time.</li>
+    <li><strong>Outbound clicks</strong> — when you click "See hotel rates," we log which trip you clicked and the price displayed at the time. This is how booking partners attribute commission to us.</li>
+    <li><strong>A session ID</strong> — a random identifier stored in your browser's local storage to link your clicks back to your search. It is not tied to your name or email.</li>
+  </ul>
+
+  <h2>What we don't collect</h2>
+  <ul>
+    <li>We don't ask for your name, email, or address. There are no accounts.</li>
+    <li>We don't sell your search data to third parties.</li>
+    <li>We don't run advertising trackers (no Google Ads, Facebook Pixel, etc.).</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>We use a single piece of local storage (the session ID above) to associate your search with your booking clicks. We do not use third-party cookies on this site. The booking partners we redirect you to (Booking.com, Expedia, Priceline) have their own privacy policies and cookies — you'll be subject to those once you click through.</p>
+
+  <h2>How affiliate partnerships work</h2>
+  <p>When you click through to a booking partner, we pass an affiliate identifier so the partner can credit any resulting booking to KindredTrips. This is how we make money. You don't pay anything extra; the partner pays us a small percentage of their booking fee.</p>
+
+  <h2>Data we may share with partners</h2>
+  <p>The booking partner receives the destination and dates you searched for as part of the redirect URL. They do not receive any other personal information from us.</p>
+
+  <h2>How long we keep data</h2>
+  <p>Search inputs and click logs are kept indefinitely so we can improve the product and analyze trends. They are stored on Supabase (US-East). They are not exported or shared.</p>
+
+  <h2>Your rights</h2>
+  <p>If you'd like us to delete your search history, <a href="/contact.html">email us</a> with your session ID (visible in your browser's local storage under <code>kt_session_id</code>) and we'll remove it.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>We may update this policy as the product evolves. The "last updated" date below will reflect any changes.</p>
+
+  <p style="margin-top: 32px; color: var(--ink-mute); font-size: 13px;">Last updated: May 2026.</p>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Kindred<span>Trips</span></div>
+      <div class="footer-disclosure">
+        KindredTrips is a Caribbean family-vacation discovery tool. When you click "See hotel rates" we send you to a partner site to complete your booking. We earn a commission on confirmed bookings at no extra cost to you. Prices shown are estimates — final pricing is set by the booking partner.
+      </div>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/privacy.html">Privacy</a>
+    </nav>
+    <div class="footer-copy">
+      © <span id="year"></span> KindredTrips. All rights reserved.
+    </div>
+  </div>
+</footer>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+
+</body>
+</html>
