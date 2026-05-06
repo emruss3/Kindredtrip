@@ -604,9 +604,12 @@
     document.getElementById("date_end").value = fmt(end);
   })();
 
-  // Wire toggle visual state
-  document.querySelectorAll(".search-extras .toggle").forEach((t) => {
+  // Wire family-fit toggle visual state. Only match <label class="toggle">
+  // entries that wrap a checkbox — chip buttons (.toggle.dest-more,
+  // .dest-chips children) also use class="toggle" but have no input.
+  document.querySelectorAll(".search-extras label.toggle").forEach((t) => {
     const cb = t.querySelector("input");
+    if (!cb) return;
     if (cb.checked) t.classList.add("active");
     cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
   });
@@ -690,8 +693,8 @@
     }).join("");
   }
 
-  // Initial population
-  syncHomepageDestinationChips();
+  // (Initial syncHomepageDestinationChips() call moved to the bottom of
+  // the script — it reads filters.country, which is declared further down.)
 
   // Topbar scroll behavior
   const topbar = document.getElementById("topbar");
@@ -731,8 +734,9 @@
   }
 
   // Wire toggle visual state on popover too
-  document.querySelectorAll("#popover-form .toggle").forEach((t) => {
+  document.querySelectorAll("#popover-form label.toggle").forEach((t) => {
     const cb = t.querySelector("input");
+    if (!cb) return;
     cb.addEventListener("change", () => t.classList.toggle("active", cb.checked));
   });
 
@@ -1739,6 +1743,9 @@
   }
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // Initial population — runs after all const/let declarations above are initialized
+  syncHomepageDestinationChips();
 </script>
 
 </body>
