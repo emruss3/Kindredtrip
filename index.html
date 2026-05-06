@@ -4,9 +4,69 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KindredTrips — Caribbean family vacations, ranked by total trip cost</title>
-<meta name="description" content="Search every family resort in the Caribbean and every airport in one place. Ranked by total trip cost — flights plus hotel — for your exact family." />
+<meta name="description" content="Search every all-inclusive family-friendly Caribbean resort and every airport at once. Ranked by total trip cost — flights plus hotel — for your exact family. Filter by kids club minimum age, on-the-beach, lazy river, and more." />
+<meta name="keywords" content="Caribbean family vacation, all-inclusive Caribbean family resorts, kids club Caribbean, family-friendly Punta Cana, family resort Bahamas, Caribbean family travel, family trip Caribbean ranked by total cost" />
+<link rel="canonical" href="https://kindredtrips.com/" />
+
+<!-- Open Graph -->
+<meta property="og:title" content="KindredTrips — Caribbean family trips, ranked by what fits your family" />
+<meta property="og:description" content="Skip picking a destination first. We compared 974 all-inclusive family resorts across 35 Caribbean countries and 79 airports. Ranked by total trip cost." />
+<meta property="og:image" content="https://kindredtrips.com/og-image.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:url" content="https://kindredtrips.com/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="KindredTrips" />
+<meta property="og:locale" content="en_US" />
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="KindredTrips — Caribbean family trips, ranked for your family" />
+<meta name="twitter:description" content="Search every all-inclusive family resort across the Caribbean at once. Ranked by total flight + hotel cost." />
+<meta name="twitter:image" content="https://kindredtrips.com/og-image.jpg" />
+
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link rel="stylesheet" href="/styles.css" />
+
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "KindredTrips",
+  "alternateName": "Kindred Trips",
+  "url": "https://kindredtrips.com/",
+  "description": "Caribbean family vacation discovery and ranking tool. Compares family-friendly all-inclusive resorts across 35 Caribbean countries by total trip cost.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "https://kindredtrips.com/?from={origin_iata}"
+    },
+    "query-input": "required name=origin_iata"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "KindredTrips",
+  "url": "https://kindredtrips.com/",
+  "logo": "https://kindredtrips.com/og-image.jpg",
+  "description": "Caribbean family-vacation discovery tool. Ranks complete trips (flights + hotel) by total cost across every Caribbean destination.",
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "email": "hello@kindredtrips.com",
+    "contactType": "Customer Support",
+    "availableLanguage": ["English"]
+  },
+  "areaServed": {
+    "@type": "Place",
+    "name": "Caribbean"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -76,7 +136,7 @@
     <div>
       <div class="hero-eyebrow fade-in">Caribbean family travel</div>
       <h1 class="fade-in delay-1">Caribbean trips,<br/>ranked by what fits<br/><em>your family.</em></h1>
-      <p class="lede fade-in delay-2">Skip picking a destination first. Tell us your origin, dates, and who's coming — we compared 974 resorts across 35 Caribbean countries and 79 airports, and we'll show you the trips that fit, ranked by total flight + hotel cost.</p>
+      <p class="lede fade-in delay-2">Skip picking a destination first. Tell us your origin, dates, and who's coming — we compared 974 all-inclusive Caribbean family resorts across 35 countries and 79 airports, and we'll show you the trips that fit (kids club minimum age, on the beach, lazy river, accepts infants) ranked by total flight + hotel cost.</p>
     </div>
 
     <form id="search-form" class="search-card fade-in delay-3" onsubmit="event.preventDefault(); runSearch();">
@@ -209,13 +269,13 @@
   <div class="features-grid">
     <div class="feature">
       <div class="feature-icon">◎</div>
-      <h3>Cross-destination search</h3>
-      <p>One ranked list comparing a week in Punta Cana against a week in Aruba against a week in Turks &amp; Caicos — and 32 other countries. Not 35 separate searches.</p>
+      <h3>Cross-destination search for Caribbean family vacations</h3>
+      <p>One ranked list comparing a week of family-friendly Punta Cana against family resorts in Aruba, Turks &amp; Caicos, the Bahamas, Jamaica — and 30 other Caribbean countries. Not 35 separate searches.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">✦</div>
-      <h3>Family filters big OTAs don't have</h3>
-      <p>Kids-club minimum age. On-the-beach. Accepts infants. Connecting rooms. Lazy river. Waterpark for little kids. The details that decide whether a resort works for your kids — surfaced, not buried six clicks deep.</p>
+      <h3>Family filters the big OTAs don't have</h3>
+      <p>Kids club minimum age. On the beach. Accepts infants. Connecting rooms. Lazy river. Waterpark for little kids. The details that decide whether an all-inclusive Caribbean resort actually works for your kids — surfaced, not buried six clicks deep.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">$</div>
@@ -260,56 +320,56 @@
   </div>
   <div class="dest-grid" id="dest-grid">
     <button class="dest" data-country="Dominican Republic">
-      <img src="https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?auto=format&fit=crop&w=600&q=80" alt="Dominican Republic" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?auto=format&fit=crop&w=600&q=80" alt="Family-friendly Punta Cana coastline — KindredTrips searches all-inclusive resorts in La Romana and Samaná" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Dominican Republic</div>
         <div class="dest-meta">Punta Cana · La Romana · Samaná</div>
       </div>
     </button>
     <button class="dest" data-country="Jamaica">
-      <img src="https://images.unsplash.com/photo-1580541631971-a1a09cc1cdc5?auto=format&fit=crop&w=600&q=80" alt="Jamaica" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1580541631971-a1a09cc1cdc5?auto=format&fit=crop&w=600&q=80" alt="Jamaica beachfront — KindredTrips searches family resorts in Negril, Montego Bay, and Ocho Rios" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Jamaica</div>
         <div class="dest-meta">Negril · Montego Bay · Ocho Rios</div>
       </div>
     </button>
     <button class="dest" data-country="Bahamas">
-      <img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=600&q=80" alt="Bahamas" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=600&q=80" alt="Bahamas turquoise cay — KindredTrips searches family resorts in Nassau, Exuma, and Eleuthera" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Bahamas</div>
         <div class="dest-meta">Nassau · Exuma · Eleuthera</div>
       </div>
     </button>
     <button class="dest" data-country="Turks and Caicos">
-      <img src="https://images.unsplash.com/photo-1535262971677-7b1c41a18f97?auto=format&fit=crop&w=600&q=80" alt="Turks and Caicos" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1535262971677-7b1c41a18f97?auto=format&fit=crop&w=600&q=80" alt="Turks and Caicos beach — KindredTrips searches family resorts in Providenciales and Grace Bay" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Turks &amp; Caicos</div>
         <div class="dest-meta">Providenciales · Grace Bay</div>
       </div>
     </button>
     <button class="dest" data-country="Aruba">
-      <img src="https://images.unsplash.com/photo-1506929562872-bb421503ef21?auto=format&fit=crop&w=600&q=80" alt="Aruba" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1506929562872-bb421503ef21?auto=format&fit=crop&w=600&q=80" alt="Aruba coastline — KindredTrips searches family resorts on Palm Beach and Eagle Beach" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Aruba</div>
         <div class="dest-meta">Palm Beach · Eagle Beach</div>
       </div>
     </button>
     <button class="dest" data-country="Saint Lucia">
-      <img src="https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=600&q=80" alt="Saint Lucia" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=600&q=80" alt="Saint Lucia palm coast — KindredTrips searches family resorts in Soufrière and Rodney Bay" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Saint Lucia</div>
         <div class="dest-meta">Soufrière · Rodney Bay</div>
       </div>
     </button>
     <button class="dest" data-country="Barbados">
-      <img src="https://images.unsplash.com/photo-1571919743851-c4df8b6ee133?auto=format&fit=crop&w=600&q=80" alt="Barbados" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1571919743851-c4df8b6ee133?auto=format&fit=crop&w=600&q=80" alt="Barbados beach — KindredTrips searches family resorts in St. James and Christ Church" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Barbados</div>
         <div class="dest-meta">St. James · Christ Church</div>
       </div>
     </button>
     <button class="dest" data-country="Cayman Islands">
-      <img src="https://images.unsplash.com/photo-1518614368389-0aa1e02fbb4c?auto=format&fit=crop&w=600&q=80" alt="Cayman Islands" loading="lazy" />
+      <img src="https://images.unsplash.com/photo-1518614368389-0aa1e02fbb4c?auto=format&fit=crop&w=600&q=80" alt="Cayman Islands aerial — KindredTrips searches family resorts on Seven Mile Beach, Grand Cayman" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Cayman Islands</div>
         <div class="dest-meta">Seven Mile Beach · Grand Cayman</div>

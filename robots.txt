@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Don't index the photo proxy or edge function paths
+Disallow: /photo
+Disallow: /functions/
+
+Sitemap: https://kindredtrips.com/sitemap.xml
