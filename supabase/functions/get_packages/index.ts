@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v3_limit_1000";
+const VERSION = "get_packages_v4_photos";
 
 function corsHeaders() {
   return {
@@ -122,7 +122,10 @@ serve(async (req) => {
           data_quality,
           direct_flight,
           guaranteed_connecting_rooms,
-          high_rise
+          high_rise,
+          google_place_id,
+          photo_refs,
+          photo_attributions
         )
       `, { count: "exact" })
       .eq("search_id", search_id);

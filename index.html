@@ -363,7 +363,14 @@
     for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
     return Math.abs(h);
   }
-  function photoForResort(resort, w = 480) {
+  function photoForResort(resort, w = 480, photoIndex = 0) {
+    // Real Google Places photo when available
+    const refs = resort?.photo_refs;
+    if (Array.isArray(refs) && refs.length > 0) {
+      const ref = refs[photoIndex % refs.length];
+      return `${SUPABASE_URL}/functions/v1/resort_photo?ref=${encodeURIComponent(ref)}&w=${w}`;
+    }
+    // Fallback: stock Caribbean image hashed by resort_id
     const seed = resort?.resort_id || resort?.resort_name || "default";
     const id = PHOTO_POOL[hashStr(seed) % PHOTO_POOL.length];
     return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
@@ -891,6 +898,7 @@
     const main = document.getElementById("results-main");
     const sidebar = document.getElementById("results-sidebar");
 
+    sidebar.classList.toggle("collapsed", window.__sidebarCollapsedMobile === true);
     sidebar.innerHTML = renderSidebar();
     main.innerHTML =
       renderResultBar(filtered.length) +
@@ -903,8 +911,15 @@
   function renderSidebar() {
     if (allPackages.length === 0) return "";
     const bounds = priceBounds();
+    const activeCount = activeFilterCount();
+    const collapsed = window.__sidebarCollapsedMobile === true;
 
-    return [
+    const toggle = `<button class="sidebar-mobile-toggle" onclick="toggleSidebarMobile()">
+      <span>Filters${activeCount > 0 ? ` <b style="color: var(--ink); margin-left: 4px;">${activeCount}</b>` : ""}</span>
+      <span style="color: var(--ink-3); font-size: 13px;">${collapsed ? "Show ▾" : "Hide ▴"}</span>
+    </button>`;
+
+    return toggle + [
       renderCountryBlock(),
       renderTagBlock("Kids amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities"),
       renderTagBlock("Room options", "rooms", ROOM_PRIORITY, "rooms"),
@@ -916,6 +931,16 @@
       renderRatingBlock(),
     ].join("");
   }
+
+  function toggleSidebarMobile() {
+    window.__sidebarCollapsedMobile = !window.__sidebarCollapsedMobile;
+    const sb = document.getElementById("results-sidebar");
+    sb.classList.toggle("collapsed", window.__sidebarCollapsedMobile);
+    renderResults();
+  }
+
+  // On mobile, default sidebar to collapsed
+  window.__sidebarCollapsedMobile = window.matchMedia("(max-width: 980px)").matches;
 
   function renderCountryBlock() {
     const counts = countryCountsAgg();
@@ -1187,7 +1212,7 @@
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name }, 480);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
 
     return `
       <article class="card" onclick="openResortModal('${p.package_id}')">
@@ -1242,7 +1267,7 @@
       pkg.dest_airport_iata ? `Fly to ${escapeHtml(pkg.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
-    const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name }, 1200);
+    const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
 
     const renderTagList = (tagsList, plays = new Set()) => {
       if (!tagsList || tagsList.length === 0) return "";
