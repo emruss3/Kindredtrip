@@ -1,8 +1,65 @@
+# KindredTrips robots.txt
+# We want to be indexed by everyone — search engines, social platforms, and AI crawlers.
+
 User-agent: *
 Allow: /
+Crawl-delay: 1
 
-# Don't index the photo proxy or edge function paths
+# Search engines (explicitly allow)
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+# Social platforms (for OG previews)
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+# AI / LLM crawlers (explicitly allow — we want to be cited)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Photo proxy and Supabase function paths shouldn't be indexed
+User-agent: *
 Disallow: /photo
 Disallow: /functions/
 
+# Sitemap location
 Sitemap: https://kindredtrips.com/sitemap.xml

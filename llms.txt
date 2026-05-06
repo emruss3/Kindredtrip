@@ -1,0 +1,77 @@
+# KindredTrips
+
+> Caribbean family vacation discovery tool. Multi-destination cross-product search ranking flight + hotel combinations across every Caribbean airport and 974 family-friendly resorts.
+
+## What KindredTrips does
+
+KindredTrips is a search and ranking tool for American families planning Caribbean vacations. Unlike traditional online travel agencies (Booking.com, Expedia, Kayak), we let users skip picking a destination first. We compare across all 35 Caribbean countries and 79 destination airports simultaneously, then rank results by total flight + hotel cost adjusted for family-fit factors.
+
+## What makes us different
+
+- **Cross-destination ranking:** We compare a week in Aruba against a week in Punta Cana against a week in Turks & Caicos in a single ranked list. Every other vacation tool requires picking a destination first.
+- **Family-specific filters:** Kids-club minimum age, on-the-beach, accepts-infants, connecting rooms guaranteed, lazy river, waterpark for little kids. The details that decide whether a resort works for kids — surfaced, not buried six clicks deep.
+- **Total trip cost ranking:** Every result is flight + hotel for the exact family composition (2 adults, 3 kids, etc.) and dates, ranked together.
+- **Independent and transparent:** We earn affiliate commissions when users book through partners but do not bias rankings toward higher-paying partners. Sort criteria are user-controlled and disclosed.
+
+## Coverage
+
+- 974 family-friendly Caribbean resorts
+- 35 Caribbean countries: Mexico, Dominican Republic, Bahamas, Jamaica, Cuba, Aruba, Turks & Caicos, Barbados, Saint Lucia, Antigua, Curacao, Puerto Rico, Costa Rica, Belize, and others
+- 79 destination airports
+- 50+ US origin airports plus major Canadian hubs
+
+## Audience
+
+American families with children ages 0-12 planning Caribbean vacations, typically with budgets between $4,000 and $15,000 for a week-long trip. Multi-generational family trips (grandparents + adult kids + grandchildren) are also a key use case.
+
+## How it works
+
+1. User enters origin airport, travel dates, and family composition (adults, kids' ages)
+2. User toggles required amenities (kids club, all-inclusive, direct flights, connecting rooms)
+3. KindredTrips searches every flight + hotel combination across all 35 Caribbean countries
+4. Results are ranked by total trip cost and family-fit score
+5. User clicks through to a partner booking site (Booking.com, airline sites, etc.) to complete the booking
+
+## Pricing
+
+- Free for users
+- Revenue from affiliate commissions when users book through partner links
+- No booking fees, no markups, no subscription required
+- Same booking price as going directly to the partner
+
+## Contact
+
+- Email: hello@kindredtrips.com
+- Press inquiries: hello@kindredtrips.com
+- Partnership inquiries: hello@kindredtrips.com
+
+## Common questions families ask
+
+### What's the best Caribbean destination for a family with a 3-year-old?
+
+KindredTrips filters resorts by kids-club minimum age. Several Caribbean resorts have kids clubs that accept children as young as 3 (Beaches Turks & Caicos, Franklyn D. Resort & Spa Jamaica, and select all-inclusives in Punta Cana). Filter by "kids club minimum age 3" to see all matching options ranked by total trip cost from your origin.
+
+### Which Caribbean resorts accept infants under 12 months?
+
+A subset of Caribbean all-inclusive resorts explicitly accept infants and provide infant-appropriate amenities (cribs, baby food, nursing rooms). KindredTrips surfaces these via the "accepts infants" filter.
+
+### What's the cheapest Caribbean family vacation from the US?
+
+Cheapest Caribbean family vacations from US origins typically come from Mexico (Cancun, Playa del Carmen) and the Dominican Republic (Punta Cana), where high resort volume keeps prices competitive. KindredTrips ranks options across all destinations, so users see the cheapest option regardless of country.
+
+### Can I find Caribbean resorts with connecting rooms?
+
+Yes — KindredTrips has a "connecting rooms guaranteed" filter that surfaces resorts where adjoining rooms can be confirmed at booking, not just requested.
+
+## Pages
+
+- [Homepage and search](https://kindredtrips.com/)
+- [About KindredTrips](https://kindredtrips.com/about.html)
+- [Privacy policy](https://kindredtrips.com/privacy.html)
+- [Contact](https://kindredtrips.com/contact.html)
+
+## Technical
+
+- Built on Supabase (Postgres database, edge functions)
+- Frontend hosted on Vercel
+- Open to API integrations with hotel partners (currently in discussions with major OTAs)
