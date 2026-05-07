@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260507-search" />
-<meta name="kt-build" content="20260507-search-redesign" />
+<link rel="stylesheet" href="/styles.css?v=20260507-dest-incard" />
+<meta name="kt-build" content="20260507-dest-incard" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -292,6 +292,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
           Search trips
         </button>
+
+        <div class="search-card-dest-row" id="dest-row">
+          <span class="search-card-dest-label">Going to</span>
+          <span id="dest-chips"></span>
+          <button type="button" class="dest-link" onclick="clearAllDestinations()">Anywhere in the Caribbean</button>
+          <button type="button" class="dest-link dest-more" onclick="openDestPicker()">More destinations →</button>
+        </div>
       </div>
 
       <div class="search-extras">
@@ -302,18 +309,6 @@
         <button type="button" class="toggle toggle-more" onclick="openMoreFilters()">More filters</button>
       </div>
     </form>
-
-    <details class="popular-destinations" id="popular-destinations">
-      <summary>
-        <span class="popular-destinations-label">Popular destinations</span>
-        <span class="popular-destinations-toggle" aria-hidden="true">▾</span>
-      </summary>
-      <div class="popular-destinations-row" id="dest-row">
-        <span id="dest-chips"></span>
-        <button type="button" class="dest-link" onclick="clearAllDestinations()">Anywhere in the Caribbean</button>
-        <button type="button" class="dest-link dest-more" onclick="openDestPicker()">More destinations →</button>
-      </div>
-    </details>
   </div>
 </section>
 
@@ -1851,7 +1846,7 @@
             </div>
             ${budgetPill}
           </div>
-          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">See rates →</button>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
         </div>
       </article>
     `;

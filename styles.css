@@ -669,82 +669,67 @@ button { font-family: inherit; }
   color: var(--ink-2);
 }
 
-/* Popular destinations — quiet secondary row, lives below the search card on the hero photo */
-.popular-destinations {
-  margin-top: 14px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-}
-.popular-destinations > summary {
-  list-style: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  user-select: none;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
-  padding: 2px 0;
-}
-.popular-destinations > summary::-webkit-details-marker { display: none; }
-.popular-destinations-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
-  letter-spacing: 0.005em;
-}
-.popular-destinations-toggle {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  transition: transform 0.15s;
-}
-.popular-destinations[open] > summary .popular-destinations-toggle { transform: rotate(180deg); }
-.popular-destinations-row {
+/* "Going to" destinations row — lives INSIDE the search card grid, spanning all columns */
+.search-card-dest-row {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
+  padding: 9px 16px 11px;
+  background: #fff;
+  border-top: 1px solid #F2E8DA;
 }
-.popular-destinations-row #dest-chips {
+.search-card-dest-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: 6px;
+}
+.search-card-dest-row #dest-chips {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.popular-destinations-row .toggle {
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.55);
-  color: rgba(255, 255, 255, 0.92);
+.search-card-dest-row .toggle {
+  background: #FFF8EC;
+  border-color: #E8DCCB;
+  color: var(--ink);
   font-size: 12.5px;
   padding: 4px 11px 5px;
   font-weight: 500;
 }
-.popular-destinations-row .toggle:hover { border-color: rgba(255, 255, 255, 0.9); }
-.popular-destinations-row .toggle.active {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 0.92);
-  color: var(--ink);
+.search-card-dest-row .toggle:hover { border-color: var(--ink-3); }
+.search-card-dest-row .toggle.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
 }
 .dest-link {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--ink-2);
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
   padding: 4px 6px;
   text-decoration: underline;
-  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
 }
 .dest-link:hover {
-  color: #fff;
-  text-decoration-color: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  text-decoration-color: var(--ink-3);
 }
-@media (max-width: 600px) {
-  .popular-destinations[open] .popular-destinations-row {
-    flex-direction: column;
-    align-items: flex-start;
+.dest-link.dest-more {
+  font-weight: 500;
+}
+@media (max-width: 880px) {
+  .search-card-dest-row {
+    border-top: 1px solid #F2E8DA;
+    padding: 10px 14px;
   }
 }
 
