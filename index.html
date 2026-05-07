@@ -135,19 +135,7 @@
 <header class="topbar" id="topbar">
   <div class="topbar-inner">
     <a href="/" class="logo" aria-label="KindredTrips home">
-      <span class="wm-kindred">Kindred</span><span class="wm-trips">Trips</span>
-      <svg class="wm-arc" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><path d="M2 4 Q 50 0 98 4" /></svg>
-      <svg class="wm-spark" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="1.4"/>
-        <line x1="8" y1="2" x2="8" y2="5"/>
-        <line x1="8" y1="11" x2="8" y2="14"/>
-        <line x1="2" y1="8" x2="5" y2="8"/>
-        <line x1="11" y1="8" x2="14" y2="8"/>
-        <line x1="3.6" y1="3.6" x2="5.5" y2="5.5"/>
-        <line x1="10.5" y1="10.5" x2="12.4" y2="12.4"/>
-        <line x1="3.6" y1="12.4" x2="5.5" y2="10.5"/>
-        <line x1="10.5" y1="5.5" x2="12.4" y2="3.6"/>
-      </svg>
+      <img src="/logo.png" alt="KindredTrips" class="logo-img" />
     </a>
 
     <button id="compact-search" class="compact-search" onclick="openSearchPopover()" aria-label="Edit search">
@@ -161,7 +149,7 @@
       <a href="/about.html" class="nav-link">About</a>
       <a href="/#why" class="nav-link">Inspiration</a>
       <a href="/contact.html" class="nav-link">Contact</a>
-      <a href="/contact.html" class="topbar-cta">Talk to us</a>
+      <a href="/#search-form" class="topbar-cta">Search trips</a>
     </nav>
   </div>
 </header>
@@ -216,9 +204,8 @@
   <div class="hero-inner">
     <div>
       <div class="hero-eyebrow fade-in">Caribbean family travel</div>
-      <h1 class="fade-in delay-1">Caribbean trips,<br/>ranked by what fits<br/><em>your family.</em></h1>
-      <p class="hero-tagline script fade-in delay-2">Amazing places. Meaningful moments. Together.</p>
-      <p class="lede fade-in delay-2">Skip picking a destination first. Tell us your origin, dates, who's coming, and your trip budget — we compare 974 curated family resorts and flight options across 35 countries and 79 airports, and rank complete trips (flights + hotel) that fit your family and your budget.</p>
+      <h1 class="fade-in delay-1">Find the Caribbean trip<br/>that actually fits<br/><em>your family.</em></h1>
+      <p class="lede fade-in delay-2">Enter your airport, dates, and kids' ages. KindredTrips compares curated family-friendly resorts across Caribbean destinations and ranks the best trips by total cost, travel time, and family fit.</p>
     </div>
 
     <form id="search-form" class="search-card fade-in delay-3" onsubmit="event.preventDefault(); runSearch();">
@@ -533,7 +520,7 @@
   <div class="footer-inner">
     <div>
       <div class="footer-brand">
-        <span class="wm-kindred">Kindred</span><span class="wm-trips">Trips</span>
+        <img src="/logo.png" alt="KindredTrips" class="logo-img" />
       </div>
       <p class="footer-disclosure">
         Caribbean family travel, ranked by what fits your family. Independent. Family-run.<br/><br/>
@@ -1614,17 +1601,15 @@
     const filterCount = activeFilterCount();
     const showing = Math.min(25, matchingCount);
     const summaryText = filterCount > 0
-      ? `${matchingCount} of ${total} match your filters. Showing the top ${showing} by complete trip cost, travel time, family fit, and budget fit.`
-      : `${total} curated family resort trips ranked for your dates, flights, and budget.`;
-    const subLine = filterCount > 0
-      ? ""
-      : `Sorted by complete trip cost, travel time, family fit, and budget fit.`;
+      ? `${matchingCount} of ${total} match your filters.`
+      : `${total} curated family resort trips ranked for your dates.`;
+    const subLine = `Sorted by total cost, travel time, and family fit.`;
     return `
       <div class="result-bar">
         <div>
           <h2>Ranked trips</h2>
           <div class="summary-line">${summaryText}</div>
-          ${subLine ? `<div class="summary-sub">${subLine}</div>` : ""}
+          <div class="summary-sub">${subLine}</div>
         </div>
         <div class="sort-controls">
           <label for="sort_by" style="font-weight: 500;">Sort by</label>
@@ -1638,8 +1623,8 @@
         </div>
       </div>
       <details class="rank-explainer">
-        <summary>How we rank these</summary>
-        <p>KindredTrips ranks complete trips — flights + hotel — using total trip cost, budget fit, travel time, stops, resort quality, and family-specific details like kids clubs, babysitting, room fit, and kid-friendly amenities.</p>
+        <summary>How rankings work</summary>
+        <p>KindredTrips ranks complete trips — flights + hotel — by total trip cost, budget fit, travel time, stops, resort quality, and family-fit signals like kids club, babysitting, and room layout.</p>
       </details>
     `;
   }
@@ -1845,7 +1830,7 @@
             </div>
             ${budgetPill}
           </div>
-          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">Check live price →</button>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">See rates →</button>
         </div>
       </article>
     `;
@@ -2233,7 +2218,7 @@
           <div><b>${fmtMoney(pkg.total_price)}</b> estimated trip total${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
           <div class="modal-cta-sub">flights + hotel · for your family</div>
         </div>
-        <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">Check live trip price →</button>
+        <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
       </div>`;
 
     const html = `
