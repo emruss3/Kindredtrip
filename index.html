@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260507-tighter-search" />
-<meta name="kt-build" content="20260507-tighter-search-supabase-fields" />
+<link rel="stylesheet" href="/styles.css?v=20260507-travelers-popover" />
+<meta name="kt-build" content="20260507-travelers-popover" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -275,12 +275,28 @@
             <input id="date_end" type="date" required aria-label="Check-out" />
           </div>
         </div>
-        <div class="search-field search-field-combo" onclick="this.querySelector('input').focus()">
-          <label>Travelers</label>
-          <div class="search-field-row">
-            <input id="adults" type="number" min="1" max="8" value="2" required aria-label="Adults" />
-            <span class="search-field-sep-text">adults</span>
-            <input id="child_ages" type="text" placeholder="kids' ages, e.g. 8, 5, 2" autocomplete="off" aria-label="Kids' ages" />
+        <div class="search-field search-field-popover" id="travelers-field">
+          <label for="travelers-display">Travelers</label>
+          <button type="button" id="travelers-display" class="travelers-display" onclick="toggleTravelersPopover(event)" aria-haspopup="true" aria-expanded="false">
+            <span id="travelers-display-text">2 adults</span>
+            <span class="travelers-display-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="travelers-popover" id="travelers-popover" hidden>
+            <div class="travelers-row">
+              <div class="travelers-row-label">Adults</div>
+              <div class="stepper" role="group" aria-label="Adults">
+                <button type="button" class="stepper-btn" onclick="adjustAdults(-1)" aria-label="Fewer adults">−</button>
+                <span class="stepper-value" id="adults-value">2</span>
+                <button type="button" class="stepper-btn" onclick="adjustAdults(1)" aria-label="More adults">+</button>
+                <input type="hidden" id="adults" value="2" />
+              </div>
+            </div>
+            <div class="travelers-row travelers-row-stack">
+              <label class="travelers-row-label" for="child_ages">Kids' ages</label>
+              <input id="child_ages" type="text" placeholder="e.g. 8, 5, 2" autocomplete="off" oninput="updateTravelersDisplay()" />
+              <div class="travelers-help">Comma-separated. Leave blank if no kids are coming.</div>
+            </div>
+            <button type="button" class="btn btn-primary travelers-done" onclick="closeTravelersPopover()">Done</button>
           </div>
         </div>
         <div class="search-field" onclick="this.querySelector('input').focus()">
@@ -706,6 +722,64 @@
     filters.country.clear();
     syncHomepageDestinationChips();
   }
+
+  // -------- Travelers popover (Adults stepper + Kids' ages) --------
+  function toggleTravelersPopover(event) {
+    if (event) event.stopPropagation();
+    const pop = document.getElementById("travelers-popover");
+    const btn = document.getElementById("travelers-display");
+    if (!pop) return;
+    const isOpen = !pop.hidden;
+    if (isOpen) {
+      closeTravelersPopover();
+    } else {
+      pop.hidden = false;
+      btn?.setAttribute("aria-expanded", "true");
+      // Defer the outside-click listener so the click that opened the
+      // popover doesn't immediately close it.
+      setTimeout(() => document.addEventListener("click", outsideTravelersClick), 0);
+    }
+  }
+  function closeTravelersPopover() {
+    const pop = document.getElementById("travelers-popover");
+    const btn = document.getElementById("travelers-display");
+    if (!pop) return;
+    pop.hidden = true;
+    btn?.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", outsideTravelersClick);
+  }
+  function outsideTravelersClick(e) {
+    const field = document.getElementById("travelers-field");
+    if (field && !field.contains(e.target)) closeTravelersPopover();
+  }
+  function adjustAdults(delta) {
+    const input = document.getElementById("adults");
+    const display = document.getElementById("adults-value");
+    if (!input || !display) return;
+    const cur = parseInt(input.value, 10) || 2;
+    const next = Math.max(1, Math.min(8, cur + delta));
+    input.value = String(next);
+    display.textContent = String(next);
+    updateTravelersDisplay();
+  }
+  function updateTravelersDisplay() {
+    const adultsInput = document.getElementById("adults");
+    const kidsInput = document.getElementById("child_ages");
+    const display = document.getElementById("travelers-display-text");
+    if (!display) return;
+    const adults = parseInt(adultsInput?.value, 10) || 2;
+    const kidsCount = parseChildAges(kidsInput?.value || "").length;
+    const adultsLabel = `${adults} adult${adults === 1 ? "" : "s"}`;
+    const kidsLabel = kidsCount > 0 ? `, ${kidsCount} kid${kidsCount === 1 ? "" : "s"}` : "";
+    display.textContent = adultsLabel + kidsLabel;
+  }
+  // Close on Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const pop = document.getElementById("travelers-popover");
+      if (pop && !pop.hidden) closeTravelersPopover();
+    }
+  });
   function openMoreFilters() {
     // After search, the sidebar holds every other filter — scroll to it.
     // Before search, just nudge the user to start the search first.
@@ -2428,6 +2502,7 @@
 
   // Initial population — runs after all const/let declarations above are initialized
   syncHomepageDestinationChips();
+  updateTravelersDisplay();
 </script>
 
 </body>

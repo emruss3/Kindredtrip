@@ -568,7 +568,7 @@ button { font-family: inherit; }
 .search-field select:focus { outline: none; box-shadow: none; }
 .search-field input::placeholder { color: var(--ink-3); font-weight: 400; }
 
-/* Combined-field cells: Dates (date_start + date_end), Travelers (adults + child_ages) */
+/* Combined-field cell: Dates (date_start + date_end) */
 .search-field-row {
   display: flex;
   align-items: center;
@@ -578,18 +578,146 @@ button { font-family: inherit; }
 }
 .search-field-row input { flex: 1 1 auto; min-width: 0; font-size: 13.5px; }
 .search-field-combo input[type="date"] { font-variant-numeric: tabular-nums; }
-.search-field-combo #adults { flex: 0 0 22px; max-width: 28px; text-align: left; }
-.search-field-combo #child_ages { flex: 1 1 auto; }
 .search-field-sep {
   color: var(--ink-3);
   font-size: 13px;
   flex-shrink: 0;
 }
-.search-field-sep-text {
-  color: var(--ink-3);
-  font-size: 12px;
+
+/* Travelers field — display button + popover */
+.search-field-popover { cursor: pointer; }
+.travelers-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-size: 14px;
   font-weight: 500;
-  flex-shrink: 0;
+  color: var(--ink);
+  cursor: pointer;
+  line-height: 1.3;
+  text-align: left;
+}
+.travelers-display:focus { outline: none; }
+.travelers-display-caret {
+  color: var(--ink-3);
+  font-size: 10px;
+  margin-left: 4px;
+  transition: transform 0.15s;
+}
+.travelers-display[aria-expanded="true"] .travelers-display-caret { transform: rotate(180deg); }
+
+.travelers-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px -10px rgba(10, 23, 33, 0.22);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 240px;
+}
+.travelers-popover[hidden] { display: none; }
+.travelers-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.travelers-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.travelers-row-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.travelers-row-stack input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+.travelers-row-stack input:focus {
+  outline: none;
+  border-color: var(--ink-3);
+}
+.travelers-help {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+/* Stepper for adults count */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 2px;
+  background: #fff;
+}
+.stepper-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  line-height: 1;
+}
+.stepper-btn:hover { background: var(--bg-soft); }
+.stepper-btn:focus { outline: none; box-shadow: 0 0 0 2px var(--sea-soft); }
+.stepper-value {
+  min-width: 22px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.travelers-done {
+  align-self: stretch;
+  font-size: 13px;
+  padding: 8px 14px;
+}
+
+@media (max-width: 880px) {
+  .travelers-popover {
+    position: static;
+    box-shadow: none;
+    border: none;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    margin-top: 0;
+  }
 }
 
 .search-submit {
@@ -2280,9 +2408,9 @@ body:not(.has-results) #results-wrap { display: none; }
   gap: 6px;
   font-size: 13.5px;
   font-weight: 500;
-  color: var(--ink-1);
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
+  color: var(--ink);
+  background: #FFF8EF;
+  border: 1px solid #E8DCCB;
   border-radius: var(--r-pill);
   padding: 5px 12px;
   align-self: flex-start;
@@ -2290,7 +2418,12 @@ body:not(.has-results) #results-wrap { display: none; }
 }
 .card-flight-icon {
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (max-width: 720px) {
   .card-flight { font-size: 12.5px; padding: 4px 10px; }
