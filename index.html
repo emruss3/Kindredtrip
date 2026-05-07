@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260507-modal" />
-<meta name="kt-build" content="20260507-modal-rebuild" />
+<link rel="stylesheet" href="/styles.css?v=20260507-search" />
+<meta name="kt-build" content="20260507-search-redesign" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -267,21 +267,21 @@
             <option value="YYZ">Toronto Pearson (YYZ)</option>
           </datalist>
         </div>
-        <div class="search-field" onclick="this.querySelector('input').focus()">
-          <label for="date_start">Check-in</label>
-          <input id="date_start" type="date" required />
+        <div class="search-field search-field-combo" onclick="this.querySelector('input').focus()">
+          <label>Dates</label>
+          <div class="search-field-row">
+            <input id="date_start" type="date" required aria-label="Check-in" />
+            <span class="search-field-sep" aria-hidden="true">→</span>
+            <input id="date_end" type="date" required aria-label="Check-out" />
+          </div>
         </div>
-        <div class="search-field" onclick="this.querySelector('input').focus()">
-          <label for="date_end">Check-out</label>
-          <input id="date_end" type="date" required />
-        </div>
-        <div class="search-field" onclick="this.querySelector('input').focus()">
-          <label for="adults">Adults</label>
-          <input id="adults" type="number" min="1" max="8" value="2" required />
-        </div>
-        <div class="search-field" onclick="this.querySelector('input').focus()">
-          <label for="child_ages">Kids' ages</label>
-          <input id="child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
+        <div class="search-field search-field-combo" onclick="this.querySelector('input').focus()">
+          <label>Travelers</label>
+          <div class="search-field-row">
+            <input id="adults" type="number" min="1" max="8" value="2" required aria-label="Adults" />
+            <span class="search-field-sep-text">adults</span>
+            <input id="child_ages" type="text" placeholder="kids' ages, e.g. 8, 5, 2" autocomplete="off" aria-label="Kids' ages" />
+          </div>
         </div>
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="budget">Trip budget</label>
@@ -295,20 +295,25 @@
       </div>
 
       <div class="search-extras">
-        <span class="search-extras-label">Family-fit</span>
         <label class="toggle"><input type="checkbox" data-flag="require_kids_club" checked />Kids club</label>
         <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
-        <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights</label>
         <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
-      </div>
-
-      <div class="search-extras" id="dest-row">
-        <span class="search-extras-label">Destinations</span>
-        <span id="dest-chips"></span>
-        <button type="button" class="toggle dest-more" onclick="openDestPicker()">+ More</button>
-        <span class="dest-hint" id="dest-hint">Anywhere in the Caribbean</span>
+        <button type="button" class="toggle toggle-more" onclick="openMoreFilters()">More filters</button>
       </div>
     </form>
+
+    <details class="popular-destinations" id="popular-destinations">
+      <summary>
+        <span class="popular-destinations-label">Popular destinations</span>
+        <span class="popular-destinations-toggle" aria-hidden="true">▾</span>
+      </summary>
+      <div class="popular-destinations-row" id="dest-row">
+        <span id="dest-chips"></span>
+        <button type="button" class="dest-link" onclick="clearAllDestinations()">Anywhere in the Caribbean</button>
+        <button type="button" class="dest-link dest-more" onclick="openDestPicker()">More destinations →</button>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -701,6 +706,21 @@
   function closeDestPicker() {
     document.getElementById("dest-picker").hidden = true;
     document.body.style.overflow = "";
+  }
+  function clearAllDestinations() {
+    filters.country.clear();
+    syncHomepageDestinationChips();
+  }
+  function openMoreFilters() {
+    // After search, the sidebar holds every other filter — scroll to it.
+    // Before search, just nudge the user to start the search first.
+    const sidebar = document.getElementById("results-sidebar");
+    if (sidebar && document.body.classList.contains("has-results")) {
+      sidebar.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      const dates = document.getElementById("date_start");
+      if (dates && !dates.value) dates.focus();
+    }
   }
   function renderDestPicker() {
     const grid = document.getElementById("dest-picker-grid");

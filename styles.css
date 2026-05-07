@@ -334,29 +334,6 @@ button { font-family: inherit; }
   pointer-events: auto;
 }
 
-/* Homepage destination chips row — quiet, secondary */
-#dest-row {
-  align-items: center;
-  margin-top: var(--s-2);
-  padding-top: var(--s-2);
-  border-top: 1px solid var(--line-soft);
-  font-size: 12.5px;
-  opacity: 0.85;
-}
-#dest-row .search-extras-label { color: var(--ink-3); font-size: 11px; }
-.dest-hint {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  margin-left: 4px;
-}
-.toggle.dest-more {
-  background: transparent;
-  border-style: dashed;
-  font-weight: 500;
-  font-size: 12.5px;
-  padding: 4px 10px;
-}
-
 /* Destinations picker modal */
 .dest-picker {
   position: fixed;
@@ -521,44 +498,37 @@ button { font-family: inherit; }
 
 /* Search card overlaid on hero */
 .search-card {
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: #FFF8EC;
+  border: 1px solid #E8DCCB;
   border-radius: var(--r-lg);
-  padding: var(--s-4);
-  max-width: 940px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.5) inset,
-    0 18px 40px -22px rgba(10, 23, 33, 0.35);
+  padding: 10px;
+  max-width: 920px;
+  box-shadow: 0 8px 24px -16px rgba(10, 23, 33, 0.18);
   color: var(--ink);
 }
 .search-card-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 0.7fr 0.9fr 0.9fr auto;
+  grid-template-columns: 1.1fr 1.4fr 1.4fr 1fr auto;
   gap: 0;
   background: #fff;
   border-radius: var(--r-md);
-  border: 1px solid var(--line-soft);
+  border: 1px solid #E8DCCB;
   overflow: hidden;
 }
-@media (max-width: 1080px) {
-  .search-card-grid { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 880px) {
+  .search-card-grid { grid-template-columns: 1fr 1fr; }
 }
-@media (max-width: 720px) {
-  .search-card-grid { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 480px) {
+@media (max-width: 540px) {
   .search-card-grid { grid-template-columns: 1fr; }
 }
 
 .search-field {
-  padding: 10px var(--s-4) 12px;
-  border-right: 1px solid var(--line-soft);
+  padding: 8px var(--s-4) 10px;
+  border-right: 1px solid #F2E8DA;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 56px;
+  min-height: 54px;
   position: relative;
   cursor: text;
   transition: background 0.12s;
@@ -566,13 +536,19 @@ button { font-family: inherit; }
 .search-field:hover { background: rgba(0,0,0,0.015); }
 .search-field:focus-within { background: rgba(0,0,0,0.025); }
 .search-field:last-of-type { border-right: none; }
+@media (max-width: 880px) {
+  .search-field {
+    border-right: none;
+    border-bottom: 1px solid #F2E8DA;
+  }
+}
 .search-field label {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--ink-1);
+  color: var(--ink-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   cursor: text;
 }
 .search-field input,
@@ -590,8 +566,32 @@ button { font-family: inherit; }
 .search-field select:focus { outline: none; box-shadow: none; }
 .search-field input::placeholder { color: var(--ink-3); font-weight: 400; }
 
+/* Combined-field cells: Dates (date_start + date_end), Travelers (adults + child_ages) */
+.search-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+}
+.search-field-row input { flex: 1 1 auto; min-width: 0; font-size: 14.5px; }
+.search-field-combo input[type="date"] { font-variant-numeric: tabular-nums; }
+.search-field-combo #adults { flex: 0 0 26px; max-width: 32px; text-align: left; }
+.search-field-combo #child_ages { flex: 1 1 auto; }
+.search-field-sep {
+  color: var(--ink-3);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.search-field-sep-text {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
 .search-submit {
-  padding: 0 var(--s-5);
+  padding: 0 22px;
   background: var(--coral);
   border: none;
   color: #fff;
@@ -601,44 +601,51 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--s-2);
-  min-height: 56px;
+  gap: 8px;
+  min-height: 54px;
   transition: background 0.15s;
   letter-spacing: -0.005em;
+  border-radius: 0;
 }
 .search-submit:hover { background: var(--coral-deep); }
 .search-submit:disabled { opacity: 0.7; cursor: not-allowed; }
 @media (max-width: 880px) {
-  .search-submit { grid-column: 1 / -1; min-height: 52px; padding: var(--s-3); }
+  .search-submit {
+    grid-column: 1 / -1;
+    min-height: 50px;
+    padding: var(--s-3);
+    border-radius: 0;
+    width: 100%;
+  }
 }
 
-/* Search advanced row */
+/* Filters row (under main search) */
 .search-extras {
   display: flex;
-  gap: var(--s-2);
-  margin-top: var(--s-4);
+  gap: 6px;
+  margin-top: 10px;
   flex-wrap: wrap;
   align-items: center;
 }
 .search-extras-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-2);
-  margin-right: var(--s-2);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-right: 4px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 .toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px 7px;
-  border: 1px solid var(--line);
+  padding: 5px 12px 6px;
+  border: 1px solid #E8DCCB;
   border-radius: var(--r-pill);
   background: #fff;
   cursor: pointer;
   font-size: 12.5px;
-  color: var(--ink-1);
+  color: var(--ink);
   user-select: none;
   font-weight: 500;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
@@ -652,10 +659,93 @@ button { font-family: inherit; }
 }
 .toggle.active::before {
   content: "";
-  width: 10px; height: 10px;
+  width: 9px; height: 9px;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M5 12l5 5L20 7'/%3E%3C/svg%3E");
   background-size: contain;
   background-repeat: no-repeat;
+}
+.toggle-more {
+  border-style: dashed;
+  color: var(--ink-2);
+}
+
+/* Popular destinations — quiet secondary row, lives below the search card on the hero photo */
+.popular-destinations {
+  margin-top: 14px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.popular-destinations > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 2px 0;
+}
+.popular-destinations > summary::-webkit-details-marker { display: none; }
+.popular-destinations-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.005em;
+}
+.popular-destinations-toggle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: transform 0.15s;
+}
+.popular-destinations[open] > summary .popular-destinations-toggle { transform: rotate(180deg); }
+.popular-destinations-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.popular-destinations-row #dest-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.popular-destinations-row .toggle {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12.5px;
+  padding: 4px 11px 5px;
+  font-weight: 500;
+}
+.popular-destinations-row .toggle:hover { border-color: rgba(255, 255, 255, 0.9); }
+.popular-destinations-row .toggle.active {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+}
+.dest-link {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 4px 6px;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-underline-offset: 3px;
+}
+.dest-link:hover {
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.9);
+}
+@media (max-width: 600px) {
+  .popular-destinations[open] .popular-destinations-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 /* ---------- Stats strip ---------- */
