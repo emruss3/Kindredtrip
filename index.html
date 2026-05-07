@@ -161,7 +161,7 @@
       <a href="/about.html" class="nav-link">About</a>
       <a href="/#why" class="nav-link">Inspiration</a>
       <a href="/contact.html" class="nav-link">Contact</a>
-      <a href="/contact.html" class="topbar-cta">Plan with Us</a>
+      <a href="/contact.html" class="topbar-cta">Talk to us</a>
     </nav>
   </div>
 </header>
@@ -191,8 +191,9 @@
         <input id="po_child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
       </div>
       <div class="search-field">
-        <label for="po_budget">Max budget</label>
-        <input id="po_budget" type="number" min="0" step="500" placeholder="Any" autocomplete="off" inputmode="numeric" />
+        <label for="po_budget">Trip budget</label>
+        <input id="po_budget" type="number" min="0" step="500" placeholder="$10,000" autocomplete="off" inputmode="numeric" />
+        <div class="search-field-hint">Flights + hotel</div>
       </div>
       <button class="search-submit" type="submit">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -217,7 +218,7 @@
       <div class="hero-eyebrow fade-in">Caribbean family travel</div>
       <h1 class="fade-in delay-1">Caribbean trips,<br/>ranked by what fits<br/><em>your family.</em></h1>
       <p class="hero-tagline script fade-in delay-2">Amazing places. Meaningful moments. Together.</p>
-      <p class="lede fade-in delay-2">Skip picking a destination first. Tell us your origin, dates, and who's coming — we compared 974 all-inclusive Caribbean family resorts across 35 countries and 79 airports, and we'll show you the trips that fit (kids club minimum age, on the beach, lazy river, accepts infants) ranked by total flight + hotel cost.</p>
+      <p class="lede fade-in delay-2">Skip picking a destination first. Tell us your origin, dates, who's coming, and your trip budget — we compare 974 curated family resorts and flight options across 35 countries and 79 airports, and rank complete trips (flights + hotel) that fit your family and your budget.</p>
     </div>
 
     <form id="search-form" class="search-card fade-in delay-3" onsubmit="event.preventDefault(); runSearch();">
@@ -295,8 +296,9 @@
           <input id="child_ages" type="text" placeholder="8, 5, 2" autocomplete="off" />
         </div>
         <div class="search-field" onclick="this.querySelector('input').focus()">
-          <label for="budget">Max budget</label>
-          <input id="budget" type="number" min="0" step="500" placeholder="Any" autocomplete="off" inputmode="numeric" />
+          <label for="budget">Trip budget</label>
+          <input id="budget" type="number" min="0" step="500" placeholder="$10,000" autocomplete="off" inputmode="numeric" />
+          <div class="search-field-hint">Flights + hotel</div>
         </div>
         <button id="submit-btn" class="search-submit" type="submit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -1289,35 +1291,25 @@
       + (p._tags.rooms.includes("Connecting Rooms") || p.resorts?.guaranteed_connecting_rooms ? 1 : 0)
       + (p._tags.styles.includes("Family Resort") || p._tags.styles.includes("Family") ? 1 : 0);
 
-    // 1. Best value — lowest total_price
-    const bestValue = [...visible].sort((a, b) => num(a.total_price) - num(b.total_price))[0];
-    if (bestValue && bestValue.total_price != null) winners.set(bestValue.package_id, { label: "Best value", cls: "rank rank-best" });
-
-    // 2. Best kid amenities — most KIDS_AMENITY tags (require >= 3)
+    // Best kid amenities — most KIDS_AMENITY tags (require >= 3)
     const kidScored = [...visible].sort((a, b) => kidScore(b) - kidScore(a));
     if (kidScored[0] && kidScore(kidScored[0]) >= 3 && !winners.has(kidScored[0].package_id)) {
       winners.set(kidScored[0].package_id, { label: "Best kid amenities", cls: "rank rank-kid" });
     }
 
-    // 3. Strong family fit — highest familyFit score (require >= 4)
+    // Strong family fit — highest familyFit score (require >= 4)
     const familyScored = [...visible].sort((a, b) => familyFit(b) - familyFit(a));
     if (familyScored[0] && familyFit(familyScored[0]) >= 4 && !winners.has(familyScored[0].package_id)) {
       winners.set(familyScored[0].package_id, { label: "Strong family fit", cls: "rank rank-fit" });
     }
 
-    // 4. Easy travel day — direct flight + lowest duration
+    // Easy travel day — direct flight + lowest duration
     const easy = visible.filter((p) => p.stops === 0).sort((a, b) => num(a.duration_hours) - num(b.duration_hours))[0];
     if (easy && !winners.has(easy.package_id)) {
       winners.set(easy.package_id, { label: "Easy travel day", cls: "rank rank-easy" });
     }
 
-    // 5. Lower flight cost — cheapest flight_price
-    const cheapFlight = [...visible].sort((a, b) => num(a.flight_price) - num(b.flight_price))[0];
-    if (cheapFlight && cheapFlight.flight_price != null && !winners.has(cheapFlight.package_id)) {
-      winners.set(cheapFlight.package_id, { label: "Lower flight cost", cls: "rank rank-flight" });
-    }
-
-    // 6. Shortest travel — lowest stops then lowest duration
+    // Shortest travel — lowest stops then lowest duration
     const shortest = [...visible].sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)))[0];
     if (shortest && !winners.has(shortest.package_id) && shortest.stops != null) {
       winners.set(shortest.package_id, { label: "Shortest travel", cls: "rank rank-short" });
@@ -1327,9 +1319,10 @@
   }
 
   function renderResults() {
-    const filtered = allPackages.filter(packageMatchesFilters);
+    const filtered = applyClientSort(allPackages.filter(packageMatchesFilters));
     const visible = filtered.slice(0, 25);
     const rankBadges = computeRankingBadges(visible);
+    const budgetBadges = computeBudgetBadges(visible);
 
     const main = document.getElementById("results-main");
     const sidebar = document.getElementById("results-sidebar");
@@ -1341,7 +1334,52 @@
       renderActiveFilterPills() +
       (visible.length === 0
         ? `<div class="empty"><h3>Nothing matches those filters.</h3><p>Try clearing a filter or two — your constraints might be too tight.</p></div>`
-        : visible.map((p) => renderCard(p, rankBadges.get(p.package_id))).join(""));
+        : visible.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join(""));
+  }
+
+  // One subtle budget-related badge per visible card. Returns Map<package_id, {label, cls}>
+  function computeBudgetBadges(visible) {
+    const winners = new Map();
+    if (!visible.length) return winners;
+    const num = (v) => (v == null ? Infinity : Number(v));
+    const budget = getUserBudget();
+    const rate = (p) => p.resorts?.avg_user_rating || 0;
+
+    if (budget == null) {
+      const cheapest = [...visible].sort((a, b) => num(a.total_price) - num(b.total_price))[0];
+      if (cheapest && cheapest.total_price != null) {
+        winners.set(cheapest.package_id, { label: "Lowest trip cost", cls: "budget-badge" });
+      }
+      return winners;
+    }
+
+    const under = visible.filter((p) => p.total_price != null && p.total_price <= budget);
+    if (under.length) {
+      // Most under budget — biggest savings from full budget
+      const mostUnder = [...under].sort((a, b) => (budget - b.total_price) - (budget - a.total_price))[0];
+      if (mostUnder) {
+        const savings = Math.round(budget - mostUnder.total_price);
+        winners.set(mostUnder.package_id, { label: `${fmtMoney(savings)} under budget`, cls: "budget-badge under" });
+      }
+      // Best under budget — highest-rated trip whose total fits
+      const bestUnder = [...under].sort((a, b) => rate(b) - rate(a))[0];
+      if (bestUnder && !winners.has(bestUnder.package_id) && rate(bestUnder) > 0) {
+        winners.set(bestUnder.package_id, { label: "Best under budget", cls: "budget-badge under" });
+      }
+      // Upgrade within budget — closest to the ceiling without going over
+      const upgrade = [...under].sort((a, b) => (budget - a.total_price) - (budget - b.total_price))[0];
+      if (upgrade && !winners.has(upgrade.package_id) && (budget - upgrade.total_price) <= budget * 0.10) {
+        winners.set(upgrade.package_id, { label: "Upgrade within budget", cls: "budget-badge under" });
+      }
+    }
+
+    // Lower flight cost — works regardless of budget
+    const cheapFlight = [...visible].sort((a, b) => num(a.flight_price) - num(b.flight_price))[0];
+    if (cheapFlight && cheapFlight.flight_price != null && !winners.has(cheapFlight.package_id)) {
+      winners.set(cheapFlight.package_id, { label: "Lower flight cost", cls: "budget-badge" });
+    }
+
+    return winners;
   }
 
   function renderSidebar() {
@@ -1576,33 +1614,87 @@
     const filterCount = activeFilterCount();
     const showing = Math.min(25, matchingCount);
     const summaryText = filterCount > 0
-      ? `${matchingCount} of ${total} match your filters. Showing the top ${showing} by total cost, travel friction, and family fit.`
-      : `${total} curated family resort trips ranked for your dates. Showing the top ${showing} by total cost, travel friction, and family fit.`;
+      ? `${matchingCount} of ${total} match your filters. Showing the top ${showing} by complete trip cost, travel time, family fit, and budget fit.`
+      : `${total} curated family resort trips ranked for your dates, flights, and budget.`;
+    const subLine = filterCount > 0
+      ? ""
+      : `Sorted by complete trip cost, travel time, family fit, and budget fit.`;
     return `
       <div class="result-bar">
         <div>
           <h2>Ranked trips</h2>
           <div class="summary-line">${summaryText}</div>
+          ${subLine ? `<div class="summary-sub">${subLine}</div>` : ""}
         </div>
         <div class="sort-controls">
           <label for="sort_by" style="font-weight: 500;">Sort by</label>
           <select id="sort_by" onchange="onSortChange(this.value)">
             <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit for your family</option>
-            <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total price</option>
-            <option value="price_desc"${lastSortBy === "price_desc" ? " selected" : ""}>Highest total price</option>
+            <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total trip cost</option>
+            <option value="under_budget"${lastSortBy === "under_budget" ? " selected" : ""}>Most under budget</option>
+            <option value="shortest_travel"${lastSortBy === "shortest_travel" ? " selected" : ""}>Shortest travel day</option>
+            <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort within budget</option>
           </select>
         </div>
       </div>
       <details class="rank-explainer">
         <summary>How we rank these</summary>
-        <p>KindredTrips ranks curated family resort options using estimated flight + hotel cost, travel time, stops, resort quality, and family-specific details like kids clubs, babysitting, room fit, and kid-friendly amenities.</p>
+        <p>KindredTrips ranks complete trips — flights + hotel — using total trip cost, budget fit, travel time, stops, resort quality, and family-specific details like kids clubs, babysitting, room fit, and kid-friendly amenities.</p>
       </details>
     `;
   }
 
   function onSortChange(value) {
     lastSortBy = value;
-    fetchAndRender().catch((e) => showError(e.message));
+    // Client-side resort over the full fetched set — avoids refetch and works
+    // for sort options the backend doesn't natively support yet.
+    renderResults();
+  }
+
+  // -------- Budget helpers --------
+  function getUserBudget() {
+    if (lastSearchSummary && lastSearchSummary.budget_total) return lastSearchSummary.budget_total;
+    if (filters.priceMax != null) return filters.priceMax;
+    return null;
+  }
+
+  function budgetDelta(p) {
+    const b = getUserBudget();
+    if (b == null || p.total_price == null) return null;
+    const diff = b - p.total_price;
+    return { diff: Math.abs(Math.round(diff)), under: diff >= 0, budget: b };
+  }
+
+  function applyClientSort(packages) {
+    const num = (v) => (v == null ? Infinity : Number(v));
+    const budget = getUserBudget();
+    const arr = [...packages];
+    switch (lastSortBy) {
+      case "price_asc":
+        return arr.sort((a, b) => num(a.total_price) - num(b.total_price));
+      case "under_budget": {
+        if (budget == null) return arr.sort((a, b) => num(a.total_price) - num(b.total_price));
+        const within = arr.filter((p) => p.total_price != null && p.total_price <= budget);
+        const over   = arr.filter((p) => !(p.total_price != null && p.total_price <= budget));
+        within.sort((a, b) => (budget - a.total_price) > (budget - b.total_price) ? -1 : 1);
+        over.sort((a, b) => num(a.total_price) - num(b.total_price));
+        return within.concat(over);
+      }
+      case "shortest_travel":
+        return arr.sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)));
+      case "best_within_budget": {
+        const rate = (p) => p.resorts?.avg_user_rating || 0;
+        if (budget == null) return arr.sort((a, b) => rate(b) - rate(a));
+        const within = arr.filter((p) => p.total_price != null && p.total_price <= budget);
+        const over   = arr.filter((p) => !(p.total_price != null && p.total_price <= budget));
+        within.sort((a, b) => rate(b) - rate(a));
+        over.sort((a, b) => rate(b) - rate(a));
+        return within.concat(over);
+      }
+      case "score":
+      default:
+        return arr; // server pre-sorted by score
+    }
   }
 
   // Convert 0-100 rating to X.X / 5
@@ -1620,7 +1712,7 @@
     return `<span class="badge${cls ? " " + cls : ""}"><span class="emoji">${emoji}</span>${label}</span>`;
   }
 
-  function renderCard(p, rankBadge) {
+  function renderCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
     const tags = p._tags;
     const badges = [];
@@ -1684,17 +1776,26 @@
     const stopsStr = p.stops != null
       ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
       : null;
-    const duration = p.duration_hours ? `${p.duration_hours}h` : null;
-    const flightLine = [stopsStr, duration].filter(Boolean).join(" · ");
-
+    const duration = p.duration_hours ? `${p.duration_hours}h travel` : null;
     const transferStr = fmtTransfer(r.airport_transfer_notes);
-    const sizeStr = fmtSize(r.rooms_count);
+    const flightCost = p.flight_price != null ? `${fmtMoney(p.flight_price)} flights` : null;
 
+    const flightParts = [
+      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}` : null,
+      stopsStr,
+      duration,
+      transferStr ? `${transferStr} transfer` : null,
+      flightCost,
+    ].filter(Boolean);
+    const flightRow = flightParts.length
+      ? `<div class="card-flight"><span class="card-flight-icon">✈</span>${flightParts.join(" · ")}</div>`
+      : "";
+
+    const sizeStr = fmtSize(r.rooms_count);
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
       sizeStr ? escapeHtml(sizeStr) : null,
-      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}${transferStr ? ` · ${escapeHtml(transferStr)} from airport` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
@@ -1710,6 +1811,14 @@
       ? `<div class="card-watchout">${watchouts.map(w => `<span class="badge warn"><span class="emoji">⚠</span>${escapeHtml(w)}</span>`).join("")}</div>`
       : "";
 
+    const delta = budgetDelta(p);
+    const deltaRow = delta
+      ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>`
+      : "";
+    const budgetPill = budgetBadge
+      ? `<div class="${budgetBadge.cls}">${escapeHtml(budgetBadge.label)}</div>`
+      : "";
+
     return `
       <article class="card" onclick="openResortModal('${p.package_id}')">
         <div class="card-photo">
@@ -1719,27 +1828,213 @@
         <div class="card-body">
           ${titleRow}
           <div class="card-meta">${meta}</div>
+          ${flightRow}
           <div class="badges">${badges.join("")}</div>
           ${watchoutRow}
         </div>
         <div class="card-price">
           <div class="price-block-top">
-            <div class="price-from">Estimated total</div>
+            <div class="price-from">Estimated trip total</div>
             <div class="price-sub">flights + hotel</div>
             <p class="price-total">${fmtMoney(p.total_price)}</p>
             <div class="price-suffix">for your family</div>
+            ${deltaRow}
             <div class="price-breakdown">
               <div><b>${fmtMoney(p.flight_price)}</b> flights</div>
               <div><b>${fmtMoney(p.hotel_price)}</b> hotel</div>
             </div>
+            ${budgetPill}
           </div>
-          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">See hotel rates →</button>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); bookHotel('${p.package_id}')">Check live price →</button>
         </div>
       </article>
     `;
   }
 
   // -------- Resort detail modal --------
+
+  function familyFitInfo(pkg) {
+    const r = pkg.resorts || {};
+    const t = pkg._tags || extractTags(pkg);
+    let score = 0;
+    const reasons = [];
+    if (r.kids_club_available || t.amenities.includes("Kids Club") || t.amenities.includes("Kids Club for Under 4")) {
+      score += 2;
+      const ageNote = (r.kids_club_min_age != null || r.kids_club_max_age != null)
+        ? ` (ages ${r.kids_club_min_age ?? "?"}${r.kids_club_max_age ? `–${r.kids_club_max_age}` : "+"})`
+        : "";
+      reasons.push(`Kids club${ageNote}`);
+    }
+    if (r.babysitting_available || t.amenities.includes("Babysitting")) { score += 1; reasons.push("Babysitting"); }
+    if (t.rooms.includes("Family Suite")) { score += 2; reasons.push("Family suites"); }
+    if (t.rooms.includes("2 Bedroom Suites")) { score += 2; reasons.push("Two-bedroom suites"); }
+    if (t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) { score += 1; reasons.push(r.guaranteed_connecting_rooms ? "Guaranteed connecting rooms" : "Connecting rooms"); }
+    if (t.amenities.includes("Lazy River") || t.amenities.includes("Pool Slide") || r.water_park
+        || t.amenities.includes("Waterpark For Little Kids") || t.amenities.includes("Waterpark For Big Kids")) {
+      score += 1; reasons.push("Water play");
+    }
+    if (r.accepts_infants) reasons.push("Accepts infants");
+    let label = "Decent fit";
+    if (score >= 6) label = "Excellent";
+    else if (score >= 4) label = "Strong";
+    else if (score >= 2) label = "Good";
+    else if (score === 0) label = "Limited";
+    return { score, label, reasons };
+  }
+
+  function travelEaseInfo(pkg) {
+    if (pkg.stops == null) return { label: "—", note: "—" };
+    const stopsStr = pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`;
+    const dur = pkg.duration_hours ? `${pkg.duration_hours}h` : "";
+    const transferStr = fmtTransfer(pkg.resorts?.airport_transfer_notes);
+    return {
+      label: pkg.stops === 0 ? "Easy" : pkg.stops >= 2 ? "Long day" : "Manageable",
+      note: [stopsStr, dur].filter(Boolean).join(" · ") + (transferStr ? ` · ${transferStr} transfer` : ""),
+    };
+  }
+
+  function roomFitInfo(pkg) {
+    const r = pkg.resorts || {};
+    const t = pkg._tags || extractTags(pkg);
+    const adults = lastSearchSummary?.adults || 2;
+    const kids = lastSearchSummary?.child_ages?.length || 0;
+    const total = adults + kids;
+    const has2Bdrm = t.rooms.includes("2 Bedroom Suites");
+    const hasFamilySuite = t.rooms.includes("Family Suite");
+    const hasConnecting = t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms;
+    const guaranteedConnecting = !!r.guaranteed_connecting_rooms;
+    const maxOcc = r.family_room_max_occupancy;
+
+    if (total <= 4) {
+      return {
+        headline: "One room likely works",
+        detail: hasFamilySuite ? "Family suites add space — worth asking about." : "Most standard rooms can fit a family of four.",
+        check: maxOcc ? `Family room max occupancy: ${maxOcc}.` : "Confirm the standard family room size first.",
+        family: total,
+      };
+    }
+    if (total === 5) {
+      if (hasFamilySuite || has2Bdrm || (maxOcc && maxOcc >= 5)) {
+        return {
+          headline: "Family suite recommended",
+          detail: hasFamilySuite ? "This resort offers family suites that comfortably fit five." : "Two-bedroom or larger family layouts are listed.",
+          check: "Ask for a family suite or two-bedroom layout when booking.",
+          family: total,
+        };
+      }
+      if (hasConnecting) {
+        return {
+          headline: "Connecting rooms recommended",
+          detail: guaranteedConnecting ? "Guaranteed connecting rooms — works well for five." : "Connecting rooms are listed but not guaranteed.",
+          check: guaranteedConnecting ? "Confirm at booking." : "Ask for guaranteed connecting rooms — not 'on request'.",
+          family: total,
+        };
+      }
+      return {
+        headline: "Verify before booking",
+        detail: "Family-of-five room options aren't clearly listed.",
+        check: "Room fit should be verified before booking.",
+        family: total,
+      };
+    }
+    // 6+ people
+    if (has2Bdrm) {
+      return {
+        headline: "Two-bedroom suite or two rooms",
+        detail: "Two-bedroom suites are listed — usually most comfortable for a larger family.",
+        check: "Ask for a two-bedroom layout or two connecting rooms.",
+        family: total,
+      };
+    }
+    if (hasConnecting) {
+      return {
+        headline: "Two connecting rooms recommended",
+        detail: "Larger families typically need two connecting rooms here.",
+        check: guaranteedConnecting ? "Connecting rooms are guaranteed — confirm at booking." : "Confirm guaranteed connecting rooms before booking.",
+        family: total,
+      };
+    }
+    return {
+      headline: "Verify before booking",
+      detail: "Room layouts for larger families aren't clearly listed.",
+      check: "Room fit should be verified before booking.",
+      family: total,
+    };
+  }
+
+  function goodForAndWatchouts(pkg) {
+    const r = pkg.resorts || {};
+    const t = pkg._tags || extractTags(pkg);
+    const good = [];
+    const watch = [];
+    const adults = lastSearchSummary?.adults || 2;
+    const kids = lastSearchSummary?.child_ages?.length || 0;
+
+    if (pkg.stops === 0) good.push("Direct flight");
+    if (r.on_beach || t.rooms.includes("Beach Front Rooms") || t.highlights.includes("Great Beach")) good.push("On the beach");
+    if (r.kids_club_available || t.amenities.includes("Kids Club") || t.amenities.includes("Kids Club for Under 4")) good.push("Kids club available");
+    if (r.babysitting_available || t.amenities.includes("Babysitting")) good.push("Babysitting available");
+    if (t.amenities.includes("Lazy River")) good.push("Lazy river");
+    if (r.water_park || t.amenities.includes("Waterpark For Little Kids") || t.amenities.includes("Waterpark For Big Kids")) good.push("Water park");
+    if (t.styles.includes("All-Inclusive") || t.highlights.includes("Great Food")) good.push("Strong food/AI signal");
+    if (t.rooms.includes("Family Suite")) good.push("Family suites");
+    if (r.guaranteed_connecting_rooms) good.push("Guaranteed connecting rooms");
+    if (r.accepts_infants) good.push("Accepts infants");
+    const r5 = ratingTo5(r.avg_user_rating);
+    if (r5 != null && r5 >= 4.3) good.push(`Highly rated (${r5.toFixed(1)}/5)`);
+
+    if (pkg.stops != null && pkg.stops >= 2) watch.push("Long travel day — 2+ stops");
+    if (r.country === "Cuba") watch.push("U.S. travel rules apply");
+    if (!r.kids_club_available && !t.amenities.includes("Kids Club") && !t.amenities.includes("Kids Club for Under 4")) {
+      if (kids > 0) watch.push("No kids club listed");
+    }
+    if ((adults + kids) >= 5 && !t.rooms.includes("Family Suite") && !t.rooms.includes("2 Bedroom Suites") && !r.guaranteed_connecting_rooms) {
+      watch.push("Room fit for 5+ not clearly listed");
+    }
+    if (pkg.warnings) watch.push(String(pkg.warnings));
+
+    return { good, watch };
+  }
+
+  function pickAlternatives(pkg) {
+    const here = allPackages.find((p) => p.package_id === pkg.package_id);
+    const others = allPackages.filter((p) => p.package_id !== pkg.package_id && p.total_price != null);
+    if (others.length === 0 || !here) return [];
+    const num = (v) => (v == null ? Infinity : Number(v));
+    const budget = getUserBudget();
+
+    const cheaper = [...others]
+      .filter((p) => here.total_price != null && p.total_price < here.total_price)
+      .sort((a, b) => num(a.total_price) - num(b.total_price))[0];
+
+    const familyFitFn = (p) => familyFitInfo(p).score;
+    const betterFamily = [...others]
+      .filter((p) => familyFitFn(p) > familyFitInfo(here).score)
+      .sort((a, b) => familyFitFn(b) - familyFitFn(a))[0];
+
+    const shorterTravel = [...others]
+      .filter((p) => p.stops != null && (num(p.stops) < num(here.stops) || (num(p.stops) === num(here.stops) && num(p.duration_hours) < num(here.duration_hours))))
+      .sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)))[0];
+
+    const higherRatedUnder = budget != null
+      ? [...others].filter((p) => p.total_price != null && p.total_price <= budget)
+        .sort((a, b) => (b.resorts?.avg_user_rating || 0) - (a.resorts?.avg_user_rating || 0))[0]
+      : null;
+
+    const seen = new Set();
+    const out = [];
+    const push = (p, why) => {
+      if (!p || seen.has(p.package_id) || p.package_id === pkg.package_id) return;
+      seen.add(p.package_id);
+      out.push({ pkg: p, why });
+    };
+    push(cheaper, "Lower trip cost");
+    push(betterFamily, "Better family fit");
+    push(shorterTravel, "Shorter travel day");
+    if (out.length < 3) push(higherRatedUnder, "Higher-rated within budget");
+    return out.slice(0, 3);
+  }
+
   function openResortModal(packageId) {
     const pkg = allPackages.find((p) => p.package_id === packageId);
     if (!pkg) return;
@@ -1755,18 +2050,12 @@
     const ratingStr = r5Modal != null
       ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r5Modal.toFixed(1)}${reviewsModal ? ` · ${reviewsModal} reviews` : ""}</span>`
       : "";
-    const flightLine = [
-      pkg.stops != null ? (pkg.stops === 0 ? "Direct flight" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
-      pkg.duration_hours ? `${pkg.duration_hours}h flight` : null,
-      fmtTransfer(r.airport_transfer_notes) ? `${fmtTransfer(r.airport_transfer_notes)} from airport` : null,
-    ].filter(Boolean).join(" · ");
 
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
       ratingStr,
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
       fmtSize(r.rooms_count) ? escapeHtml(fmtSize(r.rooms_count)) : null,
-      pkg.dest_airport_iata ? `Fly to ${escapeHtml(pkg.dest_airport_iata)}${flightLine ? ` · ${escapeHtml(flightLine)}` : ""}` : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
     const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
@@ -1778,23 +2067,174 @@
         return `<span class="${cls}">${escapeHtml(t)}</span>`;
       }).join("");
     };
+    const renderKidTagList = (tagsList) => tagsList.map((t) => {
+      const cls = playTagSet.has(t) ? "tag-pill play" : "tag-pill kid";
+      return `<span class="${cls}">${escapeHtml(t)}</span>`;
+    }).join("");
 
-    const renderKidTagList = (tagsList) => {
-      return tagsList.map((t) => {
-        const cls = playTagSet.has(t) ? "tag-pill play" : "tag-pill kid";
-        return `<span class="${cls}">${escapeHtml(t)}</span>`;
-      }).join("");
-    };
+    // ---- Trip Fit Summary ----
+    const delta = budgetDelta(pkg);
+    const budget = getUserBudget();
+    const fit = familyFitInfo(pkg);
+    const ease = travelEaseInfo(pkg);
+    const room = roomFitInfo(pkg);
 
-    const stats = [];
-    const transfer = fmtTransfer(r.airport_transfer_notes);
-    if (transfer) stats.push({ label: "Airport transfer", value: transfer });
-    if (r.rooms_count) stats.push({ label: "Rooms", value: r.rooms_count.toLocaleString() });
-    if (r.year_renovated) stats.push({ label: "Renovated", value: r.year_renovated });
-    else if (r.year_built) stats.push({ label: "Built", value: r.year_built });
-    if (r.beds) stats.push({ label: "Beds", value: r.beds });
-    if (r.hotel_brand) stats.push({ label: "Brand", value: r.hotel_brand });
-    while (stats.length < 4) stats.push({ label: "", value: "—", muted: true });
+    const tripFitTotal = `
+      <div class="trip-fit-total">
+        <div class="price-from">Estimated trip total</div>
+        <div class="price-total">${fmtMoney(pkg.total_price)}</div>
+        <div class="price-suffix">flights + hotel · for your family</div>
+        <div class="trip-fit-breakdown">
+          <span><b>${fmtMoney(pkg.flight_price)}</b> flights</span>
+          <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
+        </div>
+      </div>`;
+    const tripFitBudget = budget != null ? `
+      <div class="trip-fit-budget">
+        <div class="price-from">Your budget</div>
+        <div class="trip-fit-budget-value">${fmtMoney(budget)}</div>
+        ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+      </div>` : "";
+
+    const fitPills = `
+      <div class="fit-pills">
+        <div class="fit-pill">
+          <div class="fit-pill-label">Budget Fit</div>
+          <div class="fit-pill-value">${budget == null ? "No budget set" : (delta ? `${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : "—")}</div>
+        </div>
+        <div class="fit-pill">
+          <div class="fit-pill-label">Travel Ease</div>
+          <div class="fit-pill-value">${escapeHtml(ease.label)}</div>
+          <div class="fit-pill-sub">${escapeHtml(ease.note)}</div>
+        </div>
+        <div class="fit-pill">
+          <div class="fit-pill-label">Family Fit</div>
+          <div class="fit-pill-value">${escapeHtml(fit.label)}</div>
+          <div class="fit-pill-sub">${escapeHtml(fit.reasons.slice(0, 3).join(" · ") || "Limited family signals listed")}</div>
+        </div>
+      </div>`;
+
+    // ---- Flight options ----
+    const flightOptions = `
+      <div class="modal-section flight-options">
+        <h4>Flight options for this resort</h4>
+        <div class="flight-option-grid">
+          <article class="flight-option active">
+            <div class="flight-option-tag">Best overall</div>
+            <div class="flight-option-price">${fmtMoney(pkg.flight_price)}</div>
+            <div class="flight-option-meta">${escapeHtml([
+              pkg.dest_airport_iata ? `Fly to ${pkg.dest_airport_iata}` : null,
+              pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
+              pkg.duration_hours ? `${pkg.duration_hours}h travel` : null,
+            ].filter(Boolean).join(" · "))}</div>
+            <div class="flight-option-note">Estimated total for your family</div>
+          </article>
+          <article class="flight-option placeholder">
+            <div class="flight-option-tag">Cheapest</div>
+            <div class="flight-option-placeholder-note">Live flight alternatives coming soon — we're wiring in real-time fares.</div>
+          </article>
+          <article class="flight-option placeholder">
+            <div class="flight-option-tag">Easiest with kids</div>
+            <div class="flight-option-placeholder-note">Live flight alternatives coming soon — we're wiring in real-time fares.</div>
+          </article>
+        </div>
+      </div>`;
+
+    // ---- Why this resort works for your family ----
+    const gw = goodForAndWatchouts(pkg);
+    const whyFamily = `
+      <div class="modal-section why-family">
+        <h4>Why this resort works for your family</h4>
+        <div class="fit-good-watch">
+          <div class="fit-list">
+            <h5>Good for</h5>
+            ${gw.good.length ? `<ul>${gw.good.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : `<p class="fit-list-empty">No standout family signals listed.</p>`}
+          </div>
+          <div class="fit-list">
+            <h5>Watch-outs</h5>
+            ${gw.watch.length ? `<ul>${gw.watch.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : `<p class="fit-list-empty">No major watch-outs flagged.</p>`}
+          </div>
+        </div>
+        ${allKidTagsInOrder.length ? `<div class="tag-grid" style="margin-top: 12px;">${renderKidTagList(allKidTagsInOrder)}</div>` : ""}
+      </div>`;
+
+    // ---- Room fit ----
+    const roomFitSection = `
+      <div class="modal-section room-fit">
+        <h4>Room fit</h4>
+        <div class="room-fit-headline">${escapeHtml(room.headline)}</div>
+        <p class="room-fit-detail">${escapeHtml(room.detail)}</p>
+        <p class="room-fit-check">${escapeHtml(room.check)}</p>
+        ${tags.rooms.length ? `<div class="tag-grid">${renderTagList(tags.rooms)}</div>` : ""}
+      </div>`;
+
+    // ---- Budget tradeoff ----
+    const budgetSection = `
+      <div class="modal-section budget-tradeoff">
+        <h4>How this fits your budget</h4>
+        <div class="budget-scenarios">
+          <div class="budget-scenario active">
+            <div class="scenario-tag">Best overall</div>
+            <div class="scenario-total">${fmtMoney(pkg.total_price)}</div>
+            <div class="scenario-meta">${fmtMoney(pkg.flight_price)} flights · ${fmtMoney(pkg.hotel_price)} hotel</div>
+            ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : `<div class="scenario-meta">No budget set</div>`}
+          </div>
+          <div class="budget-scenario placeholder">
+            <div class="scenario-tag">Cheapest flight</div>
+            <div class="scenario-placeholder-note">Live alternatives coming soon.</div>
+          </div>
+          <div class="budget-scenario placeholder">
+            <div class="scenario-tag">Easiest flight</div>
+            <div class="scenario-placeholder-note">Live alternatives coming soon.</div>
+          </div>
+        </div>
+      </div>`;
+
+    // ---- Compare alternatives ----
+    const alts = pickAlternatives(pkg);
+    const compareSection = alts.length ? `
+      <div class="modal-section compare-alts">
+        <h4>Compare alternatives</h4>
+        <div class="compare-alts-grid">
+          ${alts.map(({ pkg: a, why }) => {
+            const ar = a.resorts || {};
+            const aDelta = budgetDelta(a);
+            const aPhoto = photoForResort({ resort_id: a.resort_id, resort_name: ar.resort_name, photo_refs: ar.photo_refs }, 400);
+            return `
+              <button class="alt-card" onclick="openResortModal('${a.package_id}')">
+                <div class="alt-card-photo"><img src="${aPhoto}" alt="${escapeHtml(ar.resort_name || "Alternative")}" loading="lazy" /></div>
+                <div class="alt-card-body">
+                  <div class="alt-card-why">${escapeHtml(why)}</div>
+                  <div class="alt-card-name">${escapeHtml(ar.resort_name || "Alternative")}</div>
+                  <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${a.duration_hours}h` : ""}</div>
+                  <div class="alt-card-price"><b>${fmtMoney(a.total_price)}</b><span class="alt-card-price-sub"> total</span></div>
+                  ${aDelta ? `<div class="budget-delta small ${aDelta.under ? "under" : "over"}">${fmtMoney(aDelta.diff)} ${aDelta.under ? "under" : "over"}</div>` : ""}
+                </div>
+              </button>`;
+          }).join("")}
+        </div>
+      </div>` : "";
+
+    // ---- Save / share ----
+    const saveShare = `
+      <div class="modal-section save-share">
+        <h4>Save this trip</h4>
+        <div class="save-share-row">
+          <button class="btn btn-secondary" onclick="sendTripToSelf('${pkg.package_id}')">Send this trip to myself</button>
+          <button class="btn btn-secondary" onclick="shareTrip('${pkg.package_id}')">Share with spouse</button>
+          <button class="btn btn-secondary" onclick="watchTrip('${pkg.package_id}')">Watch this trip</button>
+        </div>
+      </div>`;
+
+    // ---- Sticky outbound CTA ----
+    const stickyCta = `
+      <div class="modal-cta-sticky">
+        <div class="modal-cta-info">
+          <div><b>${fmtMoney(pkg.total_price)}</b> estimated trip total${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
+          <div class="modal-cta-sub">flights + hotel · for your family</div>
+        </div>
+        <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">Check live trip price →</button>
+      </div>`;
 
     const html = `
       <div class="modal-photo">
@@ -1811,28 +2251,23 @@
           <div class="meta">${meta}</div>
         </div>
 
-        ${stats.length > 0 ? `
-        <div class="modal-stats">
-          ${stats.slice(0, 4).map(s => `
-            <div class="item">
-              <div class="label">${escapeHtml(s.label || "")}</div>
-              <div class="value${s.muted ? " muted" : ""}">${escapeHtml(String(s.value || "—"))}</div>
-            </div>
-          `).join("")}
-        </div>
-        ` : ""}
+        <section class="trip-fit-summary">
+          <div class="trip-fit-top">
+            ${tripFitTotal}
+            ${tripFitBudget}
+          </div>
+          ${fitPills}
+        </section>
 
-        ${allKidTagsInOrder.length ? `
-        <div class="modal-section">
-          <h4>For kids</h4>
-          <div class="tag-grid">${renderKidTagList(allKidTagsInOrder)}</div>
-        </div>
-        ` : ""}
+        ${flightOptions}
+        ${whyFamily}
+        ${roomFitSection}
+        ${budgetSection}
 
-        ${tags.rooms.length ? `
+        ${activityTags.length ? `
         <div class="modal-section">
-          <h4>Room options</h4>
-          <div class="tag-grid">${renderTagList(tags.rooms)}</div>
+          <h4>Activities &amp; amenities</h4>
+          <div class="tag-grid">${renderTagList(activityTags)}</div>
         </div>
         ` : ""}
 
@@ -1843,32 +2278,12 @@
         </div>
         ` : ""}
 
-        ${activityTags.length ? `
-        <div class="modal-section">
-          <h4>Activities &amp; amenities</h4>
-          <div class="tag-grid">${renderTagList(activityTags)}</div>
-        </div>
-        ` : ""}
+        ${compareSection}
+        ${saveShare}
 
-        ${tags.highlights.length ? `
-        <div class="modal-section">
-          <h4>Highlights</h4>
-          <div class="tag-grid">${renderTagList(tags.highlights)}</div>
-        </div>
-        ` : ""}
+        ${stickyCta}
 
-        <div class="modal-pricing">
-          <div>
-            <div class="price-from">Estimated total for your family</div>
-            <div class="price-total">${fmtMoney(pkg.total_price)}</div>
-            <div class="breakdown">
-              <b>${fmtMoney(pkg.flight_price)}</b> flights · <b>${fmtMoney(pkg.hotel_price)}</b> hotel
-            </div>
-          </div>
-          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-        </div>
-
-        <p class="modal-footer-note">Prices shown are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner.</p>
+        <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
       </div>
     `;
 
@@ -1877,6 +2292,58 @@
     document.getElementById("modal-overlay").classList.add("open");
     document.body.style.overflow = "hidden";
     modal.scrollTop = 0;
+  }
+
+  // -------- Save / share placeholders --------
+  function tripShareSubject(pkg) {
+    const r = pkg.resorts || {};
+    return `KindredTrips: ${r.resort_name || "Family trip"}${r.country ? ` · ${r.country}` : ""}`;
+  }
+  function tripShareBody(pkg) {
+    const r = pkg.resorts || {};
+    const delta = budgetDelta(pkg);
+    const lines = [
+      `${r.resort_name || "Resort"}${r.country ? ` — ${r.country}` : ""}`,
+      `Estimated trip total: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
+    ];
+    if (delta) lines.push(`${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget (${fmtMoney(delta.budget)})`);
+    if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}`);
+    lines.push("");
+    lines.push("Open in KindredTrips: " + location.href);
+    return lines.join("\n");
+  }
+  function sendTripToSelf(packageId) {
+    const pkg = allPackages.find((p) => p.package_id === packageId);
+    if (!pkg) return;
+    const url = `mailto:?subject=${encodeURIComponent(tripShareSubject(pkg))}&body=${encodeURIComponent(tripShareBody(pkg))}`;
+    window.open(url, "_self");
+  }
+  function shareTrip(packageId) {
+    const pkg = allPackages.find((p) => p.package_id === packageId);
+    if (!pkg) return;
+    const text = `${tripShareSubject(pkg)}\n\n${tripShareBody(pkg)}`;
+    if (navigator.share) {
+      navigator.share({ title: tripShareSubject(pkg), text }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => alert("Trip details copied — paste in your preferred message app."),
+        () => window.open(`mailto:?subject=${encodeURIComponent(tripShareSubject(pkg))}&body=${encodeURIComponent(tripShareBody(pkg))}`, "_self")
+      );
+    } else {
+      window.open(`mailto:?subject=${encodeURIComponent(tripShareSubject(pkg))}&body=${encodeURIComponent(tripShareBody(pkg))}`, "_self");
+    }
+  }
+  function watchTrip(packageId) {
+    try {
+      const watched = JSON.parse(localStorage.getItem("kt_watched_trips") || "[]");
+      if (!watched.includes(packageId)) {
+        watched.push(packageId);
+        localStorage.setItem("kt_watched_trips", JSON.stringify(watched));
+      }
+      alert("Saved to your watchlist on this device. Live price tracking is coming soon.");
+    } catch {
+      alert("We'll keep an eye on this trip — watchlist saved locally.");
+    }
   }
 
   function closeModal() {
