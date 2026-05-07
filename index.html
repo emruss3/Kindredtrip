@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260507-dest-incard" />
-<meta name="kt-build" content="20260507-dest-incard" />
+<link rel="stylesheet" href="/styles.css?v=20260507-tighter-search" />
+<meta name="kt-build" content="20260507-tighter-search-supabase-fields" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2116,6 +2116,12 @@
       </div>`;
 
     // ---- Flight options ----
+    const destAirportLabel = (() => {
+      const code = pkg.dest_airport_iata;
+      if (!code) return null;
+      const name = (r.airport_name || "").replace(/\s*\((?:airport|intl|international)\)/i, "").trim();
+      return name ? `Fly to ${name} (${code})` : `Fly to ${code}`;
+    })();
     const flightOptions = `
       <div class="modal-section flight-options">
         <h4>Flight options for this resort</h4>
@@ -2124,7 +2130,7 @@
             <div class="flight-option-tag">Best overall</div>
             <div class="flight-option-price">${fmtMoney(pkg.flight_price)}</div>
             <div class="flight-option-meta">${escapeHtml([
-              pkg.dest_airport_iata ? `Fly to ${pkg.dest_airport_iata}` : null,
+              destAirportLabel,
               pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
               pkg.duration_hours ? `${pkg.duration_hours}h travel` : null,
             ].filter(Boolean).join(" · "))}</div>
@@ -2160,16 +2166,25 @@
       </div>`;
 
     // ---- Room fit ----
+    const bedsLine = r.beds ? `<p class="room-fit-beds"><b>Standard room beds:</b> ${escapeHtml(String(r.beds))}</p>` : "";
     const roomFitSection = `
       <div class="modal-section room-fit">
         <h4>Room fit</h4>
         <div class="room-fit-headline">${escapeHtml(room.headline)}</div>
         <p class="room-fit-detail">${escapeHtml(room.detail)}</p>
+        ${bedsLine}
         <p class="room-fit-check">${escapeHtml(room.check)}</p>
         ${tags.rooms.length ? `<div class="tag-grid">${renderTagList(tags.rooms)}</div>` : ""}
       </div>`;
 
     // ---- Budget tradeoff ----
+    const directRate = (() => {
+      const d = Number(r.direct_usd_2026);
+      if (!d || isNaN(d) || d <= 0) return "";
+      const adults = lastSearchSummary?.adults || 2;
+      const kids = lastSearchSummary?.child_ages?.length || 0;
+      return `<p class="direct-rate-note">2026 direct rate: <b>${fmtMoney(d)}</b>/night posted by the resort. We estimate <b>${fmtMoney(pkg.hotel_price)}</b> hotel total for your family (${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}).</p>`;
+    })();
     const budgetSection = `
       <div class="modal-section budget-tradeoff">
         <h4>How this fits your budget</h4>
@@ -2189,7 +2204,33 @@
             <div class="scenario-placeholder-note">Live alternatives coming soon.</div>
           </div>
         </div>
+        ${directRate}
       </div>`;
+
+    // ---- About this resort ----
+    const aboutBits = [];
+    if (r.year_renovated) aboutBits.push({ label: "Renovated", value: String(r.year_renovated) });
+    else if (r.year_built) aboutBits.push({ label: "Built", value: String(r.year_built) });
+    if (r.rooms_count) aboutBits.push({ label: "Rooms", value: r.rooms_count.toLocaleString() });
+    if (r.floors) aboutBits.push({ label: "Floors", value: String(r.floors) });
+    if (r.beds && !r.year_renovated && !r.year_built) aboutBits.push({ label: "Beds", value: String(r.beds) });
+    const valueLine = (() => {
+      const v = Number(r.value_ratio);
+      if (!v || isNaN(v) || v <= 0) return "";
+      const out5 = Math.min(5, Math.round((v / 2) * 10) / 10);
+      return `<div class="about-resort-rating"><span class="about-resort-rating-label">Value rating</span> <b>${out5.toFixed(1)}</b><span class="about-resort-rating-sub"> / 5 (rating ÷ price)</span></div>`;
+    })();
+    const aboutSection = (aboutBits.length || valueLine) ? `
+      <div class="modal-section about-resort">
+        <h4>About this resort</h4>
+        ${aboutBits.length ? `<div class="about-resort-grid">${aboutBits.map(b => `
+          <div class="about-resort-item">
+            <div class="about-resort-label">${escapeHtml(b.label)}</div>
+            <div class="about-resort-stat">${escapeHtml(b.value)}</div>
+          </div>
+        `).join("")}</div>` : ""}
+        ${valueLine}
+      </div>` : "";
 
     // ---- Compare alternatives ----
     const alts = pickAlternatives(pkg);
@@ -2264,6 +2305,7 @@
         ${whyFamily}
         ${roomFitSection}
         ${budgetSection}
+        ${aboutSection}
 
         ${activityTags.length ? `
         <div class="modal-section">

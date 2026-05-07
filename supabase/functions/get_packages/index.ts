@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v5_transfer_time";
+const VERSION = "get_packages_v6_more_resort_fields";
 
 function corsHeaders() {
   return {
@@ -94,10 +94,12 @@ serve(async (req) => {
           country,
           area,
           airport_code,
+          airport_name,
           avg_user_rating,
           review_count,
           hotel_brand,
           hotel_style,
+          audience,
           amenities_text,
           special_room_options_text,
           food_beach_party_text,
@@ -105,6 +107,7 @@ serve(async (req) => {
           rooms_count,
           year_built,
           year_renovated,
+          floors,
           airport_transfer_notes,
           beach_quality_score,
           on_beach,
@@ -122,6 +125,8 @@ serve(async (req) => {
           swim_up_rooms,
           data_quality,
           direct_flight,
+          direct_usd_2026,
+          value_ratio,
           guaranteed_connecting_rooms,
           high_rise,
           google_place_id,

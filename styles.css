@@ -523,12 +523,12 @@ button { font-family: inherit; }
 }
 
 .search-field {
-  padding: 8px var(--s-4) 10px;
+  padding: 5px 14px 7px;
   border-right: 1px solid #F2E8DA;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 54px;
+  min-height: 46px;
   position: relative;
   cursor: text;
   transition: background 0.12s;
@@ -543,24 +543,26 @@ button { font-family: inherit; }
   }
 }
 .search-field label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
   cursor: text;
+  line-height: 1.2;
 }
 .search-field input,
 .search-field select {
   border: none;
   padding: 0;
   background: transparent;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--ink);
   width: 100%;
   font-family: inherit;
+  line-height: 1.3;
 }
 .search-field input:focus,
 .search-field select:focus { outline: none; box-shadow: none; }
@@ -572,37 +574,37 @@ button { font-family: inherit; }
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-height: 22px;
+  min-height: 18px;
 }
-.search-field-row input { flex: 1 1 auto; min-width: 0; font-size: 14.5px; }
+.search-field-row input { flex: 1 1 auto; min-width: 0; font-size: 13.5px; }
 .search-field-combo input[type="date"] { font-variant-numeric: tabular-nums; }
-.search-field-combo #adults { flex: 0 0 26px; max-width: 32px; text-align: left; }
+.search-field-combo #adults { flex: 0 0 22px; max-width: 28px; text-align: left; }
 .search-field-combo #child_ages { flex: 1 1 auto; }
 .search-field-sep {
   color: var(--ink-3);
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 .search-field-sep-text {
   color: var(--ink-3);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   flex-shrink: 0;
 }
 
 .search-submit {
-  padding: 0 22px;
+  padding: 0 20px;
   background: var(--coral);
   border: none;
   color: #fff;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 54px;
+  min-height: 46px;
   transition: background 0.15s;
   letter-spacing: -0.005em;
   border-radius: 0;
@@ -612,7 +614,7 @@ button { font-family: inherit; }
 @media (max-width: 880px) {
   .search-submit {
     grid-column: 1 / -1;
-    min-height: 50px;
+    min-height: 46px;
     padding: var(--s-3);
     border-radius: 0;
     width: 100%;
@@ -2187,6 +2189,80 @@ body:not(.has-results) #results-wrap { display: none; }
   border: 0;
 }
 .hidden { display: none !important; }
+
+/* ---------- Modal: room fit beds line ---------- */
+.room-fit-beds {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  margin: 4px 0 6px;
+  line-height: 1.5;
+}
+.room-fit-beds b {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
+}
+
+/* ---------- Modal: budget tradeoff direct-rate transparency note ---------- */
+.direct-rate-note {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  background: var(--bg-soft);
+  border-radius: var(--r-xs);
+  line-height: 1.5;
+}
+.direct-rate-note b { color: var(--ink-1); font-weight: 600; }
+
+/* ---------- Modal: About this resort ---------- */
+.about-resort-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+@media (max-width: 600px) { .about-resort-grid { grid-template-columns: repeat(2, 1fr); } }
+.about-resort-item {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding: 8px 12px;
+}
+.about-resort-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+.about-resort-stat {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.about-resort-rating {
+  font-size: 13px;
+  color: var(--ink-1);
+  padding: 6px 12px;
+  background: var(--bg-soft);
+  border-radius: var(--r-xs);
+  display: inline-block;
+}
+.about-resort-rating b { font-size: 16px; color: var(--ink); margin-left: 4px; }
+.about-resort-rating-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.about-resort-rating-sub { color: var(--ink-3); font-size: 11.5px; }
 
 /* ---------- Search field hint ---------- */
 .search-field-hint {

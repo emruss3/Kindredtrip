@@ -1,11 +1,17 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v11_block_brazil";
+const VERSION = "process_search_batch_v12_default_exclude_cuba";
 
-// Global never-include list. Brazil is in our dataset but is not Caribbean
-// and isn't part of the product positioning, so we keep it out by default.
-const GLOBAL_BLOCKED_COUNTRIES: string[] = ["Brazil"];
+// Hard-blocked: never appears in results. Brazil is in the dataset but isn't
+// Caribbean for product-positioning purposes, so it's permanently out.
+const HARD_BLOCKED_COUNTRIES: string[] = ["Brazil"];
+
+// Default-excluded: filtered out unless the user explicitly opts in by
+// listing the country in included_countries (i.e. selecting it from the
+// destination picker). Cuba is fully bookable for some travelers but the
+// U.S. travel-rules friction makes it a poor default for the target audience.
+const DEFAULT_EXCLUDED_COUNTRIES: string[] = ["Cuba"];
 
 serve(async (req) => {
   try {
@@ -68,7 +74,16 @@ serve(async (req) => {
       resortsQuery = resortsQuery.in("country", included_countries);
     }
 
-    const allExcluded = Array.from(new Set([...excluded_countries, ...GLOBAL_BLOCKED_COUNTRIES]));
+    // DEFAULT_EXCLUDED only kicks in if the user hasn't explicitly opted that
+    // country in via included_countries (the destination picker).
+    const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter(
+      (c) => !(included_countries ?? []).includes(c)
+    );
+    const allExcluded = Array.from(new Set([
+      ...excluded_countries,
+      ...HARD_BLOCKED_COUNTRIES,
+      ...defaultExcluded,
+    ]));
     if (allExcluded.length > 0) {
       const quoted = allExcluded.map((c) => `"${String(c).replace(/"/g, '\\"')}"`).join(",");
       resortsQuery = resortsQuery.not("country", "in", `(${quoted})`);
