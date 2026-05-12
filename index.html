@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260507-travelers-popover" />
-<meta name="kt-build" content="20260507-travelers-popover" />
+<link rel="stylesheet" href="/styles.css?v=20260512-twophase-pricing" />
+<meta name="kt-build" content="20260512-twophase-pricing" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1277,12 +1277,16 @@
       }
 
       setStatus(`Pricing ${pkgData.summary.total_packages} trips for your family…`, { spinner: true });
-      await callFn("price_packages_liteapi", {
+      await callFn("start_pricing", {
         method: "POST",
         body: JSON.stringify({ search_id: lastSearchId }),
       });
 
       await fetchAndRender();
+
+      // Phase 2: poll until real LiteAPI flight prices replace the mock
+      // fallbacks. Fire-and-forget — user already sees ranked results.
+      pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
     } catch (err) {
       console.error(err);
       showError(err.message || String(err));
@@ -1291,8 +1295,62 @@
     }
   }
 
-  async function fetchAndRender() {
-    setStatus("Ranking the results…", { spinner: true });
+  // -------- Two-phase pricing: poll for real flight prices --------
+  let activePollId = 0;
+  async function pollUntilFlightsReal() {
+    const myPollId = ++activePollId;
+    const startedAt = Date.now();
+    const HARD_TIMEOUT_MS = 180_000;   // 3 minutes
+    const STAGNANT_AFTER_MS = 30_000;  // give it 30s of grace
+    const POLL_INTERVAL_MS = 5_000;
+    let lastLiveCount = -1;
+    let stagnantChecks = 0;
+
+    showPricingUpdater(true);
+    try {
+      while (Date.now() - startedAt < HARD_TIMEOUT_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        if (myPollId !== activePollId) return; // a newer search took over
+
+        try {
+          await refetchPackages();
+        } catch (e) {
+          console.error("[pricing poll] refetch failed:", e);
+          continue;
+        }
+        if (myPollId !== activePollId) return;
+
+        const total = allPackages.length;
+        if (total === 0) continue;
+        const live = allPackages.filter((p) => p.flight_supplier === "liteapi").length;
+
+        // Done: all flights resolved as live
+        if (live === total) return;
+
+        // No progress for two consecutive polls (after a 30s grace period) — the
+        // background worker has likely settled on no_offers/failed for the rest.
+        if (live === lastLiveCount) {
+          stagnantChecks++;
+          if (stagnantChecks >= 2 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
+        } else {
+          stagnantChecks = 0;
+          lastLiveCount = live;
+        }
+      }
+    } finally {
+      if (myPollId === activePollId) showPricingUpdater(false);
+    }
+  }
+
+  function showPricingUpdater(on) {
+    const el = document.getElementById("pricing-updater");
+    if (!el) return;
+    el.hidden = !on;
+  }
+
+  // Silent refetch — fetches packages, re-renders, returns the response data.
+  // Used by both fetchAndRender (with status text) and the pricing poll (silent).
+  async function refetchPackages() {
     const data = await callFn(
       `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
       { method: "GET" }
@@ -1301,11 +1359,17 @@
       p._tags = extractTags(p);
       return p;
     });
+    renderResults();
+    return data;
+  }
+
+  async function fetchAndRender() {
+    setStatus("Ranking the results…", { spinner: true });
+    const data = await refetchPackages();
     const adults = lastSearchSummary?.adults || 2;
     const kids = lastSearchSummary?.child_ages?.length || 0;
     const familyStr = `family of ${adults + kids}` + (kids > 0 ? ` (kids ages ${lastSearchSummary.child_ages.join(", ")})` : "");
     setStatus(`We compared ${data.summary.fully_priced} resorts across ${countCountries(allPackages)} countries for your ${familyStr}.`);
-    renderResults();
   }
 
   function countCountries(packages) {
@@ -1694,6 +1758,14 @@
       ? `${matchingCount} of ${total} match your filters.`
       : `${total} curated family resort trips ranked for your dates.`;
     const subLine = `Sorted by total cost, travel time, and family fit.`;
+    // The pricing-updater banner is shown by pollUntilFlightsReal while real
+    // LiteAPI flight prices are still landing in the background. Default to
+    // hidden; the poll toggles `hidden` on/off. Preserve current state across
+    // re-renders by reading the existing element if any.
+    const updaterHidden = (() => {
+      const existing = document.getElementById("pricing-updater");
+      return !existing || existing.hidden;
+    })();
     return `
       <div class="result-bar">
         <div>
@@ -1711,6 +1783,10 @@
             <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort within budget</option>
           </select>
         </div>
+      </div>
+      <div id="pricing-updater" class="pricing-updater"${updaterHidden ? " hidden" : ""}>
+        <span class="pricing-updater-dot" aria-hidden="true"></span>
+        <span>Refreshing flight prices — results will update as live fares land.</span>
       </div>
       <details class="rank-explainer">
         <summary>How rankings work</summary>
@@ -1886,6 +1962,7 @@
       ? `<div class="card-watchout">${watchouts.map(w => `<span class="badge warn"><span class="emoji">⚠</span>${escapeHtml(w)}</span>`).join("")}</div>`
       : "";
 
+    const isLiveCard = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
     const deltaRow = delta
       ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>`
@@ -1909,7 +1986,7 @@
         </div>
         <div class="card-price">
           <div class="price-block-top">
-            <div class="price-from">Estimated trip total</div>
+            <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Estimated trip total"}</div>
             <div class="price-sub">flights + hotel</div>
             <p class="price-total">${fmtMoney(p.total_price)}</p>
             <div class="price-suffix">for your family</div>
@@ -2153,10 +2230,11 @@
     const fit = familyFitInfo(pkg);
     const ease = travelEaseInfo(pkg);
     const room = roomFitInfo(pkg);
+    const isLive = pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi";
 
     const tripFitTotal = `
       <div class="trip-fit-total">
-        <div class="price-from">Estimated trip total</div>
+        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated trip total"}</div>
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">

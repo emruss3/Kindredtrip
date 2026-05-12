@@ -2318,6 +2318,51 @@ body:not(.has-results) #results-wrap { display: none; }
 }
 .hidden { display: none !important; }
 
+/* ---------- Pricing-updater banner (shown while real flight prices land) ---------- */
+.pricing-updater {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFF8EF;
+  border: 1px solid #E8DCCB;
+  border-radius: var(--r-pill);
+  padding: 6px 14px 7px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-1);
+  line-height: 1.3;
+  transition: opacity 0.3s;
+}
+.pricing-updater[hidden] { display: none; }
+.pricing-updater-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral);
+  flex-shrink: 0;
+  animation: pricingPulse 1.4s ease-in-out infinite;
+}
+@keyframes pricingPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+
+/* Live-price label variant for the price-from caption */
+.price-from.live {
+  color: #1f7d4d;
+  letter-spacing: 0.10em;
+}
+.price-from.live::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1f7d4d;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
 /* ---------- Modal: room fit beds line ---------- */
 .room-fit-beds {
   font-size: 13.5px;
