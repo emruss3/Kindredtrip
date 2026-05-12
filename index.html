@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-sidebar-popover-fix" />
-<meta name="kt-build" content="20260512-sidebar-popover-fix" />
+<link rel="stylesheet" href="/styles.css?v=20260512-popover-fixed" />
+<meta name="kt-build" content="20260512-popover-fixed" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -748,6 +748,27 @@
   }
 
   // -------- Travelers popover (Adults stepper + Kids' ages) --------
+  // Popover is position: fixed, so it escapes the hero's overflow:hidden +
+  // isolation:isolate stacking context (otherwise the age-dropdown row gets
+  // clipped or hidden behind .stats-strip when the popover grows tall).
+  // We anchor it to the field via getBoundingClientRect and re-anchor on
+  // scroll/resize while it's open.
+  function positionTravelersPopover() {
+    const field = document.getElementById("travelers-field");
+    const pop = document.getElementById("travelers-popover");
+    if (!field || !pop || pop.hidden) return;
+    const rect = field.getBoundingClientRect();
+    const margin = 8;
+    const desiredWidth = Math.max(280, rect.width);
+    const maxWidth = window.innerWidth - margin * 2;
+    const width = Math.min(desiredWidth, maxWidth);
+    let left = rect.left;
+    if (left + width > window.innerWidth - margin) left = window.innerWidth - margin - width;
+    if (left < margin) left = margin;
+    pop.style.top = `${rect.bottom + 6}px`;
+    pop.style.left = `${left}px`;
+    pop.style.width = `${width}px`;
+  }
   function toggleTravelersPopover(event) {
     if (event) event.stopPropagation();
     const pop = document.getElementById("travelers-popover");
@@ -759,6 +780,9 @@
     } else {
       pop.hidden = false;
       btn?.setAttribute("aria-expanded", "true");
+      positionTravelersPopover();
+      window.addEventListener("scroll", positionTravelersPopover, { passive: true });
+      window.addEventListener("resize", positionTravelersPopover);
       // Defer the outside-click listener so the click that opened the
       // popover doesn't immediately close it.
       setTimeout(() => document.addEventListener("click", outsideTravelersClick), 0);
@@ -771,10 +795,15 @@
     pop.hidden = true;
     btn?.setAttribute("aria-expanded", "false");
     document.removeEventListener("click", outsideTravelersClick);
+    window.removeEventListener("scroll", positionTravelersPopover);
+    window.removeEventListener("resize", positionTravelersPopover);
   }
   function outsideTravelersClick(e) {
     const field = document.getElementById("travelers-field");
-    if (field && !field.contains(e.target)) closeTravelersPopover();
+    const pop = document.getElementById("travelers-popover");
+    if (field && !field.contains(e.target) && pop && !pop.contains(e.target)) {
+      closeTravelersPopover();
+    }
   }
   function adjustAdults(delta) {
     const input = document.getElementById("adults");

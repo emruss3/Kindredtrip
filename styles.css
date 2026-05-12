@@ -611,11 +611,8 @@ button { font-family: inherit; }
 .travelers-display[aria-expanded="true"] .travelers-display-caret { transform: rotate(180deg); }
 
 .travelers-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 70;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -625,6 +622,7 @@ button { font-family: inherit; }
   flex-direction: column;
   gap: 14px;
   min-width: 240px;
+  max-width: calc(100vw - 16px);
 }
 .travelers-popover[hidden] { display: none; }
 .travelers-row {
@@ -768,14 +766,8 @@ button { font-family: inherit; }
 }
 
 @media (max-width: 880px) {
-  .travelers-popover {
-    position: static;
-    box-shadow: none;
-    border: none;
-    border-top: 1px solid var(--line);
-    border-radius: 0;
-    margin-top: 0;
-  }
+  /* Keep popover fixed but a bit narrower so it doesn't pin to a full row */
+  .travelers-popover { min-width: 280px; }
 }
 
 .search-submit {
