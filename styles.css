@@ -639,6 +639,11 @@ button { font-family: inherit; }
   align-items: stretch;
   gap: 6px;
 }
+.travelers-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .travelers-row-label {
   font-size: 11px;
   font-weight: 700;
@@ -646,6 +651,59 @@ button { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+.travelers-row-sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Per-kid age selects, shown when kids stepper > 0 */
+.kids-ages-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line-soft);
+}
+.kids-ages-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+@media (max-width: 480px) {
+  .kids-ages-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.kid-age {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.kid-age-num {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.kid-age select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23748189' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 8px;
+  padding-right: 26px;
+}
+.kid-age select:focus { outline: none; border-color: var(--ink-3); }
 .travelers-row-stack input {
   width: 100%;
   border: 1px solid var(--line);
@@ -798,6 +856,38 @@ button { font-family: inherit; }
   border-style: dashed;
   color: var(--ink-2);
 }
+
+/* Filter pill that holds a select (e.g. Max travel time) */
+.toggle.toggle-select {
+  padding: 3px 6px 3px 12px;
+  gap: 6px;
+  cursor: default;
+  background: #FFF8EF;
+  border-color: #E8DCCB;
+}
+.toggle-select:hover { border-color: var(--ink-3); }
+.toggle-select-label {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.toggle.toggle-select select {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 2px 18px 2px 4px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23748189' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 8px;
+}
+.toggle.toggle-select select:focus { outline: none; }
 
 /* "Going to" destinations row — lives INSIDE the search card grid, spanning all columns */
 .search-card-dest-row {
@@ -2317,6 +2407,50 @@ body:not(.has-results) #results-wrap { display: none; }
   border: 0;
 }
 .hidden { display: none !important; }
+
+/* ---------- Pricing-progress widget (phase 1, while start_pricing runs) ---------- */
+.pricing-progress {
+  background: #FFF8EF;
+  border: 1px solid #E8DCCB;
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pricing-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #F2E8DA;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pricing-progress-fill {
+  height: 100%;
+  background: var(--coral);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  min-width: 2px;
+}
+.pricing-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+.pricing-progress-label b { color: var(--ink); font-weight: 600; }
+.pricing-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--coral);
+  animation: pricingPulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
 
 /* ---------- Pricing-updater banner (shown while real flight prices land) ---------- */
 .pricing-updater {
