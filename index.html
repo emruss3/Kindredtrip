@@ -1277,7 +1277,7 @@
       }
 
       setStatus(`Pricing ${pkgData.summary.total_packages} trips for your family…`, { spinner: true });
-      await callFn("price_packages_mock", {
+      await callFn("price_packages_liteapi", {
         method: "POST",
         body: JSON.stringify({ search_id: lastSearchId }),
       });
