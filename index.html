@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-photo-gallery" />
-<meta name="kt-build" content="20260512-photo-gallery" />
+<link rel="stylesheet" href="/styles.css?v=20260512-soft-pricing-fail" />
+<meta name="kt-build" content="20260512-soft-pricing-fail" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1399,19 +1399,43 @@
         method: "POST",
         body: JSON.stringify({ search_id: lastSearchId }),
       });
-      await renderWithProgressivePricing(pricingPromise, pkgData.summary.total_packages);
+      // Swallow the rejection here so it doesn't surface as an unhandled
+      // promise rejection later — we read pricingError back from
+      // renderWithProgressivePricing's return value.
+      pricingPromise.catch(() => {});
+      const { pricingError } = await renderWithProgressivePricing(
+        pricingPromise, pkgData.summary.total_packages
+      );
 
-      await fetchAndRender();
+      // Always try to render whatever did get priced. process_search_batch
+      // writes packages with NULL prices; start_pricing fills them in. Even
+      // if start_pricing 546'd mid-way, some packages may have prices
+      // already (LiteAPI batches it completed, or price_flights_for_search
+      // ran in parallel).
+      try { await fetchAndRender(); } catch (e) { console.error("[fetchAndRender] error:", e); }
+
+      if (pricingError) {
+        // Soft warning instead of a hard error wall. The user still sees
+        // whatever was priced. Don't show the raw "HTTP 546".
+        console.error("[start_pricing] failed:", pricingError);
+        const pricedCount = allPackages.length;
+        if (pricedCount === 0) {
+          showError("Pricing is slow or temporarily unavailable. Please try the search again in a moment.");
+        } else {
+          setStatus("Pricing is slow right now — some trips may show estimated prices. We'll keep refining.");
+        }
+      }
 
       // Phase 2: poll only if the backend signaled there are still pending
-      // routes to price (worker dispatched). If everything was cached, the
-      // initial render already has live flight prices and we can skip the
-      // poll entirely.
+      // routes to price (worker dispatched). If everything was cached, or
+      // start_pricing failed, skip the poll entirely.
       let pendingRoutes = 0;
-      try {
-        const pricingResult = await pricingPromise;
-        pendingRoutes = Number(pricingResult?.flights?.pending_routes) || 0;
-      } catch { /* fall through — leave pendingRoutes at 0 */ }
+      if (!pricingError) {
+        try {
+          const pricingResult = await pricingPromise;
+          pendingRoutes = Number(pricingResult?.flights?.pending_routes) || 0;
+        } catch { /* fall through — leave pendingRoutes at 0 */ }
+      }
       if (pendingRoutes > 0) {
         pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
       }
@@ -1477,11 +1501,17 @@
   }
 
   // -------- Phase 1 progress: progressively render cards while start_pricing runs --------
+  // Returns { pricingError } — caller decides how to surface it. The function
+  // itself does NOT throw on a start_pricing failure: it tears down the
+  // progress widget and returns so the caller can still try fetchAndRender()
+  // against whatever partial pricing landed (mock flight prices from
+  // process_search_batch will still be present even if LiteAPI calls inside
+  // start_pricing crashed).
   async function renderWithProgressivePricing(pricingPromise, totalEstimate) {
     const myPollId = ++activePollId; // borrow the same cancel counter — a new search invalidates us too
     let done = false;
-    let lastError = null;
-    pricingPromise.then(() => { done = true; }, (err) => { done = true; lastError = err; });
+    let pricingError = null;
+    pricingPromise.then(() => { done = true; }, (err) => { done = true; pricingError = err; });
 
     showPricingProgress({ priced: 0, total: totalEstimate });
 
@@ -1491,7 +1521,7 @@
 
     while (!done && Date.now() - start < HARD_CAP_MS) {
       await sleep(POLL_INTERVAL_MS);
-      if (myPollId !== activePollId) return;
+      if (myPollId !== activePollId) return { pricingError: null };
       if (done) break;
 
       try {
@@ -1499,7 +1529,7 @@
           `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
           { method: "GET" }
         );
-        if (myPollId !== activePollId) return;
+        if (myPollId !== activePollId) return { pricingError: null };
 
         const summary = data.summary || {};
         // Phase 1 tracks HOTEL pricing progress (with_hotel_price grows
@@ -1520,7 +1550,7 @@
     }
 
     hidePricingProgress();
-    if (lastError) throw lastError;
+    return { pricingError };
   }
 
   function showPricingProgress({ priced, total }) {
