@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v6_more_resort_fields";
+const VERSION = "get_packages_v7_cap_fields";
 
 function corsHeaders() {
   return {
@@ -131,7 +131,15 @@ serve(async (req) => {
           high_rise,
           google_place_id,
           photo_refs,
-          photo_attributions
+          photo_attributions,
+          cap_has_kids_club,
+          cap_has_family_room,
+          cap_has_water_park,
+          cap_has_connecting,
+          cap_has_suite,
+          cap_has_villa,
+          cap_max_room_occupancy,
+          cap_facilities
         )
       `, { count: "exact" })
       .eq("search_id", search_id);

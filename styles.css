@@ -2227,6 +2227,85 @@ details.rank-explainer > p {
 }
 .modal-photo-attr a { color: #fff; text-decoration: underline; }
 
+/* Photo gallery — prev/next nav arrows + counter on the hero */
+.modal-photo-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.15s;
+}
+.modal-photo-nav:hover { background: #fff; transform: translateY(-50%) scale(1.05); }
+.modal-photo-nav.prev { left: var(--s-4); padding-right: 3px; }
+.modal-photo-nav.next { right: var(--s-4); padding-left: 3px; }
+.modal-photo-counter {
+  position: absolute;
+  top: var(--s-5);
+  right: var(--s-5);
+  background: rgba(10, 23, 33, 0.55);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  z-index: 1;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
+}
+
+/* Thumbnail strip below the hero photo */
+.modal-photo-strip {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.modal-photo-strip::-webkit-scrollbar { height: 6px; }
+.modal-photo-strip::-webkit-scrollbar-track { background: transparent; }
+.modal-photo-strip::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+.modal-photo-thumb {
+  flex: 0 0 auto;
+  width: 80px;
+  height: 60px;
+  border: 2px solid transparent;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  padding: 0;
+  background: var(--bg-soft);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.modal-photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.modal-photo-thumb:hover { border-color: var(--ink-3); transform: translateY(-1px); }
+.modal-photo-thumb.active { border-color: var(--coral); }
+@media (max-width: 600px) {
+  .modal-photo-thumb { width: 64px; height: 48px; }
+}
+
 .modal-close {
   position: absolute;
   top: var(--s-4); right: var(--s-4);
