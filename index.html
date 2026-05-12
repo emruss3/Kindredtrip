@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-popover-fixed" />
-<meta name="kt-build" content="20260512-popover-fixed" />
+<link rel="stylesheet" href="/styles.css?v=20260512-multi-offer-depth" />
+<meta name="kt-build" content="20260512-multi-offer-depth" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1400,9 +1400,18 @@
 
       await fetchAndRender();
 
-      // Phase 2: poll until real LiteAPI flight prices replace the mock
-      // fallbacks. Fire-and-forget — user already sees ranked results.
-      pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
+      // Phase 2: poll only if the backend signaled there are still pending
+      // routes to price (worker dispatched). If everything was cached, the
+      // initial render already has live flight prices and we can skip the
+      // poll entirely.
+      let pendingRoutes = 0;
+      try {
+        const pricingResult = await pricingPromise;
+        pendingRoutes = Number(pricingResult?.flights?.pending_routes) || 0;
+      } catch { /* fall through — leave pendingRoutes at 0 */ }
+      if (pendingRoutes > 0) {
+        pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
+      }
     } catch (err) {
       console.error(err);
       showError(err.message || String(err));
@@ -2112,6 +2121,23 @@
       badges.push(`<span class="badge muted">Curated family resort</span>`);
     }
 
+    // Offer-depth badges (new from start_pricing v4: multi-offer storage)
+    if (p.max_offer_occupancy && p.max_offer_occupancy > 0) {
+      badges.push(`<span class="badge"><span class="emoji">🛏</span>Sleeps ${p.max_offer_occupancy}</span>`);
+    }
+    // Only show "All-inclusive" if the user didn't already filter for it (would
+    // be redundant since every card would have it). has_any_ai means at least
+    // one bookable hotel offer is all-inclusive.
+    if (p.has_any_ai && !lastSearchSummary?.require_all_inclusive) {
+      badges.push(`<span class="badge good"><span class="emoji">🍽</span>All-inclusive</span>`);
+    }
+    if (p.has_any_refundable) {
+      badges.push(`<span class="badge"><span class="emoji">↩</span>Refundable</span>`);
+    }
+    if (p.hotel_offer_count && p.hotel_offer_count > 1) {
+      badges.push(`<span class="badge muted">${p.hotel_offer_count} room options</span>`);
+    }
+
     const stopsStr = p.stops != null
       ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
       : null;
@@ -2119,12 +2145,16 @@
     const transferStr = fmtTransfer(r.airport_transfer_notes);
     const flightCost = p.flight_price != null ? `${fmtMoney(p.flight_price)} flights` : null;
 
+    const flightOptionsCount = p.flight_offer_count && p.flight_offer_count > 1
+      ? `${p.flight_offer_count} flight options`
+      : null;
     const flightParts = [
       p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}` : null,
       stopsStr,
       duration,
       transferStr ? `${transferStr} transfer` : null,
       flightCost,
+      flightOptionsCount,
     ].filter(Boolean);
     const flightRow = flightParts.length
       ? `<div class="card-flight"><span class="card-flight-icon">✈</span>${flightParts.join(" · ")}</div>`
@@ -2462,9 +2492,12 @@
       const name = (r.airport_name || "").replace(/\s*\((?:airport|intl|international)\)/i, "").trim();
       return name ? `Fly to ${name} (${code})` : `Fly to ${code}`;
     })();
+    const flightCountNote = pkg.flight_offer_count && pkg.flight_offer_count > 1
+      ? `<span class="modal-section-count">${pkg.flight_offer_count} options available</span>`
+      : "";
     const flightOptions = `
       <div class="modal-section flight-options">
-        <h4>Flight options for this resort</h4>
+        <h4>Flight options for this resort ${flightCountNote}</h4>
         <div class="flight-option-grid">
           <article class="flight-option active">
             <div class="flight-option-tag">Best overall</div>
@@ -2549,6 +2582,12 @@
 
     // ---- About this resort ----
     const aboutBits = [];
+    if (pkg.hotel_offer_count && pkg.hotel_offer_count > 1) {
+      aboutBits.push({ label: "Room options", value: String(pkg.hotel_offer_count) });
+    }
+    if (pkg.max_offer_occupancy && pkg.max_offer_occupancy > 0) {
+      aboutBits.push({ label: "Sleeps up to", value: String(pkg.max_offer_occupancy) });
+    }
     if (r.year_renovated) aboutBits.push({ label: "Renovated", value: String(r.year_renovated) });
     else if (r.year_built) aboutBits.push({ label: "Built", value: String(r.year_built) });
     if (r.rooms_count) aboutBits.push({ label: "Rooms", value: r.rooms_count.toLocaleString() });
