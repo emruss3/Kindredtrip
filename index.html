@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-sticky-shimmer-strict" />
-<meta name="kt-build" content="20260512-sticky-shimmer-strict" />
+<link rel="stylesheet" href="/styles.css?v=20260512-photo-gallery" />
+<meta name="kt-build" content="20260512-photo-gallery" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1662,27 +1662,42 @@
     return winners;
   }
 
-  // Strict client-side enforcement of search-time requirements. The backend
-  // currently treats require_kids_club + require_all_inclusive as soft hints
-  // (it only filters when cap data is loaded; require_all_inclusive only
-  // picks the cheapest AI offer, doesn't drop non-AI resorts). We enforce
-  // them on the rendered set so the toggles match what the user expects.
-  function packageMeetsSearchRequirements(pkg) {
-    if (!lastSearchSummary) return true;
+  // Returns true if the resort/package has ANY Kids Club signal. The
+  // catalog stores Kids Club info in several places — we accept any of
+  // them so the filter matches what's actually in the data.
+  //   - resorts.cap_has_kids_club (boolean from CAP enrichment) — 96 TRUE
+  //   - amenities_text token "Kids Club"/"Kids Club for Under 4" — ~334
+  //   - cap_facilities array contains "Children's club" / "Supervised
+  //     childcare/activities" — ~258 + 86 entries
+  //   - resorts.kids_club_available (always NULL in current data, kept
+  //     for forward-compat if backfilled)
+  function hasKidsClubSignal(pkg) {
     const r = pkg.resorts || {};
     const tags = pkg._tags || extractTags(pkg);
-    if (lastSearchSummary.require_kids_club) {
-      const hasKidsClub = r.kids_club_available === true
-        || (tags.amenities || []).some((t) => /kids club/i.test(t));
-      if (!hasKidsClub) return false;
+    if (r.kids_club_available === true) return true;
+    if (r.cap_has_kids_club === true) return true;
+    if ((tags.amenities || []).some((t) => /kids club/i.test(t))) return true;
+    const fac = Array.isArray(r.cap_facilities) ? r.cap_facilities : [];
+    if (fac.some((f) => typeof f === "string" && /child(ren)?'?s club|supervised childcare/i.test(f))) {
+      return true;
     }
+    return false;
+  }
+
+  // Strict client-side enforcement of search-time requirements.
+  //
+  // Data reality (audited via SQL): "all-inclusive" never appears anywhere
+  // in the resort table — not in hotel_style, amenities_text, cap_facilities,
+  // food_beach_party_text, or any boolean column. The only AI signal we have
+  // is package.has_any_ai, set from real LiteAPI rate offers' boardType=AI.
+  // For mock-priced packages (~50% during phase 1) it's false even when the
+  // resort really is AI, so we leave them in rather than blanket-exclude.
+  function packageMeetsSearchRequirements(pkg) {
+    if (!lastSearchSummary) return true;
+    if (lastSearchSummary.require_kids_club && !hasKidsClubSignal(pkg)) return false;
     if (lastSearchSummary.require_all_inclusive) {
-      // has_any_ai is set from real LiteAPI offers in start_pricing v4. For
-      // mock-priced packages it ends up false, so fall back to the resort's
-      // hotel_style/styles tags ("All-Inclusive").
-      const hasAi = pkg.has_any_ai === true
-        || (tags.styles || []).some((t) => /all.?inclusive/i.test(t));
-      if (!hasAi) return false;
+      const liteapiPriced = pkg.hotel_supplier === "liteapi";
+      if (liteapiPriced && pkg.has_any_ai !== true) return false;
     }
     return true;
   }
@@ -2158,12 +2173,21 @@
     if (p.max_offer_occupancy && p.max_offer_occupancy > 0) {
       badges.push(`<span class="badge"><span class="emoji">🛏</span>Sleeps ${p.max_offer_occupancy}</span>`);
     }
-    // Only show "All-inclusive" if the user didn't already filter for it (would
-    // be redundant since every card would have it). has_any_ai means at least
-    // one bookable hotel offer is all-inclusive.
-    if (p.has_any_ai && !lastSearchSummary?.require_all_inclusive) {
+    // All-inclusive confirmation. Always show when has_any_ai is true so the
+    // user gets visible confirmation that their toggle is being honored. For
+    // mock-priced packages (no LiteAPI offers yet) when the user has the
+    // toggle on, show a quieter "AI rate pending" so they know the AI status
+    // is provisional, not missing.
+    const aiToggle = lastSearchSummary?.require_all_inclusive;
+    if (p.has_any_ai === true) {
       badges.push(`<span class="badge good"><span class="emoji">🍽</span>All-inclusive</span>`);
+    } else if (aiToggle && p.hotel_supplier !== "liteapi") {
+      badges.push(`<span class="badge muted">All-inclusive · rate pending</span>`);
     }
+    // Kids club confirmation is already handled by the KIDS_AMENITY_PRIORITY
+    // loop above (which renders "Kids 1+" or "Kids club" from BADGE_SPEC).
+    // Don't double up — the loop is more informative because it tells the
+    // user the minimum age when applicable.
     if (p.has_any_refundable) {
       badges.push(`<span class="badge"><span class="emoji">↩</span>Refundable</span>`);
     }
@@ -2255,6 +2279,36 @@
   }
 
   // -------- Resort detail modal --------
+
+  // Photo-gallery state for the open modal. Reset each time openResortModal
+  // runs; consumed by setModalPhoto() when thumbnails / nav arrows are clicked.
+  let currentModalPhotoRefs = [];
+  let currentModalPhotoAttributions = [];
+  let currentModalPhotoIdx = 0;
+
+  function setModalPhoto(i) {
+    const refs = currentModalPhotoRefs;
+    if (!refs || refs.length === 0) return;
+    const idx = ((i % refs.length) + refs.length) % refs.length;
+    currentModalPhotoIdx = idx;
+    const img = document.getElementById("modal-photo-hero");
+    if (img) img.src = `/photo?ref=${encodeURIComponent(refs[idx])}&w=1200`;
+    const counter = document.getElementById("modal-photo-counter");
+    if (counter) counter.textContent = `${idx + 1} / ${refs.length}`;
+    document.querySelectorAll(".modal-photo-thumb").forEach((t, n) => {
+      t.classList.toggle("active", n === idx);
+    });
+    const attrEl = document.getElementById("modal-photo-attr");
+    if (attrEl) {
+      const a = (currentModalPhotoAttributions || [])[idx] || (currentModalPhotoAttributions || [])[0] || "";
+      attrEl.innerHTML = `${a} · Photo via Google`;
+    }
+    // Scroll the active thumbnail into view in the strip
+    const activeThumb = document.querySelector(".modal-photo-thumb.active");
+    if (activeThumb && activeThumb.scrollIntoView) {
+      activeThumb.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+    }
+  }
 
   function familyFitInfo(pkg) {
     const r = pkg.resorts || {};
@@ -2690,12 +2744,33 @@
         <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
       </div>`;
 
+    // Photo gallery — most resorts have ~8 Google Places photos in photo_refs.
+    // Hero shows photo[0]; clicking a thumbnail or the prev/next arrows swaps it.
+    currentModalPhotoRefs = Array.isArray(r.photo_refs) ? r.photo_refs : [];
+    currentModalPhotoAttributions = Array.isArray(r.photo_attributions) ? r.photo_attributions : [];
+    currentModalPhotoIdx = 0;
+    const hasMultiPhotos = currentModalPhotoRefs.length > 1;
+    const navArrows = hasMultiPhotos ? `
+      <button type="button" class="modal-photo-nav prev" aria-label="Previous photo" onclick="setModalPhoto(currentModalPhotoIdx - 1)">‹</button>
+      <button type="button" class="modal-photo-nav next" aria-label="Next photo" onclick="setModalPhoto(currentModalPhotoIdx + 1)">›</button>
+      <div class="modal-photo-counter" id="modal-photo-counter">1 / ${currentModalPhotoRefs.length}</div>` : "";
+    const thumbnails = hasMultiPhotos ? `
+      <div class="modal-photo-strip" id="modal-photo-strip">
+        ${currentModalPhotoRefs.slice(0, 12).map((ref, i) => `
+          <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
+            <img src="/photo?ref=${encodeURIComponent(ref)}&w=200" alt="" loading="lazy" />
+          </button>
+        `).join("")}
+      </div>` : "";
+
     const html = `
       <div class="modal-photo">
-        <img src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
+        <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
         ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
-        ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
+        ${navArrows}
+        ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr" id="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
       </div>
+      ${thumbnails}
       <button class="modal-close" onclick="closeModal()" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2810,10 +2885,14 @@
     if (e.target === e.currentTarget) closeModal();
   }
 
-  // ESC closes modal
+  // ESC closes modal; ←/→ navigates the photo gallery while open
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && document.getElementById("modal-overlay").classList.contains("open")) {
-      closeModal();
+    const modalOpen = document.getElementById("modal-overlay")?.classList.contains("open");
+    if (!modalOpen) return;
+    if (e.key === "Escape") { closeModal(); return; }
+    if (currentModalPhotoRefs.length > 1) {
+      if (e.key === "ArrowLeft")  { setModalPhoto(currentModalPhotoIdx - 1); e.preventDefault(); }
+      if (e.key === "ArrowRight") { setModalPhoto(currentModalPhotoIdx + 1); e.preventDefault(); }
     }
   });
 
