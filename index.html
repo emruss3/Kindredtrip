@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-twophase-pricing" />
-<meta name="kt-build" content="20260512-twophase-pricing" />
+<link rel="stylesheet" href="/styles.css?v=20260512-progress-widget" />
+<meta name="kt-build" content="20260512-progress-widget" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -283,7 +283,10 @@
           </button>
           <div class="travelers-popover" id="travelers-popover" hidden>
             <div class="travelers-row">
-              <div class="travelers-row-label">Adults</div>
+              <div class="travelers-row-info">
+                <div class="travelers-row-label">Adults</div>
+                <div class="travelers-row-sub">Ages 18+</div>
+              </div>
               <div class="stepper" role="group" aria-label="Adults">
                 <button type="button" class="stepper-btn" onclick="adjustAdults(-1)" aria-label="Fewer adults">−</button>
                 <span class="stepper-value" id="adults-value">2</span>
@@ -291,10 +294,21 @@
                 <input type="hidden" id="adults" value="2" />
               </div>
             </div>
-            <div class="travelers-row travelers-row-stack">
-              <label class="travelers-row-label" for="child_ages">Kids' ages</label>
-              <input id="child_ages" type="text" placeholder="e.g. 8, 5, 2" autocomplete="off" oninput="updateTravelersDisplay()" />
-              <div class="travelers-help">Comma-separated. Leave blank if no kids are coming.</div>
+            <div class="travelers-row">
+              <div class="travelers-row-info">
+                <div class="travelers-row-label">Kids</div>
+                <div class="travelers-row-sub">Ages 0–17 at check-in</div>
+              </div>
+              <div class="stepper" role="group" aria-label="Kids">
+                <button type="button" class="stepper-btn" onclick="adjustKids(-1)" aria-label="Fewer kids">−</button>
+                <span class="stepper-value" id="kids-count-value">0</span>
+                <button type="button" class="stepper-btn" onclick="adjustKids(1)" aria-label="More kids">+</button>
+              </div>
+            </div>
+            <div class="kids-ages-row" id="kids-ages-row" hidden>
+              <div class="travelers-row-label">Age of each kid</div>
+              <div class="kids-ages-grid" id="kids-ages-grid"></div>
+              <input type="hidden" id="child_ages" />
             </div>
             <button type="button" class="btn btn-primary travelers-done" onclick="closeTravelersPopover()">Done</button>
           </div>
@@ -322,6 +336,16 @@
         <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
         <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights</label>
         <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
+        <label class="toggle toggle-select" for="max_flight_hours">
+          <span class="toggle-select-label">Max travel time:</span>
+          <select id="max_flight_hours" aria-label="Max travel time">
+            <option value="">Any</option>
+            <option value="5">≤ 5h</option>
+            <option value="7">≤ 7h</option>
+            <option value="9">≤ 9h</option>
+            <option value="12">≤ 12h</option>
+          </select>
+        </label>
         <button type="button" class="toggle toggle-more" onclick="openMoreFilters()">More filters</button>
       </div>
     </form>
@@ -762,13 +786,59 @@
     display.textContent = String(next);
     updateTravelersDisplay();
   }
+  // Kids count model — each entry is the age in years (default 8). Drives both
+  // the inline per-kid age selects and the hidden #child_ages CSV the rest of
+  // the codebase already reads.
+  let kidsAges = [];
+  function adjustKids(delta) {
+    const display = document.getElementById("kids-count-value");
+    if (!display) return;
+    const next = Math.max(0, Math.min(6, kidsAges.length + delta));
+    if (next > kidsAges.length) {
+      while (kidsAges.length < next) kidsAges.push(8);
+    } else {
+      kidsAges = kidsAges.slice(0, next);
+    }
+    display.textContent = String(next);
+    renderKidsAges();
+    syncKidsHiddenInput();
+    updateTravelersDisplay();
+  }
+  function setKidAge(idx, value) {
+    const n = parseInt(value, 10);
+    if (isNaN(n)) return;
+    kidsAges[idx] = Math.max(0, Math.min(17, n));
+    syncKidsHiddenInput();
+    updateTravelersDisplay();
+  }
+  function renderKidsAges() {
+    const row = document.getElementById("kids-ages-row");
+    const grid = document.getElementById("kids-ages-grid");
+    if (!row || !grid) return;
+    if (kidsAges.length === 0) { row.hidden = true; grid.innerHTML = ""; return; }
+    row.hidden = false;
+    grid.innerHTML = kidsAges.map((age, i) => {
+      const opts = Array.from({ length: 18 }, (_, n) => {
+        const label = n === 0 ? "< 1" : String(n);
+        return `<option value="${n}"${n === age ? " selected" : ""}>${label}</option>`;
+      }).join("");
+      return `
+        <label class="kid-age">
+          <span class="kid-age-num">Kid ${i + 1}</span>
+          <select onchange="setKidAge(${i}, this.value)" aria-label="Kid ${i + 1} age">${opts}</select>
+        </label>`;
+    }).join("");
+  }
+  function syncKidsHiddenInput() {
+    const hidden = document.getElementById("child_ages");
+    if (hidden) hidden.value = kidsAges.join(", ");
+  }
   function updateTravelersDisplay() {
     const adultsInput = document.getElementById("adults");
-    const kidsInput = document.getElementById("child_ages");
     const display = document.getElementById("travelers-display-text");
     if (!display) return;
     const adults = parseInt(adultsInput?.value, 10) || 2;
-    const kidsCount = parseChildAges(kidsInput?.value || "").length;
+    const kidsCount = kidsAges.length;
     const adultsLabel = `${adults} adult${adults === 1 ? "" : "s"}`;
     const kidsLabel = kidsCount > 0 ? `, ${kidsCount} kid${kidsCount === 1 ? "" : "s"}` : "";
     display.textContent = adultsLabel + kidsLabel;
@@ -863,7 +933,16 @@
     f("date_start").value = f("po_date_start").value;
     f("date_end").value = f("po_date_end").value;
     f("adults").value = f("po_adults").value;
-    f("child_ages").value = f("po_child_ages").value;
+    // Sync the popover's comma-list kids ages back into our internal kidsAges
+    // model so the hero Travelers display + stepper UI reflect the change.
+    kidsAges = parseChildAges(f("po_child_ages").value);
+    const kidsCountDisplay = f("kids-count-value");
+    if (kidsCountDisplay) kidsCountDisplay.textContent = String(kidsAges.length);
+    renderKidsAges();
+    syncKidsHiddenInput();
+    const adultsDisplay = f("adults-value");
+    if (adultsDisplay) adultsDisplay.textContent = String(parseInt(f("adults").value, 10) || 2);
+    updateTravelersDisplay();
     f("budget").value = f("po_budget").value;
     document.querySelectorAll(".search-extras input[type=checkbox]").forEach((heroCb) => {
       const popCb = document.querySelector(`#popover-form input[data-flag="${heroCb.dataset.flag}"]`);
@@ -1250,6 +1329,8 @@
         ...flags,
       };
       if (homepageBudget) body.budget_total = homepageBudget;
+      const maxFlightHoursRaw = parseFloat(document.getElementById("max_flight_hours")?.value);
+      if (!isNaN(maxFlightHoursRaw) && maxFlightHoursRaw > 0) body.max_flight_hours = maxFlightHoursRaw;
       // Homepage country selection feeds both server-side filter and post-search sidebar
       if (filters.country.size > 0) {
         body.included_countries = Array.from(filters.country);
@@ -1276,11 +1357,17 @@
         throw new Error("No resorts match those constraints. Try clearing a filter or widening your dates.");
       }
 
-      setStatus(`Pricing ${pkgData.summary.total_packages} trips for your family…`, { spinner: true });
-      await callFn("start_pricing", {
+      // Hand status off to the live progress widget — it shows real counts
+      // and progressively renders cards as they're priced.
+      setStatus("");
+
+      // Fire start_pricing as fire-and-forget; render progressively while
+      // the backend works through hotel + initial flight pricing.
+      const pricingPromise = callFn("start_pricing", {
         method: "POST",
         body: JSON.stringify({ search_id: lastSearchId }),
       });
+      await renderWithProgressivePricing(pricingPromise, pkgData.summary.total_packages);
 
       await fetchAndRender();
 
@@ -1346,6 +1433,78 @@
     const el = document.getElementById("pricing-updater");
     if (!el) return;
     el.hidden = !on;
+  }
+
+  // -------- Phase 1 progress: progressively render cards while start_pricing runs --------
+  async function renderWithProgressivePricing(pricingPromise, totalEstimate) {
+    const myPollId = ++activePollId; // borrow the same cancel counter — a new search invalidates us too
+    let done = false;
+    let lastError = null;
+    pricingPromise.then(() => { done = true; }, (err) => { done = true; lastError = err; });
+
+    showPricingProgress({ priced: 0, total: totalEstimate });
+
+    const POLL_INTERVAL_MS = 2000;
+    const HARD_CAP_MS = 120_000;  // 2 min safety cap; phase 1 typically finishes in 30-60s
+    const start = Date.now();
+
+    while (!done && Date.now() - start < HARD_CAP_MS) {
+      await sleep(POLL_INTERVAL_MS);
+      if (myPollId !== activePollId) return;
+      if (done) break;
+
+      try {
+        const data = await callFn(
+          `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
+          { method: "GET" }
+        );
+        if (myPollId !== activePollId) return;
+
+        const summary = data.summary || {};
+        const priced = summary.fully_priced || 0;
+        const total = summary.total_packages || totalEstimate;
+
+        if (priced > 0) {
+          // Progressive render: swap skeleton for whatever's priced so far.
+          allPackages = (data.packages || []).map((p) => { p._tags = extractTags(p); return p; });
+          renderResults(); // this wipes results-main, so re-inject the widget below
+        }
+        showPricingProgress({ priced, total });
+      } catch (e) {
+        console.error("[pricing progress] poll error:", e);
+      }
+    }
+
+    hidePricingProgress();
+    if (lastError) throw lastError;
+  }
+
+  function showPricingProgress({ priced, total }) {
+    const main = document.getElementById("results-main");
+    if (!main) return;
+    let widget = document.getElementById("pricing-progress");
+    if (!widget) {
+      widget = document.createElement("div");
+      widget.id = "pricing-progress";
+      widget.className = "pricing-progress";
+      widget.setAttribute("role", "status");
+      widget.setAttribute("aria-live", "polite");
+      main.insertBefore(widget, main.firstChild);
+    }
+    const pct = total > 0 ? Math.min(100, Math.round((priced / total) * 100)) : 0;
+    const msg = priced > 0
+      ? `Pricing your family's trips — <b>${priced.toLocaleString()}</b> of ${total.toLocaleString()} ready · ${pct}%`
+      : `Comparing trips across ${total ? total.toLocaleString() + " " : ""}Caribbean resorts…`;
+    widget.innerHTML = `
+      <div class="pricing-progress-bar"><div class="pricing-progress-fill" style="width: ${pct}%"></div></div>
+      <div class="pricing-progress-label">
+        <span class="pricing-progress-dot" aria-hidden="true"></span>
+        <span>${msg}</span>
+      </div>`;
+  }
+  function hidePricingProgress() {
+    const w = document.getElementById("pricing-progress");
+    if (w) w.remove();
   }
 
   // Silent refetch — fetches packages, re-renders, returns the response data.
