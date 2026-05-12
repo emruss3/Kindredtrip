@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-multi-offer-depth" />
-<meta name="kt-build" content="20260512-multi-offer-depth" />
+<link rel="stylesheet" href="/styles.css?v=20260512-sticky-shimmer-strict" />
+<meta name="kt-build" content="20260512-sticky-shimmer-strict" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1106,6 +1106,9 @@
 
   function packageMatchesFiltersExcluding(pkg, exclude) {
     const r = pkg.resorts || {};
+    // Strict search-time requirements (require_kids_club, require_all_inclusive)
+    // — applied here so sidebar counts also reflect the active toggles.
+    if (!packageMeetsSearchRequirements(pkg)) return false;
     if (exclude !== "country" && filters.country.size > 0 && !filters.country.has(r.country)) return false;
     if (exclude !== "price"   && filters.priceMin != null && (pkg.total_price || 0) < filters.priceMin) return false;
     if (exclude !== "price"   && filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
@@ -1482,7 +1485,7 @@
 
     showPricingProgress({ priced: 0, total: totalEstimate });
 
-    const POLL_INTERVAL_MS = 2000;
+    const POLL_INTERVAL_MS = 1500;
     const HARD_CAP_MS = 120_000;  // 2 min safety cap; phase 1 typically finishes in 30-60s
     const start = Date.now();
 
@@ -1499,7 +1502,10 @@
         if (myPollId !== activePollId) return;
 
         const summary = data.summary || {};
-        const priced = summary.fully_priced || 0;
+        // Phase 1 tracks HOTEL pricing progress (with_hotel_price grows
+        // incrementally as start_pricing resolves rooms). fully_priced
+        // requires both flight + hotel and stays near 0 until the very end.
+        const priced = summary.with_hotel_price || 0;
         const total = summary.total_packages || totalEstimate;
 
         if (priced > 0) {
@@ -1656,8 +1662,35 @@
     return winners;
   }
 
+  // Strict client-side enforcement of search-time requirements. The backend
+  // currently treats require_kids_club + require_all_inclusive as soft hints
+  // (it only filters when cap data is loaded; require_all_inclusive only
+  // picks the cheapest AI offer, doesn't drop non-AI resorts). We enforce
+  // them on the rendered set so the toggles match what the user expects.
+  function packageMeetsSearchRequirements(pkg) {
+    if (!lastSearchSummary) return true;
+    const r = pkg.resorts || {};
+    const tags = pkg._tags || extractTags(pkg);
+    if (lastSearchSummary.require_kids_club) {
+      const hasKidsClub = r.kids_club_available === true
+        || (tags.amenities || []).some((t) => /kids club/i.test(t));
+      if (!hasKidsClub) return false;
+    }
+    if (lastSearchSummary.require_all_inclusive) {
+      // has_any_ai is set from real LiteAPI offers in start_pricing v4. For
+      // mock-priced packages it ends up false, so fall back to the resort's
+      // hotel_style/styles tags ("All-Inclusive").
+      const hasAi = pkg.has_any_ai === true
+        || (tags.styles || []).some((t) => /all.?inclusive/i.test(t));
+      if (!hasAi) return false;
+    }
+    return true;
+  }
+
   function renderResults() {
-    const filtered = applyClientSort(allPackages.filter(packageMatchesFilters));
+    const filtered = applyClientSort(
+      allPackages.filter(packageMeetsSearchRequirements).filter(packageMatchesFilters)
+    );
     const visible = filtered.slice(0, 25);
     const rankBadges = computeRankingBadges(visible);
     const budgetBadges = computeBudgetBadges(visible);
