@@ -17,10 +17,10 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v8_parallel_batches_sync_writes";
+const VERSION = "start_pricing_v9_concurrency_2";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
-const HOTEL_BATCH_SIZE = 30;
-const HOTEL_BATCH_CONCURRENCY = 3;
+const HOTEL_BATCH_SIZE = 25;
+const HOTEL_BATCH_CONCURRENCY = 2;
 const MAX_OFFERS_PER_PACKAGE = 12;
 const LITEAPI_TIMEOUT_S = 3;
 const WALL_CLOCK_BUDGET_MS = 22_000;
