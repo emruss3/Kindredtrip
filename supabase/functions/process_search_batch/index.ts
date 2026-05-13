@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v12_default_exclude_cuba";
+const VERSION = "process_search_batch_v13_star_rating_in_score";
 
 // Hard-blocked: never appears in results. Brazil is in the dataset but isn't
 // Caribbean for product-positioning purposes, so it's permanently out.
@@ -65,7 +65,7 @@ serve(async (req) => {
     let resortsQuery = supabase
       .from("resorts")
       .select(
-        "resort_id,resort_name,country,area,airport_iata,airport_code,avg_user_rating,value_ratio,direct_usd_2026,direct_flight,guaranteed_connecting_rooms,amenities_text"
+        "resort_id,resort_name,country,area,airport_iata,airport_code,avg_user_rating,cap_star_rating,value_ratio,direct_usd_2026,direct_flight,guaranteed_connecting_rooms,amenities_text"
       )
       .eq("audience", "Family")
       .not("airport_code", "is", null);
@@ -99,13 +99,17 @@ serve(async (req) => {
       const rating = Number(r.avg_user_rating ?? 0);
       const value = Number(r.value_ratio ?? 0);
       const price = Number(r.direct_usd_2026 ?? 0);
+      const stars = Number(r.cap_star_rating ?? 0);
 
       const ratingScore = rating;
       const valueScore = Math.min(value * 8, 25);
       const directScore = r.direct_flight ? 8 : 0;
       const priceScore = price > 0 ? Math.max(0, 20 - price / 300) : 0;
+      // Modest star-rating bump: tiebreaker, not the dominant signal.
+      // 3★ and unrated = 0, 4★ = +4, 5★ = +8.
+      const starScore = stars >= 3 ? Math.max(0, (stars - 3) * 4) : 0;
 
-      return { ...r, score_total: ratingScore + valueScore + directScore + priceScore };
+      return { ...r, score_total: ratingScore + valueScore + directScore + priceScore + starScore };
     });
 
     scored.sort((a: any, b: any) => (b.score_total ?? 0) - (a.score_total ?? 0));
@@ -127,6 +131,7 @@ serve(async (req) => {
         score_total: r.score_total,
         highlights: {
           rating: r.avg_user_rating,
+          star_rating: r.cap_star_rating,
           value_ratio: r.value_ratio,
           direct_flight: r.direct_flight,
         },
