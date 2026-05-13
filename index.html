@@ -1562,13 +1562,15 @@
       // routes to price (worker dispatched). If everything was cached, or
       // start_pricing failed, skip the poll entirely.
       let pendingRoutes = 0;
+      let topUpDispatched = false;
       if (!pricingError) {
         try {
           const pricingResult = await pricingPromise;
           pendingRoutes = Number(pricingResult?.flights?.pending_routes) || 0;
+          topUpDispatched = Boolean(pricingResult?.top_up_dispatched);
         } catch { /* fall through — leave pendingRoutes at 0 */ }
       }
-      if (pendingRoutes > 0) {
+      if (pendingRoutes > 0 || topUpDispatched) {
         pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
       }
     } catch (err) {
@@ -1606,13 +1608,18 @@
 
         const total = allPackages.length;
         if (total === 0) continue;
-        const live = allPackages.filter((p) => p.flight_supplier === "liteapi").length;
+        // Combined liveness: flights AND hotels both need to be liteapi.
+        // We count progress on the sum so the poll keeps running while the
+        // hotel top-up worker is upgrading packages from mock -> liteapi.
+        const flightLive = allPackages.filter((p) => p.flight_supplier === "liteapi").length;
+        const hotelLive = allPackages.filter((p) => p.hotel_supplier === "liteapi").length;
+        const live = flightLive + hotelLive; // composite progress signal
 
-        // Done: all flights resolved as live
-        if (live === total) return;
+        // Done: every package is fully live on both sides.
+        if (flightLive === total && hotelLive === total) return;
 
         // No progress for two consecutive polls (after a 30s grace period) — the
-        // background worker has likely settled on no_offers/failed for the rest.
+        // background workers have likely settled on no-data for the rest.
         if (live === lastLiveCount) {
           stagnantChecks++;
           if (stagnantChecks >= 2 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
