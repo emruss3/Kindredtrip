@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v9_concurrency_2";
+const VERSION = "start_pricing_v10_dispatch_topup";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -703,6 +703,23 @@ serve(async (req) => {
       }).eq("search_id", search_id);
     }
 
+    // v10: dispatch the hotel top-up worker if any mock packages remain
+    // that still have a liteapi_hotel_id. Wall-clock budget caps how
+    // many hotels we can fetch in this request; the worker picks up the
+    // rest in fresh edge workers, ~200 packages at a time, until done.
+    let topUpDispatched = false;
+    if (hotelMock > 0 || hotelFallback > 0) {
+      const tp = fetch(`${supabaseUrl}/functions/v1/top_up_hotels_worker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
+        body: JSON.stringify({ search_id, max_pkgs: 200, depth: 0 }),
+      });
+      const er = (globalThis as any).EdgeRuntime;
+      if (er?.waitUntil) er.waitUntil(tp.catch(e => console.error("top_up dispatch failed:", e)));
+      else tp.catch(e => console.error("top_up dispatch failed:", e));
+      topUpDispatched = true;
+    }
+
     return new Response(JSON.stringify({
       version: VERSION,
       search_id,
@@ -739,6 +756,7 @@ serve(async (req) => {
         mock_placeholder: flightMockPlaceholder,
         worker_dispatched: workerDispatched,
       },
+      top_up_dispatched: topUpDispatched,
     }, null, 2), { status: 200, headers });
 
   } catch (e) {
