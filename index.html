@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260513-room-options" />
-<meta name="kt-build" content="20260513-room-options" />
+<link rel="stylesheet" href="/styles.css?v=20260513-real-alts" />
+<meta name="kt-build" content="20260513-real-alts" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2612,28 +2612,38 @@
     const flightCountNote = pkg.flight_offer_count && pkg.flight_offer_count > 1
       ? `<span class="modal-section-count">${pkg.flight_offer_count} options available</span>`
       : "";
+    const liveFlight = pkg.flight_supplier === "liteapi";
     const flightOptions = `
-      <div class="modal-section flight-options">
+      <div class="modal-section flight-options" id="flight-options-section">
         <h4>Flight options for this resort ${flightCountNote}</h4>
-        <div class="flight-option-grid">
+        <div class="flight-option-grid" id="flight-option-grid">
           <article class="flight-option active">
             <div class="flight-option-tag">Best overall</div>
-            <div class="flight-option-price">${fmtMoney(pkg.flight_price)}</div>
+            <div class="flight-option-price">${fmtMoney(pkg.flight_price)}${liveFlight ? "" : ` <span class="flight-option-est">est.</span>`}</div>
             <div class="flight-option-meta">${escapeHtml([
               destAirportLabel,
               pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
               pkg.duration_hours ? `${pkg.duration_hours}h travel` : null,
             ].filter(Boolean).join(" · "))}</div>
-            <div class="flight-option-note">Estimated total for your family</div>
+            <div class="flight-option-note">${liveFlight ? "Live fare for your family" : "Estimated total for your family"}</div>
           </article>
+          ${liveFlight ? `
+          <article class="flight-option loading" id="flight-cheapest">
+            <div class="flight-option-tag">Cheapest</div>
+            <div class="flight-option-placeholder-note">Loading…</div>
+          </article>
+          <article class="flight-option loading" id="flight-easiest">
+            <div class="flight-option-tag">Easiest with kids</div>
+            <div class="flight-option-placeholder-note">Loading…</div>
+          </article>` : `
           <article class="flight-option placeholder">
             <div class="flight-option-tag">Cheapest</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives coming soon — we're wiring in real-time fares.</div>
+            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
           </article>
           <article class="flight-option placeholder">
             <div class="flight-option-tag">Easiest with kids</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives coming soon — we're wiring in real-time fares.</div>
-          </article>
+            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
+          </article>`}
         </div>
       </div>`;
 
@@ -2669,8 +2679,9 @@
 
     // ---- Room options (live offers behind the headline price) ----
     // Populated async after the modal mounts so the modal opens instantly.
-    // Hidden if there are no offers, only one offer, or the package was
-    // mock-priced (in which case there's no rate variant to surface).
+    // For liteapi-priced packages we fetch real rate variants. For
+    // mock-priced packages we show an explanatory placeholder instead of
+    // hiding the section, because hiding it made the modal feel barren.
     const liveHotel = pkg.hotel_supplier === "liteapi";
     const roomOptionsSection = liveHotel ? `
       <div class="modal-section room-options" id="room-options-section">
@@ -2679,7 +2690,14 @@
           <div class="room-options-loading">Loading available rooms…</div>
         </div>
         <p class="room-options-note">Prices shown are for your stay length and party size. Final pricing is set by the booking partner at checkout.</p>
-      </div>` : "";
+      </div>` : `
+      <div class="modal-section room-options">
+        <h4>Room options</h4>
+        <div class="room-options-empty">
+          <p><b>Live rates pending.</b> This resort is still being priced from our partner. Room-by-room totals will appear here once pricing finishes.</p>
+          <p class="room-options-empty-sub">In the meantime, the trip total above is our estimated rate based on resort tier and country. Click "See hotel rates" to view the partner's live room list.</p>
+        </div>
+      </div>`;
 
     // ---- Budget tradeoff ----
     const directRate = (() => {
@@ -2866,6 +2884,55 @@
     modal.scrollTop = 0;
 
     if (liveHotel) loadRoomOptions(pkg.package_id);
+    if (liveFlight) loadFlightOptions(pkg.package_id);
+  }
+
+  // -------- Flight options: async fetch + render --------
+  async function loadFlightOptions(packageId) {
+    const cheapEl = document.getElementById("flight-cheapest");
+    const easyEl = document.getElementById("flight-easiest");
+    if (!cheapEl && !easyEl) return;
+    try {
+      const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}`, { method: "GET" });
+      const picks = data?.picks;
+      if (!picks) {
+        if (cheapEl) cheapEl.style.display = "none";
+        if (easyEl) easyEl.style.display = "none";
+        return;
+      }
+      if (picks.cheapest) {
+        cheapEl.classList.remove("loading");
+        cheapEl.innerHTML = renderFlightAltInner("Cheapest", picks.cheapest);
+      } else if (cheapEl) {
+        cheapEl.style.display = "none";
+      }
+      if (picks.easiest) {
+        easyEl.classList.remove("loading");
+        easyEl.innerHTML = renderFlightAltInner("Easiest with kids", picks.easiest);
+      } else if (easyEl) {
+        easyEl.style.display = "none";
+      }
+    } catch (e) {
+      console.warn("Flight options failed:", e?.message || e);
+      if (cheapEl) cheapEl.style.display = "none";
+      if (easyEl) easyEl.style.display = "none";
+    }
+  }
+
+  function renderFlightAltInner(tag, o) {
+    const stops = (Number(o.outbound_stops ?? 9) === 0 && Number(o.return_stops ?? 9) === 0)
+      ? "Direct both ways"
+      : `${(Number(o.outbound_stops ?? 0) + Number(o.return_stops ?? 0))} stops total`;
+    const durMin = Number(o.total_duration_minutes ?? 0);
+    const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
+    const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
+    const refund = o.refundable === true ? "Refundable" : (o.refundable === false ? "Non-refundable" : "");
+    return `
+      <div class="flight-option-tag">${escapeHtml(tag)}</div>
+      <div class="flight-option-price">${fmtMoney(o.total_price)}</div>
+      <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
+      ${refund ? `<div class="flight-option-note">${escapeHtml(refund)}</div>` : ""}
+    `;
   }
 
   // -------- Room options: async fetch + render --------

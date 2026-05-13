@@ -1,24 +1,30 @@
-// start_pricing v7
+// start_pricing v8
 //
-// Changes from v6:
-//   - MAX_OFFERS_PER_PACKAGE 8 → 12. The frontend now actually displays
-//     room options (via get_hotel_offers), so storing more variants is
-//     useful. The cap still wins over the long tail (avg offers/hotel is
-//     ~8, max we ever stored was 13).
-//
-// Everything else (wall-clock 25s, batch 30, timeout 4s, waitUntil for
-// rate-offer writes) is the same as v6.
+// Changes from v7:
+//   - Parallelize hotel batches with concurrency = 3. Sequential at
+//     ~1.2s/batch hit the 25s budget after ~20 batches, so ~65% of
+//     packages stayed mock-priced. With concurrency 3, the same 20
+//     batches finish in ~8s, which means almost every package gets a
+//     real liteapi price (and therefore real room options + the "Live
+//     price" badge instead of "Estimated").
+//   - Drop waitUntil for rate-offer writes. Edge-runtime kept dropping
+//     them mid-flight, so ~38% of liteapi packages had no persisted
+//     hotel_rate_offers rows, and the frontend room options section
+//     came back empty. We now write synchronously, with a 12s budget
+//     guard that bails cleanly if the inserts run long.
+//   - Tighten LITEAPI_TIMEOUT_S 4 → 3 to fail fast on slow hotels.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v7_more_room_options";
+const VERSION = "start_pricing_v8_parallel_batches_sync_writes";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 30;
-const HOTEL_BATCH_DELAY_MS = 50;
+const HOTEL_BATCH_CONCURRENCY = 3;
 const MAX_OFFERS_PER_PACKAGE = 12;
-const LITEAPI_TIMEOUT_S = 4;
-const WALL_CLOCK_BUDGET_MS = 25_000;
+const LITEAPI_TIMEOUT_S = 3;
+const WALL_CLOCK_BUDGET_MS = 22_000;
+const OFFER_WRITE_BUDGET_MS = 12_000;
 
 function corsHeaders() {
   return {
@@ -420,28 +426,42 @@ serve(async (req) => {
     // hitting Cloudflare's wall-clock (the cause of the 546 in v4), we stop
     // fetching new hotel data and let any unfetched packages fall through
     // to the mock pricer. We always return a 200 instead of being killed.
+    // v8: parallel batches with bounded concurrency. Sequential was hitting
+    // the 22s budget after ~20 batches; concurrency=3 finishes the same
+    // work in ~8s. If we hit a 429 anywhere in flight, we still abort the
+    // remaining waves but keep what already succeeded.
     const liteapiLoopStart = Date.now();
+    const allBatches: string[][] = [];
     for (let i = 0; i < liteapiHotelIds.length; i += HOTEL_BATCH_SIZE) {
+      allBatches.push(liteapiHotelIds.slice(i, i + HOTEL_BATCH_SIZE));
+    }
+
+    for (let w = 0; w < allBatches.length; w += HOTEL_BATCH_CONCURRENCY) {
       if (Date.now() - liteapiLoopStart > WALL_CLOCK_BUDGET_MS) {
         wallTimeBudgetHit = true;
         break;
       }
-      const batch = liteapiHotelIds.slice(i, i + HOTEL_BATCH_SIZE);
-      hotelBatchesAttempted++;
-      const res = await fetchHotelRatesBatch(apiKey, batch, search.date_start, search.date_end, hotelOccupancies);
-      if (res.error) {
-        hotelLastError = res.error;
-        if (res.status === 429) { hotelRateLimitHit = true; break; }
-      } else {
-        hotelBatchesSucceeded++;
-        for (const h of res.hotels) {
-          const id = String(h?.hotelId ?? "");
-          if (id) hotelDataById.set(id, h);
+      const wave = allBatches.slice(w, w + HOTEL_BATCH_CONCURRENCY);
+      hotelBatchesAttempted += wave.length;
+      const results = await Promise.all(
+        wave.map((batch) =>
+          fetchHotelRatesBatch(apiKey, batch, search.date_start, search.date_end, hotelOccupancies)
+        )
+      );
+      let hit429 = false;
+      for (const res of results) {
+        if (res.error) {
+          hotelLastError = res.error;
+          if (res.status === 429) { hit429 = true; }
+        } else {
+          hotelBatchesSucceeded++;
+          for (const h of res.hotels) {
+            const id = String(h?.hotelId ?? "");
+            if (id) hotelDataById.set(id, h);
+          }
         }
       }
-      if (i + HOTEL_BATCH_SIZE < liteapiHotelIds.length) {
-        await new Promise(rs => setTimeout(rs, HOTEL_BATCH_DELAY_MS));
-      }
+      if (hit429) { hotelRateLimitHit = true; break; }
     }
 
     const { data: airportTiers } = await sb.from("mock_flight_pricing")
@@ -617,37 +637,39 @@ serve(async (req) => {
       });
     }
 
-    // v6: defer rate-offer DB writes to AFTER the response is sent. These
-    // are the slowest part of post-LiteAPI work (delete + upsert with up to
-    // a few thousand JSONB rows) and the frontend doesn't read this table
-    // directly — it only reads the package row's offer-id fields, which are
-    // written synchronously a few lines below. waitUntil keeps the worker
-    // alive past the response so the inserts still happen.
+    // v8: write rate offers SYNCHRONOUSLY. waitUntil was unreliable —
+    // ~38% of packages had no persisted hotel_rate_offers rows, so the
+    // frontend "Room options" section was coming back empty. We now
+    // block the response on these writes, but cap them at 12s so a slow
+    // DB can't push us past the 50s edge wall-clock.
     const rateOfferRowsCount = rateOfferRows.length;
+    let rateOfferRowsPersisted = 0;
+    let rateOfferWriteTruncated = false;
     if (rateOfferRows.length) {
-      const persistRateOffers = (async () => {
-        try {
-          const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
-          const DEL_CHUNK = 200;
-          for (let i = 0; i < pkgIds.length; i += DEL_CHUNK) {
-            const slice = pkgIds.slice(i, i + DEL_CHUNK);
-            await sb.from("hotel_rate_offers").delete().in("package_id", slice);
+      const writeStart = Date.now();
+      try {
+        const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
+        const DEL_CHUNK = 200;
+        for (let i = 0; i < pkgIds.length; i += DEL_CHUNK) {
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) {
+            rateOfferWriteTruncated = true;
+            break;
           }
-          const INS_CHUNK = 200;
-          for (let i = 0; i < rateOfferRows.length; i += INS_CHUNK) {
-            const slice = rateOfferRows.slice(i, i + INS_CHUNK);
-            await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
-          }
-        } catch (e) {
-          console.error("[start_pricing v6] rate offer persistence error:", e);
+          const slice = pkgIds.slice(i, i + DEL_CHUNK);
+          await sb.from("hotel_rate_offers").delete().in("package_id", slice);
         }
-      })();
-      // deno-lint-ignore no-explicit-any
-      const er = (globalThis as any).EdgeRuntime;
-      if (er && typeof er.waitUntil === "function") {
-        er.waitUntil(persistRateOffers);
-      } else {
-        persistRateOffers.catch((e) => console.error("[start_pricing v6] rate offer persistence fallback error:", e));
+        const INS_CHUNK = 200;
+        for (let i = 0; i < rateOfferRows.length; i += INS_CHUNK) {
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) {
+            rateOfferWriteTruncated = true;
+            break;
+          }
+          const slice = rateOfferRows.slice(i, i + INS_CHUNK);
+          const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
+          if (!oe) rateOfferRowsPersisted += slice.length;
+        }
+      } catch (e) {
+        console.error("[start_pricing v8] rate offer persistence error:", e);
       }
     }
 
@@ -706,7 +728,8 @@ serve(async (req) => {
         live_fallback_to_mock: hotelFallback,
         mock_priced: hotelMock,
         rate_offers_extracted: rateOfferRowsCount,
-        rate_offers_persistence: rateOfferRowsCount > 0 ? "deferred_via_waituntil" : "n/a",
+        rate_offers_persisted: rateOfferRowsPersisted,
+        rate_offers_write_truncated: rateOfferWriteTruncated,
       },
       flights: {
         unique_routes: uniqueDestinations.length,
