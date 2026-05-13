@@ -1,36 +1,22 @@
-// start_pricing v6
+// start_pricing v7
 //
-// Changes from v5 — v5's 40s wall-clock budget kept the LiteAPI loop in
-// check, but post-LiteAPI DB writes (delete + upsert rate offers, parallel
-// package updates) added 4-5s on top, pushing total wall-clock to 43-44s.
-// Cloudflare's edge-function proxy started rejecting some calls at that
-// boundary with 546 ("no response").
+// Changes from v6:
+//   - MAX_OFFERS_PER_PACKAGE 8 → 12. The frontend now actually displays
+//     room options (via get_hotel_offers), so storing more variants is
+//     useful. The cap still wins over the long tail (avg offers/hotel is
+//     ~8, max we ever stored was 13).
 //
-// Two tightenings:
-//   - WALL_CLOCK_BUDGET_MS 40_000 → 25_000
-//   - HOTEL_BATCH_SIZE 40 → 30 (about 50% smaller LiteAPI calls)
-//   - LITEAPI_TIMEOUT_S 5 → 4
-//   - HOTEL_BATCH_DELAY_MS 100 → 50
-//
-// Plus the structural fix: heavy hotel_rate_offers DELETE + UPSERT now
-// runs via EdgeRuntime.waitUntil AFTER the response is sent. That lets
-// the function return its 200 in ~25-30s while the offer-table work
-// finishes in the background. The frontend doesn't read hotel_rate_offers
-// directly (it only reads the package row fields like hotel_offer_id and
-// cheapest_offer_id, which are written synchronously above) so this is
-// safe.
-//
-// All other v4/v5 behavior unchanged: pre-filter, multi-offer extraction,
-// smart default selection, package rollups, flight worker dispatch.
+// Everything else (wall-clock 25s, batch 30, timeout 4s, waitUntil for
+// rate-offer writes) is the same as v6.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v6_waituntil_offer_writes";
+const VERSION = "start_pricing_v7_more_room_options";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 30;
 const HOTEL_BATCH_DELAY_MS = 50;
-const MAX_OFFERS_PER_PACKAGE = 8;
+const MAX_OFFERS_PER_PACKAGE = 12;
 const LITEAPI_TIMEOUT_S = 4;
 const WALL_CLOCK_BUDGET_MS = 25_000;
 

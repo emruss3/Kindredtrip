@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260512-soft-pricing-fail" />
-<meta name="kt-build" content="20260512-soft-pricing-fail" />
+<link rel="stylesheet" href="/styles.css?v=20260513-room-options" />
+<meta name="kt-build" content="20260513-room-options" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2667,6 +2667,20 @@
         ${tags.rooms.length ? `<div class="tag-grid">${renderTagList(tags.rooms)}</div>` : ""}
       </div>`;
 
+    // ---- Room options (live offers behind the headline price) ----
+    // Populated async after the modal mounts so the modal opens instantly.
+    // Hidden if there are no offers, only one offer, or the package was
+    // mock-priced (in which case there's no rate variant to surface).
+    const liveHotel = pkg.hotel_supplier === "liteapi";
+    const roomOptionsSection = liveHotel ? `
+      <div class="modal-section room-options" id="room-options-section">
+        <h4>Room options <span class="modal-section-count" id="room-options-count">loading…</span></h4>
+        <div class="room-options-grid" id="room-options-grid">
+          <div class="room-options-loading">Loading available rooms…</div>
+        </div>
+        <p class="room-options-note">Prices shown are for your stay length and party size. Final pricing is set by the booking partner at checkout.</p>
+      </div>` : "";
+
     // ---- Budget tradeoff ----
     const directRate = (() => {
       const d = Number(r.direct_usd_2026);
@@ -2699,9 +2713,6 @@
 
     // ---- About this resort ----
     const aboutBits = [];
-    if (pkg.hotel_offer_count && pkg.hotel_offer_count > 1) {
-      aboutBits.push({ label: "Room options", value: String(pkg.hotel_offer_count) });
-    }
     if (pkg.max_offer_occupancy && pkg.max_offer_occupancy > 0) {
       aboutBits.push({ label: "Sleeps up to", value: String(pkg.max_offer_occupancy) });
     }
@@ -2821,6 +2832,7 @@
         ${flightOptions}
         ${whyFamily}
         ${roomFitSection}
+        ${roomOptionsSection}
         ${budgetSection}
         ${aboutSection}
 
@@ -2852,6 +2864,80 @@
     document.getElementById("modal-overlay").classList.add("open");
     document.body.style.overflow = "hidden";
     modal.scrollTop = 0;
+
+    if (liveHotel) loadRoomOptions(pkg.package_id);
+  }
+
+  // -------- Room options: async fetch + render --------
+  // Calls get_hotel_offers with the package_id and replaces the placeholder
+  // grid with up to 8 deduped room variants. Each card shows room name,
+  // board (All-inclusive / Breakfast / Room only), refundability,
+  // occupancy, and the total + per-night price for the requested stay.
+  // If the fetch fails or returns no offers, the section is hidden so we
+  // don't leave a "loading…" stub in the modal.
+  async function loadRoomOptions(packageId) {
+    const section = document.getElementById("room-options-section");
+    const grid = document.getElementById("room-options-grid");
+    const countEl = document.getElementById("room-options-count");
+    if (!section || !grid) return;
+    try {
+      const data = await callFn(`get_hotel_offers?package_id=${encodeURIComponent(packageId)}&limit=8`, { method: "GET" });
+      const offers = Array.isArray(data?.offers) ? data.offers : [];
+      if (offers.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+      if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
+      grid.innerHTML = offers.map(renderRoomOptionCard).join("");
+    } catch (e) {
+      console.warn("Room options failed:", e?.message || e);
+      section.style.display = "none";
+    }
+  }
+
+  function renderRoomOptionCard(o) {
+    const board = boardLabel(o);
+    const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
+    const refundable = o.refundable === true;
+    const nonRefund = o.refundable === false;
+    const refundChip = refundable
+      ? `<span class="room-chip refundable">Refundable</span>`
+      : (nonRefund ? `<span class="room-chip non-refundable">Non-refundable</span>` : "");
+    const sleeps = (o.max_occupancy && o.max_occupancy > 0) ? `<span class="room-chip">Sleeps ${o.max_occupancy}</span>` : "";
+    const promo = o.has_promotions ? `<span class="room-chip promo">Promo</span>` : "";
+    const perks = Array.isArray(o.perks) && o.perks.length
+      ? `<div class="room-option-perks">${o.perks.slice(0, 3).map((p) => `<span class="room-perk">${escapeHtml(String(p))}</span>`).join("")}</div>`
+      : "";
+    const total = fmtMoney(o.total_price);
+    const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
+    return `
+      <article class="room-option-card">
+        <div class="room-option-top">
+          <div class="room-option-name">${escapeHtml(o.room_name || "Room")}</div>
+          <div class="room-option-board ${boardClass}">${escapeHtml(board)}</div>
+        </div>
+        <div class="room-option-chips">
+          ${refundChip}${sleeps}${promo}
+        </div>
+        ${perks}
+        <div class="room-option-price">
+          <div class="room-option-total">${total}</div>
+          ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
+        </div>
+      </article>`;
+  }
+
+  function boardLabel(o) {
+    if (o.is_all_inclusive) return "All-inclusive";
+    if (o.board_name) return String(o.board_name);
+    const map = {
+      "AI": "All-inclusive",
+      "FB": "Full board",
+      "HB": "Half board",
+      "BB": "Breakfast included",
+      "RO": "Room only",
+    };
+    return map[o.board_type] || "Room only";
   }
 
   // -------- Save / share placeholders --------
