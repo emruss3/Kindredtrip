@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260513-full-flight-list" />
-<meta name="kt-build" content="20260513-full-flight-list" />
+<link rel="stylesheet" href="/styles.css?v=20260513-fix-est-badge" />
+<meta name="kt-build" content="20260513-fix-est-badge" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1128,6 +1128,7 @@
 
   let lastSearchId = null;
   let lastSearchSummary = null;
+  let lastIsWarmingUp = false;
   let allPackages = [];
   let lastSortBy = "score";
 
@@ -1615,7 +1616,9 @@
         const hotelLive = allPackages.filter((p) => p.hotel_supplier === "liteapi").length;
         const live = flightLive + hotelLive; // composite progress signal
 
-        // Done: every package is fully live on both sides.
+        // Done: backend says it's no longer warming up, or every package
+        // is fully live on both sides.
+        if (lastIsWarmingUp === false) return;
         if (flightLive === total && hotelLive === total) return;
 
         // No progress for two consecutive polls (after a 30s grace period) — the
@@ -1679,6 +1682,7 @@
 
         if (priced > 0) {
           // Progressive render: swap skeleton for whatever's priced so far.
+          if (typeof data?.is_warming_up === "boolean") lastIsWarmingUp = data.is_warming_up;
           allPackages = (data.packages || []).map((p) => { p._tags = extractTags(p); return p; });
           renderResults(); // this wipes results-main, so re-inject the widget below
         }
@@ -1727,6 +1731,10 @@
       `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
+    // Track top-level is_warming_up so the polling banner can stop in
+    // steady state. The per-card "Estimated" badge is supplier-based
+    // and independent — see isLiveCard in renderCard.
+    if (typeof data?.is_warming_up === "boolean") lastIsWarmingUp = data.is_warming_up;
     allPackages = (data.packages || []).map((p) => {
       p._tags = extractTags(p);
       return p;
@@ -2941,10 +2949,13 @@
       </div>`;
 
     // ---- Sticky outbound CTA ----
+    // Label uses the same supplier-based check as the main price badge:
+    // only "Live price" when BOTH sides resolved against LiteAPI. Anything
+    // else (still warming up, no liteapi_hotel_id, etc.) reads "estimated".
     const stickyCta = `
       <div class="modal-cta-sticky">
         <div class="modal-cta-info">
-          <div><b>${fmtMoney(pkg.total_price)}</b> estimated trip total${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
+          <div><b>${fmtMoney(pkg.total_price)}</b> ${isLive ? "live trip total" : "estimated trip total"}${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
           <div class="modal-cta-sub">flights + hotel · for your family</div>
         </div>
         <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
@@ -3234,9 +3245,11 @@
   function tripShareBody(pkg) {
     const r = pkg.resorts || {};
     const delta = budgetDelta(pkg);
+    const isLive = pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi";
+    const totalLabel = isLive ? "Live trip total" : "Estimated trip total";
     const lines = [
       `${r.resort_name || "Resort"}${r.country ? ` — ${r.country}` : ""}`,
-      `Estimated trip total: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
+      `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
     ];
     if (delta) lines.push(`${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget (${fmtMoney(delta.budget)})`);
     if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}`);
