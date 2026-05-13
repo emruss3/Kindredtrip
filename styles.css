@@ -3150,3 +3150,137 @@ body:not(.has-results) #results-wrap { display: none; }
 }
 .ink-under { color: #1f7d4d; font-weight: 600; }
 .ink-over { color: #b15a3a; font-weight: 600; }
+
+/* ---------- Modal: Room options (live rate variants) ---------- */
+.room-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+@media (max-width: 640px) { .room-options-grid { grid-template-columns: 1fr; } }
+.room-options-loading {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 16px;
+  text-align: center;
+  background: var(--bg-soft);
+  border-radius: var(--r-xs);
+}
+.room-option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 14px 14px 12px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.room-option-card:hover {
+  border-color: var(--line-strong, #d6d2cc);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+}
+.room-option-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.room-option-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+.room-option-board {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.room-option-board.ai {
+  background: #E8F4EC;
+  color: #1f7d4d;
+}
+.room-option-board.bb {
+  background: #FFF4E1;
+  color: #8c5a14;
+}
+.room-option-board.ro {
+  background: var(--bg-soft);
+  color: var(--ink-2);
+}
+.room-option-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.room-chip {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-soft);
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+}
+.room-chip.refundable {
+  background: #EAF3EC;
+  color: #1f6c43;
+  font-weight: 600;
+}
+.room-chip.non-refundable {
+  background: #F7ECE6;
+  color: #9c4a26;
+  font-weight: 600;
+}
+.room-chip.promo {
+  background: #FFF1D9;
+  color: #8c5a14;
+  font-weight: 600;
+}
+.room-option-perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.room-perk {
+  display: inline-flex;
+  align-items: center;
+}
+.room-perk::before {
+  content: "✓";
+  color: #1f7d4d;
+  margin-right: 4px;
+  font-weight: 700;
+}
+.room-option-price {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.room-option-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.room-option-pernight {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.room-options-note {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
