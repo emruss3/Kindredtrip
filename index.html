@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260513-proof-conv" />
-<meta name="kt-build" content="20260513-proof-conv" />
+<link rel="stylesheet" href="/styles.css?v=20260513-full-flight-list" />
+<meta name="kt-build" content="20260513-full-flight-list" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2784,6 +2784,14 @@
             <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
           </article>`}
         </div>
+        ${liveFlight ? `
+        <div class="flight-all-block" id="flight-all-block" hidden>
+          <div class="flight-all-head">
+            <h5>All flights for this trip</h5>
+            <span class="flight-all-count" id="flight-all-count"></span>
+          </div>
+          <div class="flight-all-list" id="flight-all-list"></div>
+        </div>` : ""}
       </div>`;
 
     // ---- Why this resort works for your family ----
@@ -3027,29 +3035,46 @@
   }
 
   // -------- Flight options: async fetch + render --------
+  // Calls get_flight_offers and populates two areas of the modal:
+  //   1. The three Top-picks cards (Best / Cheapest / Easiest)
+  //   2. The full "All flights" list below, sorted cheapest first
+  // get_flight_offers returns up to 15 offers with full segment data.
   async function loadFlightOptions(packageId) {
     const cheapEl = document.getElementById("flight-cheapest");
     const easyEl = document.getElementById("flight-easiest");
-    if (!cheapEl && !easyEl) return;
+    const allBlock = document.getElementById("flight-all-block");
+    const allList = document.getElementById("flight-all-list");
+    const allCount = document.getElementById("flight-all-count");
+    if (!cheapEl && !easyEl && !allBlock) return;
     try {
-      const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}`, { method: "GET" });
+      const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}&limit=15`, { method: "GET" });
       const picks = data?.picks;
-      if (!picks) {
-        if (cheapEl) cheapEl.style.display = "none";
-        if (easyEl) easyEl.style.display = "none";
-        return;
-      }
-      if (picks.cheapest) {
+      const offers = Array.isArray(data?.offers) ? data.offers : [];
+
+      // Render top picks (or hide if none).
+      if (picks?.cheapest && cheapEl) {
         cheapEl.classList.remove("loading");
         cheapEl.innerHTML = renderFlightAltInner("Cheapest", picks.cheapest);
       } else if (cheapEl) {
         cheapEl.style.display = "none";
       }
-      if (picks.easiest) {
+      if (picks?.easiest && easyEl) {
         easyEl.classList.remove("loading");
         easyEl.innerHTML = renderFlightAltInner("Easiest with kids", picks.easiest);
       } else if (easyEl) {
         easyEl.style.display = "none";
+      }
+
+      // Render full sorted list. Skip the offer that's already in the
+      // Best-overall card so users don't see it twice.
+      if (allBlock && allList) {
+        const bestId = picks?.best?.offer_id;
+        const rest = offers.filter(o => o.offer_id !== bestId);
+        if (rest.length > 0) {
+          allBlock.hidden = false;
+          if (allCount) allCount.textContent = rest.length === 1 ? "1 more" : `${rest.length} more`;
+          allList.innerHTML = rest.map(renderFlightFullRow).join("");
+        }
       }
     } catch (e) {
       console.warn("Flight options failed:", e?.message || e);
@@ -3058,11 +3083,26 @@
     }
   }
 
+  function flightStopsLabel(o) {
+    const out = Number(o.outbound_stops ?? -1);
+    const ret = o.return_stops == null ? null : Number(o.return_stops);
+    if (out === 0 && (ret === null || ret === 0)) return ret === null ? "Direct" : "Direct both ways";
+    if (ret === null) return out === 1 ? "1 stop" : `${out} stops`;
+    const tot = out + (ret ?? 0);
+    return tot === 1 ? "1 stop total" : `${tot} stops total`;
+  }
+
+  function fmtFlightTime(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch { return ""; }
+  }
+
   function renderFlightAltInner(tag, o) {
-    const stops = (Number(o.outbound_stops ?? 9) === 0 && Number(o.return_stops ?? 9) === 0)
-      ? "Direct both ways"
-      : `${(Number(o.outbound_stops ?? 0) + Number(o.return_stops ?? 0))} stops total`;
-    const durMin = Number(o.total_duration_minutes ?? 0);
+    const stops = flightStopsLabel(o);
+    const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
     const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
     const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
     const refund = o.refundable === true ? "Refundable" : (o.refundable === false ? "Non-refundable" : "");
@@ -3071,6 +3111,37 @@
       <div class="flight-option-price">${fmtMoney(o.total_price)}</div>
       <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
       ${refund ? `<div class="flight-option-note">${escapeHtml(refund)}</div>` : ""}
+    `;
+  }
+
+  function renderFlightFullRow(o) {
+    const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
+    const stops = flightStopsLabel(o);
+    const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
+    const durStr = durMin > 0 ? `${Math.floor(durMin / 60)}h ${durMin % 60 ? `${durMin % 60}m` : ""}`.trim() : "";
+    const dep = fmtFlightTime(o.outbound_departure_time);
+    const arr = fmtFlightTime(o.outbound_arrival_time);
+    const timeStr = dep && arr ? `${dep} → ${arr}` : "";
+    const layovers = Array.isArray(o.outbound_layover_airports) && o.outbound_layover_airports.length
+      ? `via ${o.outbound_layover_airports.join(", ")}`
+      : "";
+    const chips = [];
+    if (o.refundable === true) chips.push(`<span class="flight-chip refundable">Refundable</span>`);
+    if (o.checked_bag_included === true) chips.push(`<span class="flight-chip">Checked bag</span>`);
+    else if (o.carry_on_included === true) chips.push(`<span class="flight-chip">Carry-on only</span>`);
+    if (o.fare_family) chips.push(`<span class="flight-chip">${escapeHtml(String(o.fare_family))}</span>`);
+    return `
+      <div class="flight-row">
+        <div class="flight-row-main">
+          <div class="flight-row-airline">${escapeHtml(airline)}</div>
+          <div class="flight-row-meta">${escapeHtml([stops, durStr, timeStr, layovers].filter(Boolean).join(" · "))}</div>
+          ${chips.length ? `<div class="flight-row-chips">${chips.join("")}</div>` : ""}
+        </div>
+        <div class="flight-row-price">
+          <div class="flight-row-total">${fmtMoney(o.total_price)}</div>
+          ${o.per_adult ? `<div class="flight-row-per">${fmtMoney(o.per_adult)} / adult</div>` : ""}
+        </div>
+      </div>
     `;
   }
 
@@ -3087,7 +3158,7 @@
     const countEl = document.getElementById("room-options-count");
     if (!section || !grid) return;
     try {
-      const data = await callFn(`get_hotel_offers?package_id=${encodeURIComponent(packageId)}&limit=8`, { method: "GET" });
+      const data = await callFn(`get_hotel_offers?package_id=${encodeURIComponent(packageId)}&limit=20`, { method: "GET" });
       const offers = Array.isArray(data?.offers) ? data.offers : [];
       if (offers.length === 0) {
         section.style.display = "none";
@@ -3106,8 +3177,9 @@
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
     const refundable = o.refundable === true;
     const nonRefund = o.refundable === false;
+    const cancelDateStr = refundable && o.cancellation_deadline ? fmtCancelDate(o.cancellation_deadline) : "";
     const refundChip = refundable
-      ? `<span class="room-chip refundable">Refundable</span>`
+      ? `<span class="room-chip refundable">${cancelDateStr ? `Free cancel by ${escapeHtml(cancelDateStr)}` : "Free cancellation"}</span>`
       : (nonRefund ? `<span class="room-chip non-refundable">Non-refundable</span>` : "");
     const sleeps = (o.max_occupancy && o.max_occupancy > 0) ? `<span class="room-chip">Sleeps ${o.max_occupancy}</span>` : "";
     const promo = o.has_promotions ? `<span class="room-chip promo">Promo</span>` : "";
@@ -3131,6 +3203,14 @@
           ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
         </div>
       </article>`;
+  }
+
+  function fmtCancelDate(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch { return ""; }
   }
 
   function boardLabel(o) {
