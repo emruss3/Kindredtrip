@@ -1,35 +1,38 @@
-// start_pricing v5
+// start_pricing v6
 //
-// Changes from v4 — addresses recurring HTTP 546 (function killed by
-// Cloudflare wall-clock or OOM) on multi-batch searches:
-//   - HOTEL_BATCH_SIZE 80 → 40 (smaller LiteAPI calls = less work per await,
-//     less risk of one stalled batch blocking the rest)
-//   - HOTEL_BATCH_DELAY_MS 250 → 100 (less idle wall-clock between batches)
-//   - MAX_OFFERS_PER_PACKAGE 12 → 8 (halves the offer rows + memory)
-//   - LiteAPI per-call timeout 8 → 5 seconds (one stalled call can't eat the
-//     whole budget anymore)
-//   - WALL_CLOCK_BUDGET_MS = 40s guard on the LiteAPI batch loop: when we're
-//     within this budget we keep batching; past it we stop fetching new
-//     hotel data and let any remaining packages fall through to the mock
-//     pricer. Result: we always finish with a 200 response instead of being
-//     killed mid-flight.
-//   - raw_offer field trimmed: drop the full LiteAPI rate JSON (was 5–10KB
-//     per row), keep just the IDs + small fields needed to replay/prebook.
-//     Cuts hotel_rate_offers memory + storage by ~10×.
+// Changes from v5 — v5's 40s wall-clock budget kept the LiteAPI loop in
+// check, but post-LiteAPI DB writes (delete + upsert rate offers, parallel
+// package updates) added 4-5s on top, pushing total wall-clock to 43-44s.
+// Cloudflare's edge-function proxy started rejecting some calls at that
+// boundary with 546 ("no response").
 //
-// All other v4 behavior unchanged (pre-filter, multi-offer extraction,
-// smart default selection, package rollups, flight worker dispatch).
+// Two tightenings:
+//   - WALL_CLOCK_BUDGET_MS 40_000 → 25_000
+//   - HOTEL_BATCH_SIZE 40 → 30 (about 50% smaller LiteAPI calls)
+//   - LITEAPI_TIMEOUT_S 5 → 4
+//   - HOTEL_BATCH_DELAY_MS 100 → 50
+//
+// Plus the structural fix: heavy hotel_rate_offers DELETE + UPSERT now
+// runs via EdgeRuntime.waitUntil AFTER the response is sent. That lets
+// the function return its 200 in ~25-30s while the offer-table work
+// finishes in the background. The frontend doesn't read hotel_rate_offers
+// directly (it only reads the package row fields like hotel_offer_id and
+// cheapest_offer_id, which are written synchronously above) so this is
+// safe.
+//
+// All other v4/v5 behavior unchanged: pre-filter, multi-offer extraction,
+// smart default selection, package rollups, flight worker dispatch.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v5_walltime_guard";
+const VERSION = "start_pricing_v6_waituntil_offer_writes";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
-const HOTEL_BATCH_SIZE = 40;
-const HOTEL_BATCH_DELAY_MS = 100;
+const HOTEL_BATCH_SIZE = 30;
+const HOTEL_BATCH_DELAY_MS = 50;
 const MAX_OFFERS_PER_PACKAGE = 8;
-const LITEAPI_TIMEOUT_S = 5;
-const WALL_CLOCK_BUDGET_MS = 40_000;
+const LITEAPI_TIMEOUT_S = 4;
+const WALL_CLOCK_BUDGET_MS = 25_000;
 
 function corsHeaders() {
   return {
@@ -628,28 +631,37 @@ serve(async (req) => {
       });
     }
 
-    // Persist rate offers + surface errors
-    const rateOfferErrors: string[] = [];
-    let rateOffersInserted = 0;
+    // v6: defer rate-offer DB writes to AFTER the response is sent. These
+    // are the slowest part of post-LiteAPI work (delete + upsert with up to
+    // a few thousand JSONB rows) and the frontend doesn't read this table
+    // directly — it only reads the package row's offer-id fields, which are
+    // written synchronously a few lines below. waitUntil keeps the worker
+    // alive past the response so the inserts still happen.
+    const rateOfferRowsCount = rateOfferRows.length;
     if (rateOfferRows.length) {
-      const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
-      const DEL_CHUNK = 200;
-      for (let i = 0; i < pkgIds.length; i += DEL_CHUNK) {
-        const slice = pkgIds.slice(i, i + DEL_CHUNK);
-        const { error } = await sb.from("hotel_rate_offers").delete().in("package_id", slice);
-        if (error) rateOfferErrors.push(`delete: ${error.message}`);
-      }
-      const INS_CHUNK = 200;
-      for (let i = 0; i < rateOfferRows.length; i += INS_CHUNK) {
-        const slice = rateOfferRows.slice(i, i + INS_CHUNK);
-        const { error, data } = await sb.from("hotel_rate_offers")
-          .upsert(slice, { onConflict: "offer_id" })
-          .select("offer_id");
-        if (error) {
-          rateOfferErrors.push(`upsert chunk ${i}: ${error.message}`);
-        } else {
-          rateOffersInserted += data?.length ?? 0;
+      const persistRateOffers = (async () => {
+        try {
+          const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
+          const DEL_CHUNK = 200;
+          for (let i = 0; i < pkgIds.length; i += DEL_CHUNK) {
+            const slice = pkgIds.slice(i, i + DEL_CHUNK);
+            await sb.from("hotel_rate_offers").delete().in("package_id", slice);
+          }
+          const INS_CHUNK = 200;
+          for (let i = 0; i < rateOfferRows.length; i += INS_CHUNK) {
+            const slice = rateOfferRows.slice(i, i + INS_CHUNK);
+            await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
+          }
+        } catch (e) {
+          console.error("[start_pricing v6] rate offer persistence error:", e);
         }
+      })();
+      // deno-lint-ignore no-explicit-any
+      const er = (globalThis as any).EdgeRuntime;
+      if (er && typeof er.waitUntil === "function") {
+        er.waitUntil(persistRateOffers);
+      } else {
+        persistRateOffers.catch((e) => console.error("[start_pricing v6] rate offer persistence fallback error:", e));
       }
     }
 
@@ -707,9 +719,8 @@ serve(async (req) => {
         live_priced: hotelLive,
         live_fallback_to_mock: hotelFallback,
         mock_priced: hotelMock,
-        rate_offers_extracted: rateOfferRows.length,
-        rate_offers_inserted: rateOffersInserted,
-        rate_offer_errors: rateOfferErrors,
+        rate_offers_extracted: rateOfferRowsCount,
+        rate_offers_persistence: rateOfferRowsCount > 0 ? "deferred_via_waituntil" : "n/a",
       },
       flights: {
         unique_routes: uniqueDestinations.length,
@@ -722,7 +733,7 @@ serve(async (req) => {
     }, null, 2), { status: 200, headers });
 
   } catch (e) {
-    console.error("start_pricing v5 error:", e);
+    console.error("start_pricing v6 error:", e);
     return new Response(JSON.stringify({
       version: VERSION, error: String((e as any)?.message ?? e),
     }, null, 2), { status: 500, headers });
