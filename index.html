@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-flight-ui" />
-<meta name="kt-build" content="20260514-flight-ui" />
+<link rel="stylesheet" href="/styles.css?v=20260514-poll-fix" />
+<meta name="kt-build" content="20260514-poll-fix" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1612,14 +1612,14 @@
         // Combined liveness: flights AND hotels both need to be liteapi.
         // We count progress on the sum so the poll keeps running while the
         // hotel top-up worker is upgrading packages from mock -> liteapi.
+        // Note: get_packages always filters to liteapi+liteapi when
+        // strict_live_only=true is sent, so flightLive === total and
+        // hotelLive === total are TRUE the moment any packages appear.
+        // The meaningful progress signal is the size of `allPackages` —
+        // we keep polling while that's still growing.
         const flightLive = allPackages.filter((p) => p.flight_supplier === "liteapi").length;
         const hotelLive = allPackages.filter((p) => p.hotel_supplier === "liteapi").length;
-        const live = flightLive + hotelLive; // composite progress signal
-
-        // Done: backend says it's no longer warming up, or every package
-        // is fully live on both sides.
-        if (lastIsWarmingUp === false) return;
-        if (flightLive === total && hotelLive === total) return;
+        const live = total; // every returned package is live under strict_live_only
 
         // No progress for two consecutive polls (after a 30s grace period) — the
         // background workers have likely settled on no-data for the rest.
@@ -1892,11 +1892,31 @@
 
     sidebar.classList.toggle("collapsed", window.__sidebarCollapsedMobile === true);
     sidebar.innerHTML = renderSidebar();
+
+    // Distinguish "still loading live prices" (no allPackages yet) from
+    // "user's filters are too tight" (allPackages exists but everything
+    // got filtered out). With strict_live_only=true, allPackages stays
+    // empty until LiteAPI prices land — blaming the user's filters
+    // during that window is misleading.
+    let emptyBlock = "";
+    if (visible.length === 0) {
+      if (allPackages.length === 0) {
+        emptyBlock = `<div class="empty">
+          <h3>Finding live prices for your family…</h3>
+          <p>We're pricing flights and rooms for your dates across 35 Caribbean countries. First results usually appear within ~30 seconds.</p>
+        </div>`;
+      } else {
+        emptyBlock = `<div class="empty">
+          <h3>Nothing matches those filters.</h3>
+          <p>${allPackages.length} live trips were priced, but none match your current filters. Try clearing the kids-club, all-inclusive, or country filters.</p>
+        </div>`;
+      }
+    }
     main.innerHTML =
       renderResultBar(filtered.length) +
       renderActiveFilterPills() +
       (visible.length === 0
-        ? `<div class="empty"><h3>Nothing matches those filters.</h3><p>Try clearing a filter or two — your constraints might be too tight.</p></div>`
+        ? emptyBlock
         : visible.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join(""));
   }
 
