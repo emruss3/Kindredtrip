@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-both-legs-sticky" />
-<meta name="kt-build" content="20260514-both-legs-sticky" />
+<link rel="stylesheet" href="/styles.css?v=20260514-widget-resync" />
+<meta name="kt-build" content="20260514-widget-resync" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1574,6 +1574,10 @@
       }
       if (pendingRoutes > 0 || topUpDispatched) {
         pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
+      } else {
+        // No background work pending. Hide the progress widget so the
+        // user sees the final results state instead of a stuck widget.
+        hidePricingProgress();
       }
     } catch (err) {
       console.error(err);
@@ -1817,6 +1821,10 @@
   async function fetchAndRender() {
     setStatus("Ranking the results…", { spinner: true });
     const data = await refetchPackages();
+    // Refresh the progress widget too — phase 1 may have exited before
+    // any poll tick ran (start_pricing returns quickly when its backend
+    // chain has already done the work), leaving the bar stuck at 0%.
+    if (data?.summary) showPricingProgress(data.summary);
     updateResultStatus(data);
   }
 
