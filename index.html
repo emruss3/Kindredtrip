@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-room-photos-flights" />
-<meta name="kt-build" content="20260514-room-photos-flights" />
+<link rel="stylesheet" href="/styles.css?v=20260514-room-photos-by-name" />
+<meta name="kt-build" content="20260514-room-photos-by-name" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2513,9 +2513,9 @@
     if (p.has_any_refundable) {
       badges.push(`<span class="badge"><span class="emoji">↩</span>Refundable</span>`);
     }
-    if (p.hotel_offer_count && p.hotel_offer_count > 1) {
-      badges.push(`<span class="badge muted">${p.hotel_offer_count} room options</span>`);
-    }
+    // Room option count omitted from card badges — it's a backend
+    // signal, not a useful selling point. Surfaced in the modal where
+    // users actually browse rooms.
 
     const stopsStr = p.stops != null
       ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
@@ -3544,8 +3544,12 @@
     if (!hotelId) return;
     try {
       const data = await callFn(`get_room_photos?hotel_id=${encodeURIComponent(hotelId)}`, { method: "GET" });
-      if (data && data.room_photos && typeof data.room_photos === "object") {
-        currentModalRoomPhotos = data.room_photos;
+      if (data) {
+        currentModalRoomPhotos = {
+          by_id: data.room_photos || {},
+          by_name: data.room_photos_by_name || {},
+          hotel: data.hotel_photos || [],
+        };
         // If rooms are already rendered, re-render to pick up the real photos.
         const grid = document.getElementById("room-options-grid");
         if (grid && currentModalRooms.length) {
@@ -3608,22 +3612,24 @@
     const total = fmtMoney(o.total_price);
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
 
-    // Photo strategy:
-    //   1. Prefer the actual room photo from LiteAPI's hotel detail
-    //      (loaded async via get_room_photos). Matched by roomTypeId.
-    //   2. Fall back to a resort gallery photo (rotated by index) so
-    //      every card has a visual anchor before/instead of the real
-    //      room photo. Caption clarifies "Resort view" vs "Room photo".
+    // Photo strategy (priority order):
+    //   1. Real room photo from LiteAPI matched by normalized room name
+    //      (e.g. "double luxury room" → "double luxury room").
+    //   2. Real room photo matched by room_type_id (rate-specific IDs
+    //      rarely match LiteAPI's catalog IDs, but try anyway).
+    //   3. Rotating resort gallery photo as a visual anchor.
+    // Caption tells the user which source they're seeing.
     const roomTypeId = o.room_type_id != null ? String(o.room_type_id) : null;
-    const roomSpecificPhotos = roomTypeId && currentModalRoomPhotos[roomTypeId]
-      ? currentModalRoomPhotos[roomTypeId]
+    const normName = (o.room_name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    const byName = (currentModalRoomPhotos.by_name || {})[normName] || [];
+    const byId = roomTypeId && currentModalRoomPhotos.by_id
+      ? (currentModalRoomPhotos.by_id[roomTypeId] || [])
       : [];
     let photo = null;
     let isRoomPhoto = false;
-    if (roomSpecificPhotos.length > 0) {
-      photo = roomSpecificPhotos[0];
-      isRoomPhoto = true;
-    } else {
+    if (byName.length > 0) { photo = byName[0]; isRoomPhoto = true; }
+    else if (byId.length > 0) { photo = byId[0]; isRoomPhoto = true; }
+    else {
       const refs = currentModalPhotoRefs || [];
       if (refs.length > 0) {
         photo = `/photo?ref=${encodeURIComponent(refs[index % refs.length])}&w=400`;
