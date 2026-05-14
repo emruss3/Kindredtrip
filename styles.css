@@ -2596,13 +2596,6 @@ body:not(.has-results) #results-wrap { display: none; }
 .pricing-progress-counters b { color: var(--ink); font-weight: 600; }
 .pricing-progress-counters .live-count { color: #1f6c43; }
 .pricing-progress-counters .live-count b { color: #1f6c43; }
-.pricing-progress-elapsed-wrap {
-  color: var(--ink-3);
-  margin-left: auto;
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-#pricing-progress-elapsed { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
 .pricing-progress-label { display: none; } /* legacy class kept for older render paths */
 .pricing-progress-dot {
   width: 8px;
