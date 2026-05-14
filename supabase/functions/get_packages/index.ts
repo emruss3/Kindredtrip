@@ -1,7 +1,22 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v7_cap_fields";
+const VERSION = "get_packages_v10_full_pkg_fields";
+
+// v10 (2026-05-14):
+//   Added the package-level fields the frontend filter / modal relies
+//   on but that were missing from the SELECT in v9:
+//     - has_any_ai, has_any_refundable
+//     - hotel_offer_count, hotel_offer_id
+//     - flight_offer_count, flight_offer_id, flight_route_id
+//     - cheapest_offer_id, cheapest_ai_offer_id, cheapest_ai_total
+//     - cheapest_refundable_offer_id, cheapest_refundable_total
+//     - max_offer_occupancy
+//   Without has_any_ai, the frontend AI filter dropped every
+//   liteapi-priced package because `undefined !== true` is always true.
+//
+// v9 (2026-05-13) — kept: live_only=true default with warmup fallback
+//   (skipped when strict_live_only=true).
 
 function corsHeaders() {
   return {
@@ -13,7 +28,6 @@ function corsHeaders() {
 
 serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
-
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
 
   try {
@@ -21,6 +35,8 @@ serve(async (req) => {
     let limit = 25;
     let offset = 0;
     let only_priced = false;
+    let live_only = true;
+    let strict_live_only = false;
     let sort_by: "score" | "price_asc" | "price_desc" = "score";
 
     if (req.method === "GET") {
@@ -29,6 +45,10 @@ serve(async (req) => {
       limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25", 10), 1000);
       offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
       only_priced = url.searchParams.get("only_priced") === "true";
+      const lo = url.searchParams.get("live_only");
+      if (lo === "false" || lo === "0") live_only = false;
+      const slo = url.searchParams.get("strict_live_only");
+      if (slo === "true" || slo === "1") strict_live_only = true;
       const sb = url.searchParams.get("sort_by");
       if (sb === "price_asc" || sb === "price_desc" || sb === "score") sort_by = sb;
     } else if (req.method === "POST") {
@@ -37,6 +57,8 @@ serve(async (req) => {
       limit = Math.min(body.limit ?? 25, 1000);
       offset = body.offset ?? 0;
       only_priced = body.only_priced === true;
+      if (body.live_only === false) live_only = false;
+      if (body.strict_live_only === true) strict_live_only = true;
       if (["score", "price_asc", "price_desc"].includes(body.sort_by)) sort_by = body.sort_by;
     } else {
       return new Response(JSON.stringify({ version: VERSION, error: "Use GET or POST" }), { status: 405, headers });
@@ -51,18 +73,36 @@ serve(async (req) => {
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: search, error: sErr } = await sb
-      .from("searches")
-      .select("*")
-      .eq("search_id", search_id)
-      .maybeSingle();
+      .from("searches").select("*").eq("search_id", search_id).maybeSingle();
     if (sErr) throw sErr;
     if (!search) return new Response(JSON.stringify({ version: VERSION, error: "Search not found" }), { status: 404, headers });
 
     const { data: job } = await sb
-      .from("search_jobs")
-      .select("status, flights_done, error")
-      .eq("search_id", search_id)
-      .maybeSingle();
+      .from("search_jobs").select("status, flights_done, error")
+      .eq("search_id", search_id).maybeSingle();
+
+    const { data: stats } = await sb
+      .from("packages")
+      .select("flight_price, hotel_price, total_price, flight_supplier, hotel_supplier", { count: "exact" })
+      .eq("search_id", search_id);
+
+    const total = stats?.length ?? 0;
+    const with_flight = stats?.filter((p: any) => p.flight_price != null).length ?? 0;
+    const with_hotel = stats?.filter((p: any) => p.hotel_price != null).length ?? 0;
+    const fully_priced = stats?.filter((p: any) => p.total_price != null).length ?? 0;
+    const live_packages = stats?.filter((p: any) =>
+      p.hotel_supplier === "liteapi" && p.flight_supplier === "liteapi"
+    ).length ?? 0;
+    const mock_packages = total - live_packages;
+
+    let effective_live_only = live_only;
+    let is_warming_up = false;
+    if (live_only && !strict_live_only) {
+      if (live_packages === 0 && fully_priced > 0) {
+        effective_live_only = false;
+        is_warming_up = true;
+      }
+    }
 
     let q = sb
       .from("packages")
@@ -89,6 +129,19 @@ serve(async (req) => {
         hotel_booking_url,
         flight_booking_url,
         priced_at,
+        has_any_ai,
+        has_any_refundable,
+        hotel_offer_count,
+        hotel_offer_id,
+        flight_offer_count,
+        flight_offer_id,
+        flight_route_id,
+        cheapest_offer_id,
+        cheapest_ai_offer_id,
+        cheapest_ai_total,
+        cheapest_refundable_offer_id,
+        cheapest_refundable_total,
+        max_offer_occupancy,
         resorts (
           resort_name,
           country,
@@ -144,10 +197,12 @@ serve(async (req) => {
       `, { count: "exact" })
       .eq("search_id", search_id);
 
-    if (only_priced) {
+    if (only_priced || effective_live_only || is_warming_up) {
       q = q.not("total_price", "is", null);
     }
-
+    if (effective_live_only) {
+      q = q.eq("hotel_supplier", "liteapi").eq("flight_supplier", "liteapi");
+    }
     if (sort_by === "price_asc") {
       q = q.order("total_price", { ascending: true, nullsFirst: false });
     } else if (sort_by === "price_desc") {
@@ -159,16 +214,6 @@ serve(async (req) => {
 
     const { data: packages, error: pErr, count } = await q;
     if (pErr) throw pErr;
-
-    const { data: stats } = await sb
-      .from("packages")
-      .select("flight_price, hotel_price, total_price", { count: "exact" })
-      .eq("search_id", search_id);
-
-    const total = stats?.length ?? 0;
-    const with_flight = stats?.filter((p: any) => p.flight_price != null).length ?? 0;
-    const with_hotel = stats?.filter((p: any) => p.hotel_price != null).length ?? 0;
-    const fully_priced = stats?.filter((p: any) => p.total_price != null).length ?? 0;
 
     return new Response(
       JSON.stringify({
@@ -189,16 +234,21 @@ serve(async (req) => {
           with_flight_price: with_flight,
           with_hotel_price: with_hotel,
           fully_priced,
+          live_packages,
+          mock_packages,
           pricing_complete_pct: total > 0 ? Math.round((fully_priced / total) * 100) : 0,
+          live_pct: total > 0 ? Math.round((live_packages / total) * 100) : 0,
         },
         pagination: {
-          limit,
-          offset,
+          limit, offset,
           total_returned: packages?.length ?? 0,
           total_matching: count ?? 0,
         },
         sort_by,
         only_priced,
+        live_only,
+        effective_live_only,
+        is_warming_up,
         packages: packages ?? [],
       }),
       { status: 200, headers },
