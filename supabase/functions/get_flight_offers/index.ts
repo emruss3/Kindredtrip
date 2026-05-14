@@ -20,7 +20,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_flight_offers_v2";
+const VERSION = "get_flight_offers_v3";
 const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 50;
 
@@ -145,10 +145,16 @@ serve(async (req) => {
     // Fallback: same origin/dest/dates from a sibling route (another
     // search that priced the same itinerary). Useful when this package
     // is mock-priced but cached liteapi data exists for the route.
+    // Fallback: same origin/dest/dates from a sibling route. Useful when
+    // the package's own flight_route_id points at a duplicate route row
+    // whose flight_offers were attached to a sibling instead — production
+    // has 2-3 routes per (origin,dest,date) and only one carries the
+    // actual offer rows. We pull every matching sibling and pick the one
+    // whose flight_offers table actually has rows (highest count wins).
     if (offers.length === 0 && pkg.dest_airport_iata) {
       const s = (pkg as any).searches;
       if (s?.origin_iata && s?.date_start && s?.date_end) {
-        const { data: sib } = await sb
+        const { data: sibs } = await sb
           .from("flight_search_routes")
           .select("route_id, origin_iata, dest_iata, departure_date, return_date, adults, children, infants, fetched_at")
           .eq("origin_iata", s.origin_iata)
@@ -157,19 +163,20 @@ serve(async (req) => {
           .eq("return_date", s.date_end)
           .eq("status", "done")
           .order("fetched_at", { ascending: false })
-          .limit(1);
-        const fallbackRoute = (sib ?? [])[0];
-        if (fallbackRoute) {
+          .limit(10);
+        const siblings = (sibs ?? []).filter((r: any) => r.route_id !== routeId);
+        for (const sib of siblings) {
           const { data: fo } = await sb
             .from("flight_offers")
             .select(OFFER_SELECT)
-            .eq("route_id", fallbackRoute.route_id)
+            .eq("route_id", sib.route_id)
             .order("total_price", { ascending: true })
             .limit(limit);
           if (fo && fo.length > 0) {
             offers = fo;
-            routeMeta = fallbackRoute;
+            routeMeta = sib;
             source = "fallback_source_route";
+            break;
           }
         }
       }
