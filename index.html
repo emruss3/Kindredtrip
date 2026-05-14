@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-popover-fix" />
-<meta name="kt-build" content="20260514-popover-fix" />
+<link rel="stylesheet" href="/styles.css?v=20260514-both-legs-sticky" />
+<meta name="kt-build" content="20260514-both-legs-sticky" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3387,18 +3387,27 @@
   const ICON_NO_BAG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/><path d="M5 5l14 14"/></svg>`;
 
   function renderFlightAltInner(tag, o) {
-    const stops = flightStopsLabel(o);
     const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
     const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
     const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
     const refund = o.refundable === true ? "Refundable" : (o.refundable === false ? "Non-refundable" : "");
     const dest = currentModalDestLabel();
+    const outStops = o.outbound_stops != null
+      ? (Number(o.outbound_stops) === 0 ? "Direct" : `${o.outbound_stops} stop${o.outbound_stops === 1 ? "" : "s"}`)
+      : "";
+    const retStops = o.return_stops != null
+      ? (Number(o.return_stops) === 0 ? "Direct" : `${o.return_stops} stop${o.return_stops === 1 ? "" : "s"}`)
+      : "";
+    const stopsLine = outStops && retStops
+      ? `Outbound: ${outStops} · Return: ${retStops}`
+      : (outStops || retStops || "");
     return `
       <div class="flight-option-tag">${escapeHtml(tag)}</div>
       ${airlineLogoMarkup(o, "med")}
       <div class="flight-option-price">${fmtMoney(o.total_price)}</div>
       ${dest ? `<div class="flight-option-dest">${escapeHtml(dest)}</div>` : ""}
-      <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
+      <div class="flight-option-meta">${escapeHtml([airline, durStr].filter(Boolean).join(" · "))}</div>
+      ${stopsLine ? `<div class="flight-option-legs">${escapeHtml(stopsLine)}</div>` : ""}
       <div class="flight-option-bags">${bagsMarkup(o)}</div>
       ${refund ? `<div class="flight-option-note">${escapeHtml(refund)}</div>` : ""}
     `;
@@ -3418,17 +3427,48 @@
     return "";
   }
 
+  function flightLegLine(prefix, depIso, arrIso, durMin, stops, layovers) {
+    const dep = fmtFlightTime(depIso);
+    const arr = fmtFlightTime(arrIso);
+    const time = dep && arr ? `${dep} → ${arr}` : "";
+    const dur = durMin > 0 ? `${Math.floor(durMin / 60)}h${durMin % 60 ? ` ${durMin % 60}m` : ""}` : "";
+    const stopStr = stops == null
+      ? ""
+      : (Number(stops) === 0 ? "Direct" : `${stops} stop${stops === 1 ? "" : "s"}`);
+    const layoverStr = Array.isArray(layovers) && layovers.length ? `via ${layovers.join(", ")}` : "";
+    const parts = [time, stopStr, dur, layoverStr].filter(Boolean).join(" · ");
+    if (!parts) return "";
+    return `<div class="flight-leg"><span class="flight-leg-label">${escapeHtml(prefix)}</span><span class="flight-leg-detail">${escapeHtml(parts)}</span></div>`;
+  }
+
   function renderFlightFullRow(o) {
     const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
-    const stops = flightStopsLabel(o);
-    const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
-    const durStr = durMin > 0 ? `${Math.floor(durMin / 60)}h ${durMin % 60 ? `${durMin % 60}m` : ""}`.trim() : "";
-    const dep = fmtFlightTime(o.outbound_departure_time);
-    const arr = fmtFlightTime(o.outbound_arrival_time);
-    const timeStr = dep && arr ? `${dep} → ${arr}` : "";
-    const layovers = Array.isArray(o.outbound_layover_airports) && o.outbound_layover_airports.length
-      ? `via ${o.outbound_layover_airports.join(", ")}`
+    const outboundLine = flightLegLine(
+      "Outbound",
+      o.outbound_departure_time,
+      o.outbound_arrival_time,
+      Number(o.outbound_duration_minutes ?? 0),
+      o.outbound_stops,
+      o.outbound_layover_airports,
+    );
+    // Return leg only renders if we have its data — some sandbox / one-way
+    // results have null return fields and we don't want a misleading row.
+    const hasReturn = o.return_departure_time || o.return_arrival_time
+      || (o.return_stops != null) || (o.return_duration_minutes != null);
+    const returnLine = hasReturn ? flightLegLine(
+      "Return",
+      o.return_departure_time,
+      o.return_arrival_time,
+      Number(o.return_duration_minutes ?? 0),
+      o.return_stops,
+      o.return_layover_airports,
+    ) : "";
+
+    const totalDurMin = Number(o.total_duration_minutes ?? 0);
+    const totalDurStr = totalDurMin > 0
+      ? `${Math.floor(totalDurMin / 60)}h${totalDurMin % 60 ? ` ${totalDurMin % 60}m` : ""} total travel`
       : "";
+
     const chips = [];
     if (o.refundable === true) chips.push(`<span class="flight-chip refundable">Refundable</span>`);
     if (o.fare_family) chips.push(`<span class="flight-chip">${escapeHtml(String(o.fare_family))}</span>`);
@@ -3437,7 +3477,11 @@
         ${airlineLogoMarkup(o, "sm")}
         <div class="flight-row-main">
           <div class="flight-row-airline">${escapeHtml(airline)}</div>
-          <div class="flight-row-meta">${escapeHtml([stops, durStr, timeStr, layovers].filter(Boolean).join(" · "))}</div>
+          <div class="flight-row-legs">
+            ${outboundLine}
+            ${returnLine}
+          </div>
+          ${totalDurStr ? `<div class="flight-row-total-dur">${escapeHtml(totalDurStr)}</div>` : ""}
           <div class="flight-row-bags">${bagsMarkup(o)}</div>
           ${chips.length ? `<div class="flight-row-chips">${chips.join("")}</div>` : ""}
         </div>
