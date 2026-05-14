@@ -1244,11 +1244,11 @@ button { font-family: inherit; }
 
 /* ---------- Results layout ---------- */
 .results-wrap {
-  max-width: 1200px;
+  max-width: 1480px;
   margin: 0 auto;
   padding: var(--s-8) var(--s-8) var(--s-24);
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: var(--s-8);
 }
 @media (max-width: 980px) {
@@ -1258,9 +1258,17 @@ button { font-family: inherit; }
 .results-sidebar {
   position: sticky;
   top: 88px;
-  max-height: calc(100vh - 110px);
+  /* Account for the sticky pricing-progress widget (sits at top:60px,
+   * ~85-100px tall) PLUS the sticky status banner so the sidebar's
+   * top edge sits below both. Bottom padding lets the last filter
+   * group breathe when the user scrolls to it. */
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
-  padding-bottom: 24px;
+  /* Keep mouse-wheel scrolling inside the sidebar — without this,
+   * scrolling over the sidebar bubbles up to the page once the
+   * sidebar hits its scroll limits. */
+  overscroll-behavior: contain;
+  padding-bottom: 32px;
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
@@ -1656,10 +1664,16 @@ details.rank-explainer > p {
   border-radius: var(--r-md);
   overflow: hidden;
   display: grid;
-  grid-template-columns: 240px 1fr 240px;
+  /* minmax(0, 1fr) lets the body column shrink without grid-blowout
+   * (long airline names, etc.). Photo + price stay fixed; body flexes
+   * to fill remaining width. */
+  grid-template-columns: 260px minmax(0, 1fr) 240px;
   gap: 0;
   cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+@media (max-width: 1100px) {
+  .card { grid-template-columns: 220px minmax(0, 1fr) 220px; }
 }
 .card:hover {
   box-shadow: var(--shadow-md);
