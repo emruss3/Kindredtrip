@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-live-counts" />
-<meta name="kt-build" content="20260514-live-counts" />
+<link rel="stylesheet" href="/styles.css?v=20260514-eligible-counter" />
+<meta name="kt-build" content="20260514-eligible-counter" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1738,25 +1738,38 @@
     const fully = Number(summary?.fully_priced) || 0;
     const live = Number(summary?.live_packages) || 0;
 
-    // Headline progress bar tracks the strongest signal (live, both-sides).
+    // Progress signal: use `rooms priced` as the primary bar metric.
+    // `live_packages` sits at 0 for the first ~10-15s of a search while
+    // start_pricing's LiteAPI hotel loop hasn't begun — which makes the
+    // bar look stuck. `rooms` starts growing as soon as the first LiteAPI
+    // batch lands and reaches 100% well before `live` does. The `fully
+    // live` counter below the bar shows the deeper signal for users who
+    // want it.
     const denom = total > 0 ? total : 1;
-    const pct = Math.min(100, Math.round((live / denom) * 100));
+    const pct = Math.min(100, Math.round((rooms / denom) * 100));
 
-    // Phase label: which stage of work is actually in flight?
-    //   - Stage A: process_search_batch seeds packages with mock flight
-    //     prices (rooms stay 0). Fast — ~2-3s.
-    //   - Stage B: start_pricing fetches LiteAPI hotel rates and upgrades
-    //     flight prices from cache. Rooms grow 0 -> total. ~20s.
-    //   - Stage C: top_up_hotels_worker upgrades the remaining mock
-    //     packages to liteapi. live grows toward total. ~30-60s.
+    // Phase label calls out the eligibility count up front so users see
+    // their filters were honored at the seed stage. Stage progression:
+    //   - Stage 0: no packages yet (still seeding eligibility list)
+    //   - Stage A: packages seeded, no LiteAPI calls yet
+    //   - Stage B: LiteAPI hotel rates landing
+    //   - Stage C: top-up worker upgrading remaining trips to fully live
+    //   - Stage D: all done, finalizing
     let stage;
-    if (flights === 0 && rooms === 0) stage = "Seeding resorts across 35 Caribbean countries…";
-    else if (rooms < total) stage = "Pricing rooms with our partner network…";
-    else if (live < total) stage = "Upgrading remaining trips to live rates…";
-    else stage = "Finalizing your ranked list…";
+    if (total === 0) {
+      stage = "Finding eligible resorts across 35 Caribbean countries…";
+    } else if (rooms === 0) {
+      stage = `${total.toLocaleString()} trips eligible for your filters · pricing rooms…`;
+    } else if (rooms < total) {
+      stage = `${total.toLocaleString()} eligible · pricing rooms with our partner network…`;
+    } else if (live < total) {
+      stage = `${total.toLocaleString()} eligible · upgrading remaining trips to live rates…`;
+    } else {
+      stage = "Finalizing your ranked list…";
+    }
 
     const counters = [
-      total > 0 ? `<span><b>${total.toLocaleString()}</b> trips found</span>` : "",
+      total > 0 ? `<span><b>${total.toLocaleString()}</b> eligible</span>` : "",
       flights > 0 ? `<span><b>${flights.toLocaleString()}</b> flights priced</span>` : "",
       rooms > 0 ? `<span><b>${rooms.toLocaleString()}</b> rooms priced</span>` : "",
       live > 0 ? `<span class="live-count"><b>${live.toLocaleString()}</b> fully live</span>` : "",
