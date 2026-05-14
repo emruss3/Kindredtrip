@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-progress-detail" />
-<meta name="kt-build" content="20260514-progress-detail" />
+<link rel="stylesheet" href="/styles.css?v=20260514-progress-slot" />
+<meta name="kt-build" content="20260514-progress-slot" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -666,6 +666,7 @@
 
 <div id="status" class="status"></div>
 
+<div id="pricing-progress-slot" class="pricing-progress-slot" hidden></div>
 <main id="results-wrap" class="results-wrap" hidden>
   <aside class="results-sidebar" id="results-sidebar">
     <!-- Country filter, etc. populated dynamically -->
@@ -1129,6 +1130,8 @@
   let lastSearchId = null;
   let lastSearchSummary = null;
   let lastIsWarmingUp = false;
+  let pricingStartedAt = 0;
+  let pricingElapsedTimer = null;
   let allPackages = [];
   let lastSortBy = "score";
 
@@ -1589,7 +1592,7 @@
     const startedAt = Date.now();
     const HARD_TIMEOUT_MS = 180_000;   // 3 minutes
     const STAGNANT_AFTER_MS = 30_000;  // give it 30s of grace
-    const POLL_INTERVAL_MS = 5_000;
+    const POLL_INTERVAL_MS = 3_000;
     let lastLiveCount = -1;
     let stagnantChecks = 0;
 
@@ -1659,7 +1662,9 @@
     let pricingError = null;
     pricingPromise.then(() => { done = true; }, (err) => { done = true; pricingError = err; });
 
+    pricingStartedAt = Date.now();
     showPricingProgress(null, { totalEstimate });
+    startPricingElapsedTimer();
 
     const POLL_INTERVAL_MS = 1500;
     const HARD_CAP_MS = 120_000;  // 2 min safety cap; phase 1 typically finishes in 30-60s
@@ -1714,8 +1719,14 @@
   //   fully_priced, live_packages, mock_packages, pricing_complete_pct,
   //   live_pct
   function showPricingProgress(summary, opts = {}) {
-    const main = document.getElementById("results-main");
-    if (!main) return;
+    // The widget lives in #pricing-progress-slot, a permanent container
+    // OUTSIDE results-main. renderResults frequently wipes results-main
+    // (showing the empty state, cards, etc.) — putting the widget in
+    // its own slot means it stays visible and animating regardless of
+    // what's happening to the cards below.
+    const slot = document.getElementById("pricing-progress-slot");
+    if (!slot) return;
+    slot.hidden = false;
     let widget = document.getElementById("pricing-progress");
     if (!widget) {
       widget = document.createElement("div");
@@ -1723,7 +1734,7 @@
       widget.className = "pricing-progress";
       widget.setAttribute("role", "status");
       widget.setAttribute("aria-live", "polite");
-      main.insertBefore(widget, main.firstChild);
+      slot.appendChild(widget);
     }
     const total = Number(summary?.total_packages) || Number(opts.totalEstimate) || 0;
     const flights = Number(summary?.with_flight_price) || 0;
@@ -1750,6 +1761,7 @@
       live > 0 ? `<span class="live-count"><b>${live.toLocaleString()}</b> fully live</span>` : "",
     ].filter(Boolean).join("");
 
+    const elapsed = pricingStartedAt ? `<span class="pricing-progress-elapsed-wrap">·&nbsp;<span id="pricing-progress-elapsed">0s</span> elapsed</span>` : "";
     widget.innerHTML = `
       <div class="pricing-progress-head">
         <span class="pricing-progress-dot" aria-hidden="true"></span>
@@ -1757,12 +1769,34 @@
         <span class="pricing-progress-pct">${pct}%</span>
       </div>
       <div class="pricing-progress-bar"><div class="pricing-progress-fill" style="width: ${pct}%"></div></div>
-      <div class="pricing-progress-counters">${counters}</div>
+      <div class="pricing-progress-counters">${counters}${elapsed}</div>
     `;
   }
   function hidePricingProgress() {
     const w = document.getElementById("pricing-progress");
     if (w) w.remove();
+    const slot = document.getElementById("pricing-progress-slot");
+    if (slot) slot.hidden = true;
+    stopPricingElapsedTimer();
+  }
+
+  // 1Hz tick that updates only the elapsed-time number in the widget,
+  // separate from the 1.5s/5s package-poll cadence. Gives the widget
+  // visible "live" motion every second so the user never wonders if
+  // anything is happening.
+  function startPricingElapsedTimer() {
+    stopPricingElapsedTimer();
+    pricingElapsedTimer = setInterval(() => {
+      const el = document.getElementById("pricing-progress-elapsed");
+      if (!el || !pricingStartedAt) return;
+      const s = Math.floor((Date.now() - pricingStartedAt) / 1000);
+      const m = Math.floor(s / 60);
+      const ss = s % 60;
+      el.textContent = m > 0 ? `${m}m ${ss}s` : `${ss}s`;
+    }, 1000);
+  }
+  function stopPricingElapsedTimer() {
+    if (pricingElapsedTimer) { clearInterval(pricingElapsedTimer); pricingElapsedTimer = null; }
   }
 
   // Silent refetch — fetches packages, re-renders, returns the response data.
