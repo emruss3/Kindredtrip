@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-eligible-counter" />
-<meta name="kt-build" content="20260514-eligible-counter" />
+<link rel="stylesheet" href="/styles.css?v=20260514-modal-polish" />
+<meta name="kt-build" content="20260514-modal-polish" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1611,7 +1611,10 @@
 
         // Keep the big progress widget visible during phase 2 (top-up
         // worker) so the user sees flights / rooms count climbing.
-        if (data?.summary) showPricingProgress(data.summary);
+        if (data?.summary) {
+          showPricingProgress(data.summary);
+          updateResultStatus(data);
+        }
 
         const total = allPackages.length;
         if (total === 0) continue;
@@ -1814,10 +1817,29 @@
   async function fetchAndRender() {
     setStatus("Ranking the results…", { spinner: true });
     const data = await refetchPackages();
+    updateResultStatus(data);
+  }
+
+  // Re-renders the "We compared X resorts across Y countries" status
+  // line. Called by fetchAndRender (after phase 1) AND from inside the
+  // phase-2 polling loop as more live packages arrive. countCountries
+  // would return 0 in early polls when allPackages is briefly empty —
+  // we fall back to a generic "across the Caribbean" wording so we
+  // never show "0 countries".
+  function updateResultStatus(data) {
+    if (!lastSearchSummary) return;
     const adults = lastSearchSummary?.adults || 2;
     const kids = lastSearchSummary?.child_ages?.length || 0;
     const familyStr = `family of ${adults + kids}` + (kids > 0 ? ` (kids ages ${lastSearchSummary.child_ages.join(", ")})` : "");
-    setStatus(`We compared ${data.summary.fully_priced} resorts across ${countCountries(allPackages)} countries for your ${familyStr}.`);
+    const live = Number(data?.summary?.live_packages) || allPackages.length || 0;
+    const countries = countCountries(allPackages);
+    if (live > 0 && countries > 0) {
+      setStatus(`We found ${live.toLocaleString()} live-priced trips across ${countries} ${countries === 1 ? "country" : "countries"} for your ${familyStr}.`);
+    } else if (live > 0) {
+      setStatus(`We found ${live.toLocaleString()} live-priced trips across the Caribbean for your ${familyStr}.`);
+    } else {
+      setStatus(`Comparing trips across the Caribbean for your ${familyStr}…`, { spinner: true });
+    }
   }
 
   function countCountries(packages) {
@@ -2883,7 +2905,7 @@
         ${liveFlight ? `
         <div class="flight-all-block" id="flight-all-block" hidden>
           <div class="flight-all-head">
-            <h5>All flights for this trip</h5>
+            <h5>All flights ${destAirportLabel ? `to <span class="flight-all-dest">${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}</span>` : "for this trip"}</h5>
             <span class="flight-all-count" id="flight-all-count"></span>
           </div>
           <div class="flight-all-list" id="flight-all-list"></div>
@@ -3325,14 +3347,30 @@
     const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
     const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
     const refund = o.refundable === true ? "Refundable" : (o.refundable === false ? "Non-refundable" : "");
+    const dest = currentModalDestLabel();
     return `
       <div class="flight-option-tag">${escapeHtml(tag)}</div>
       ${airlineLogoMarkup(o, "med")}
       <div class="flight-option-price">${fmtMoney(o.total_price)}</div>
+      ${dest ? `<div class="flight-option-dest">${escapeHtml(dest)}</div>` : ""}
       <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
       <div class="flight-option-bags">${bagsMarkup(o)}</div>
       ${refund ? `<div class="flight-option-note">${escapeHtml(refund)}</div>` : ""}
     `;
+  }
+
+  // Destination label for the currently-open modal's package, used by
+  // flight cards. Falls back to just the IATA when we don't have the
+  // airport name from the resorts table.
+  function currentModalDestLabel() {
+    const pkg = currentModalPackage;
+    if (!pkg) return "";
+    const code = pkg.dest_airport_iata;
+    const r = pkg.resorts || {};
+    const name = (r.airport_name || "").replace(/\s*\((?:airport|intl|international)\)/i, "").trim();
+    if (name && code) return `Fly to ${name} (${code})`;
+    if (code) return `Fly to ${code}`;
+    return "";
   }
 
   function renderFlightFullRow(o) {
@@ -3387,14 +3425,19 @@
         return;
       }
       if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
-      grid.innerHTML = offers.map(renderRoomOptionCard).join("");
+      grid.innerHTML = offers.map((o, i) => renderRoomOptionCard(o, i)).join("");
     } catch (e) {
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
     }
   }
 
-  function renderRoomOptionCard(o) {
+  // Each room card gets a photo rotated from the resort's photo gallery.
+  // LiteAPI's /hotels/rates response doesn't carry room-specific images,
+  // and adding a per-package /hotels/details call would significantly
+  // slow modal open. Rotating resort photos gives every card a visual
+  // anchor without misrepresenting (we never claim it's the exact room).
+  function renderRoomOptionCard(o, index = 0) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
     const refundable = o.refundable === true;
@@ -3410,19 +3453,50 @@
       : "";
     const total = fmtMoney(o.total_price);
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
+
+    // Photo rotated from the resort gallery — captions clarify it's an
+    // illustrative resort photo, not the exact room.
+    const refs = currentModalPhotoRefs || [];
+    const photo = refs.length > 0
+      ? `/photo?ref=${encodeURIComponent(refs[index % refs.length])}&w=400`
+      : null;
+    const photoBlock = photo
+      ? `<div class="room-option-photo"><img src="${photo}" alt="Resort view" loading="lazy" /><span class="room-option-photo-caption">Resort view</span></div>`
+      : "";
+
+    // Party configuration this rate was priced for ("2 adults" / "2 adults + 2 kids")
+    const adults = Number(o.adult_count) || 0;
+    const kids = Number(o.child_count) || 0;
+    const configLine = adults > 0
+      ? `<div class="room-option-config">Priced for <b>${adults}</b> adult${adults === 1 ? "" : "s"}${kids > 0 ? ` + <b>${kids}</b> kid${kids === 1 ? "" : "s"}` : ""}</div>`
+      : "";
+
+    // Savings indicator if the supplier shows a higher list price
+    const initial = Number(o.initial_price) || 0;
+    const totalNum = Number(o.total_price) || 0;
+    const savings = initial > totalNum && initial > 0 ? Math.round(initial - totalNum) : 0;
+    const savingsRow = savings > 0
+      ? `<div class="room-option-savings">Save <b>${fmtMoney(savings)}</b> vs. ${fmtMoney(initial)} list</div>`
+      : "";
+
     return `
       <article class="room-option-card">
-        <div class="room-option-top">
-          <div class="room-option-name">${escapeHtml(o.room_name || "Room")}</div>
-          <div class="room-option-board ${boardClass}">${escapeHtml(board)}</div>
-        </div>
-        <div class="room-option-chips">
-          ${refundChip}${sleeps}${promo}
-        </div>
-        ${perks}
-        <div class="room-option-price">
-          <div class="room-option-total">${total}</div>
-          ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
+        ${photoBlock}
+        <div class="room-option-body">
+          <div class="room-option-top">
+            <div class="room-option-name">${escapeHtml(o.room_name || "Room")}</div>
+            <div class="room-option-board ${boardClass}">${escapeHtml(board)}</div>
+          </div>
+          ${configLine}
+          <div class="room-option-chips">
+            ${refundChip}${sleeps}${promo}
+          </div>
+          ${perks}
+          <div class="room-option-price">
+            <div class="room-option-total">${total}</div>
+            ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
+            ${savingsRow}
+          </div>
         </div>
       </article>`;
   }
