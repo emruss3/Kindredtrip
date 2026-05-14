@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260513-fix-est-badge" />
-<meta name="kt-build" content="20260513-fix-est-badge" />
+<link rel="stylesheet" href="/styles.css?v=20260514-strict-live" />
+<meta name="kt-build" content="20260514-strict-live" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1668,7 +1668,7 @@
 
       try {
         const data = await callFn(
-          `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
+          `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
           { method: "GET" }
         );
         if (myPollId !== activePollId) return { pricingError: null };
