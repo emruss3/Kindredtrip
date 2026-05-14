@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-composite-bar" />
-<meta name="kt-build" content="20260514-composite-bar" />
+<link rel="stylesheet" href="/styles.css?v=20260514-rooms-pct-default-kid" />
+<meta name="kt-build" content="20260514-rooms-pct-default-kid" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -301,7 +301,7 @@
               </div>
               <div class="stepper" role="group" aria-label="Kids">
                 <button type="button" class="stepper-btn" onclick="adjustKids(-1)" aria-label="Fewer kids">−</button>
-                <span class="stepper-value" id="kids-count-value">0</span>
+                <span class="stepper-value" id="kids-count-value">1</span>
                 <button type="button" class="stepper-btn" onclick="adjustKids(1)" aria-label="More kids">+</button>
               </div>
             </div>
@@ -951,7 +951,9 @@
   // Kids count model — each entry is the age in years (default 8). Drives both
   // the inline per-kid age selects and the hidden #child_ages CSV the rest of
   // the codebase already reads.
-  let kidsAges = [];
+  // Default: 2 adults + 1 kid (age 8 — most common family-vacation
+  // configuration). Updated by adjustKids / setKidAge as user edits.
+  let kidsAges = [8];
   function adjustKids(delta) {
     const display = document.getElementById("kids-count-value");
     if (!display) return;
@@ -1744,16 +1746,16 @@
     const fully = Number(summary?.fully_priced) || 0;
     const live = Number(summary?.live_packages) || 0;
 
-    // Progress signal: composite of rooms-priced + fully-live. Each
-    // contributes equally so the bar keeps climbing through BOTH phases:
-    //   - Phase 1 (LiteAPI hotel calls): rooms grows 0 -> total,
-    //     contributing 50% of the bar.
-    //   - Phase 2 (top-up worker): live grows from the phase-1 baseline
-    //     to total, contributing the remaining 50%.
-    // A single signal stalls visually in one phase or the other; this
-    // composite stays in motion the whole time.
-    const denom = total > 0 ? total * 2 : 1;
-    const pct = Math.min(100, Math.round(((rooms + live) / denom) * 100));
+    // Progress bar tracks rooms-priced as the primary signal. It reaches
+    // 100% when start_pricing finishes seeding prices (mix of liteapi +
+    // mock fallback). The "fully live" counter and the stage label
+    // ("Upgrading remaining trips to live rates… (X of Y)") carry the
+    // phase-2 progress signal — top-up worker upgrading mock to liteapi.
+    // We tried a composite (rooms+live)/(2*total) but it plateaus
+    // below 100% whenever some hotels can't be priced by LiteAPI,
+    // leaving the bar visibly "stuck".
+    const denom = total > 0 ? total : 1;
+    const pct = Math.min(100, Math.round((rooms / denom) * 100));
 
     // Phase label calls out the eligibility count up front so users see
     // their filters were honored at the seed stage. Stage progression:
@@ -1770,9 +1772,9 @@
     } else if (rooms < total) {
       stage = `${total.toLocaleString()} eligible · pricing rooms with our partner network…`;
     } else if (live < total) {
-      stage = `${total.toLocaleString()} eligible · upgrading remaining trips to live rates…`;
+      stage = `${total.toLocaleString()} eligible · upgrading to live rates (${live.toLocaleString()} of ${total.toLocaleString()})…`;
     } else {
-      stage = "Finalizing your ranked list…";
+      stage = `${total.toLocaleString()} trips ready · all live rates`;
     }
 
     const countries = countCountries(allPackages);
@@ -3816,6 +3818,11 @@
 
   // Initial population — runs after all const/let declarations above are initialized
   syncHomepageDestinationChips();
+  // Render the default kid age picker (defaults to 1 kid age 8) +
+  // sync the hidden #child_ages CSV so a fresh page-load submission
+  // posts the right party shape.
+  renderKidsAges();
+  syncKidsHiddenInput();
   updateTravelersDisplay();
 
   // Pre-fill the search form when a homepage SEO link (or family-decision
