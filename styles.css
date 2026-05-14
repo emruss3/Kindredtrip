@@ -2480,6 +2480,11 @@ details.rank-explainer > p {
 }
 
 /* ---------- Animations ---------- */
+/* fade-in: animation ends with transform: none so the element does NOT
+ * establish a containing block for position:fixed descendants. (The
+ * travelers popover is position:fixed inside the search form; if the
+ * form retained any transform value — even translateY(0) — the popover
+ * would be positioned relative to the form instead of the viewport.) */
 .fade-in {
   opacity: 0;
   transform: translateY(8px);
@@ -2489,7 +2494,8 @@ details.rank-explainer > p {
 .fade-in.delay-2 { animation-delay: 0.1s; }
 .fade-in.delay-3 { animation-delay: 0.15s; }
 @keyframes fadeUp {
-  to { opacity: 1; transform: translateY(0); }
+  50%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 1; transform: none; }
 }
 
 /* Hide marketing sections when results are present */
