@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-wider-layout" />
-<meta name="kt-build" content="20260514-wider-layout" />
+<link rel="stylesheet" href="/styles.css?v=20260514-room-photos-flights" />
+<meta name="kt-build" content="20260514-room-photos-flights" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2648,10 +2648,13 @@
     if (t.rooms.includes("Family Suite")) { score += 2; reasons.push("Family suites"); }
     if (t.rooms.includes("2 Bedroom Suites")) { score += 2; reasons.push("Two-bedroom suites"); }
     if (t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) { score += 1; reasons.push(r.guaranteed_connecting_rooms ? "Guaranteed connecting rooms" : "Connecting rooms"); }
-    if (t.amenities.includes("Lazy River") || t.amenities.includes("Pool Slide") || r.water_park
-        || t.amenities.includes("Waterpark For Little Kids") || t.amenities.includes("Waterpark For Big Kids")) {
-      score += 1; reasons.push("Water play");
-    }
+    // Specific water amenities — listed by name when present so users
+    // see the actual feature, not a generic "Water play" placeholder.
+    if (t.amenities.includes("Waterpark For Little Kids")) { score += 1; reasons.push("Waterpark for little kids"); }
+    else if (t.amenities.includes("Waterpark For Big Kids")) { score += 1; reasons.push("Waterpark for big kids"); }
+    else if (r.water_park) { score += 1; reasons.push("Water park"); }
+    if (t.amenities.includes("Lazy River")) { score += 1; reasons.push("Lazy river"); }
+    if (t.amenities.includes("Pool Slide")) { score += 1; reasons.push("Pool slide"); }
     if (r.accepts_infants) reasons.push("Accepts infants");
     let label = "Decent fit";
     if (score >= 6) label = "Excellent";
@@ -2948,12 +2951,12 @@
         </div>
         ${liveFlight ? `
         <div class="flight-all-block" id="flight-all-block" hidden>
-          <button type="button" class="flight-all-toggle" id="flight-all-toggle" onclick="toggleAllFlights()" aria-expanded="false">
-            <span class="flight-all-toggle-label">Show more flights ${destAirportLabel ? `to ${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}` : ""}</span>
+          <button type="button" class="flight-all-toggle" id="flight-all-toggle" onclick="toggleAllFlights()" aria-expanded="true">
+            <span class="flight-all-toggle-label">Hide other flights ${destAirportLabel ? `to ${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}` : ""}</span>
             <span class="flight-all-count" id="flight-all-count"></span>
             <span class="flight-all-toggle-caret" aria-hidden="true">▾</span>
           </button>
-          <div class="flight-all-list" id="flight-all-list" hidden></div>
+          <div class="flight-all-list" id="flight-all-list"></div>
         </div>` : ""}
       </div>`;
 
@@ -3199,7 +3202,13 @@
     document.body.style.overflow = "hidden";
     modal.scrollTop = 0;
 
-    if (liveHotel) loadRoomOptions(pkg.package_id);
+    // Reset the room-photo cache before kicking off the next fetch so
+    // a stale set from a previous modal can't leak into this resort.
+    currentModalRoomPhotos = {};
+    if (liveHotel) {
+      loadRoomOptions(pkg.package_id);
+      loadRoomPhotosForModal(pkg.package_id);
+    }
     if (liveFlight) loadFlightOptions(pkg.package_id);
   }
 
@@ -3521,6 +3530,34 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
+  // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by
+  // renderRoomOptionCard to pick a room-specific image instead of the
+  // rotating resort photo fallback.
+  let currentModalRoomPhotos = {};
+
+  // Kick off the LiteAPI room-photo fetch in parallel with the package
+  // load. We don't block on it — if it returns after the cards render,
+  // we just re-render to swap in the better photos.
+  async function loadRoomPhotosForModal(packageId) {
+    const pkg = currentModalPackage;
+    const hotelId = pkg?.resorts?.liteapi_hotel_id;
+    if (!hotelId) return;
+    try {
+      const data = await callFn(`get_room_photos?hotel_id=${encodeURIComponent(hotelId)}`, { method: "GET" });
+      if (data && data.room_photos && typeof data.room_photos === "object") {
+        currentModalRoomPhotos = data.room_photos;
+        // If rooms are already rendered, re-render to pick up the real photos.
+        const grid = document.getElementById("room-options-grid");
+        if (grid && currentModalRooms.length) {
+          grid.innerHTML = currentModalRooms.map((o, i) =>
+            renderRoomOptionCard(o, i, currentModalSelectedRoomId)
+          ).join("");
+        }
+      }
+    } catch (e) {
+      console.warn("get_room_photos failed:", e?.message || e);
+    }
+  }
 
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
@@ -3571,14 +3608,29 @@
     const total = fmtMoney(o.total_price);
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
 
-    // Photo rotated from the resort gallery — captions clarify it's an
-    // illustrative resort photo, not the exact room.
-    const refs = currentModalPhotoRefs || [];
-    const photo = refs.length > 0
-      ? `/photo?ref=${encodeURIComponent(refs[index % refs.length])}&w=400`
-      : null;
+    // Photo strategy:
+    //   1. Prefer the actual room photo from LiteAPI's hotel detail
+    //      (loaded async via get_room_photos). Matched by roomTypeId.
+    //   2. Fall back to a resort gallery photo (rotated by index) so
+    //      every card has a visual anchor before/instead of the real
+    //      room photo. Caption clarifies "Resort view" vs "Room photo".
+    const roomTypeId = o.room_type_id != null ? String(o.room_type_id) : null;
+    const roomSpecificPhotos = roomTypeId && currentModalRoomPhotos[roomTypeId]
+      ? currentModalRoomPhotos[roomTypeId]
+      : [];
+    let photo = null;
+    let isRoomPhoto = false;
+    if (roomSpecificPhotos.length > 0) {
+      photo = roomSpecificPhotos[0];
+      isRoomPhoto = true;
+    } else {
+      const refs = currentModalPhotoRefs || [];
+      if (refs.length > 0) {
+        photo = `/photo?ref=${encodeURIComponent(refs[index % refs.length])}&w=400`;
+      }
+    }
     const photoBlock = photo
-      ? `<div class="room-option-photo"><img src="${photo}" alt="Resort view" loading="lazy" /><span class="room-option-photo-caption">Resort view</span></div>`
+      ? `<div class="room-option-photo"><img src="${escapeHtml(photo)}" alt="${isRoomPhoto ? "Room photo" : "Resort view"}" loading="lazy" /><span class="room-option-photo-caption">${isRoomPhoto ? "Room photo" : "Resort view"}</span></div>`
       : "";
 
     // Party configuration this rate was priced for ("2 adults" / "2 adults + 2 kids")
