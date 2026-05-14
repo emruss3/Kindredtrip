@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-rooms-pct-default-kid" />
-<meta name="kt-build" content="20260514-rooms-pct-default-kid" />
+<link rel="stylesheet" href="/styles.css?v=20260514-always-poll" />
+<meta name="kt-build" content="20260514-always-poll" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1574,13 +1574,21 @@
           topUpDispatched = Boolean(pricingResult?.top_up_dispatched);
         } catch { /* fall through — leave pendingRoutes at 0 */ }
       }
-      if (pendingRoutes > 0 || topUpDispatched) {
-        pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
-      }
-      // Widget stays visible at its final state (composite pct ~100%
-      // and final counters) so the user has a persistent header showing
-      // engine results. It coexists with the sticky status banner via
-      // z-index stacking.
+      // Always run phase-2 polling, regardless of top_up_dispatched.
+      // The frontend's start_pricing call frequently returns early
+      // (because process_search_batch has already chained to its OWN
+      // start_pricing on the backend, and the job is in progress) —
+      // leaving pricingResult without top_up_dispatched. If we only
+      // ran phase 2 when that flag was truthy, polling would never
+      // start, and the widget would freeze on whatever state existed
+      // when the early-return response came back.
+      //
+      // pollUntilFlightsReal has its own stagnation detection that
+      // exits cleanly when allPackages.length stops growing, so
+      // running it unconditionally costs at most ~30s of polling.
+      pollUntilFlightsReal().catch((e) => console.error("[pricing poll] error:", e));
+      // Widget stays visible at its final state (counters + countries)
+      // as the persistent sticky header.
     } catch (err) {
       console.error(err);
       showError(err.message || String(err));
