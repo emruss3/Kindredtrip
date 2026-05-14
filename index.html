@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-strict-live" />
-<meta name="kt-build" content="20260514-strict-live" />
+<link rel="stylesheet" href="/styles.css?v=20260514-flight-ui" />
+<meta name="kt-build" content="20260514-flight-ui" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1728,7 +1728,7 @@
   // Used by both fetchAndRender (with status text) and the pricing poll (silent).
   async function refetchPackages() {
     const data = await callFn(
-      `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&sort_by=${lastSortBy}`,
+      `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
     // Track top-level is_warming_up so the polling banner can stop in
@@ -2763,7 +2763,7 @@
     const flightOptions = `
       <div class="modal-section flight-options" id="flight-options-section">
         <h4>Flight options for this resort ${flightCountNote}</h4>
-        <div class="flight-option-grid" id="flight-option-grid">
+        <div class="flight-option-grid" id="flight-option-grid" onclick="onFlightOptionClick(event)">
           <article class="flight-option active">
             <div class="flight-option-tag">Best overall</div>
             <div class="flight-option-price">${fmtMoney(pkg.flight_price)}${liveFlight ? "" : ` <span class="flight-option-est">est.</span>`}</div>
@@ -3050,48 +3050,136 @@
   //   1. The three Top-picks cards (Best / Cheapest / Easiest)
   //   2. The full "All flights" list below, sorted cheapest first
   // get_flight_offers returns up to 15 offers with full segment data.
+  // Clicking any row in (2) swaps that flight into the "Best overall"
+  // card and updates the modal totals — purely client-side preview,
+  // no DB writes.
+  let currentModalFlights = [];
+  let currentModalPicks = null;
+  let currentModalSelectedOfferId = null;
+  let currentModalPackage = null;
+
   async function loadFlightOptions(packageId) {
+    const pkg = allPackages.find((p) => p.package_id === packageId);
+    currentModalPackage = pkg || null;
     const cheapEl = document.getElementById("flight-cheapest");
     const easyEl = document.getElementById("flight-easiest");
     const allBlock = document.getElementById("flight-all-block");
     const allList = document.getElementById("flight-all-list");
-    const allCount = document.getElementById("flight-all-count");
     if (!cheapEl && !easyEl && !allBlock) return;
     try {
       const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}&limit=15`, { method: "GET" });
-      const picks = data?.picks;
-      const offers = Array.isArray(data?.offers) ? data.offers : [];
+      currentModalPicks = data?.picks || null;
+      currentModalFlights = Array.isArray(data?.offers) ? data.offers : [];
+      currentModalSelectedOfferId = currentModalPicks?.best?.offer_id || currentModalFlights[0]?.offer_id || null;
 
-      // Render top picks (or hide if none).
-      if (picks?.cheapest && cheapEl) {
+      if (currentModalPicks?.cheapest && cheapEl) {
         cheapEl.classList.remove("loading");
-        cheapEl.innerHTML = renderFlightAltInner("Cheapest", picks.cheapest);
+        cheapEl.innerHTML = renderFlightAltInner("Cheapest", currentModalPicks.cheapest);
+        cheapEl.dataset.offerId = currentModalPicks.cheapest.offer_id;
+        cheapEl.classList.add("clickable");
       } else if (cheapEl) {
         cheapEl.style.display = "none";
       }
-      if (picks?.easiest && easyEl) {
+      if (currentModalPicks?.easiest && easyEl) {
         easyEl.classList.remove("loading");
-        easyEl.innerHTML = renderFlightAltInner("Easiest with kids", picks.easiest);
+        easyEl.innerHTML = renderFlightAltInner("Easiest with kids", currentModalPicks.easiest);
+        easyEl.dataset.offerId = currentModalPicks.easiest.offer_id;
+        easyEl.classList.add("clickable");
       } else if (easyEl) {
         easyEl.style.display = "none";
       }
 
-      // Render full sorted list. Skip the offer that's already in the
-      // Best-overall card so users don't see it twice.
-      if (allBlock && allList) {
-        const bestId = picks?.best?.offer_id;
-        const rest = offers.filter(o => o.offer_id !== bestId);
-        if (rest.length > 0) {
-          allBlock.hidden = false;
-          if (allCount) allCount.textContent = rest.length === 1 ? "1 more" : `${rest.length} more`;
-          allList.innerHTML = rest.map(renderFlightFullRow).join("");
-        }
-      }
+      renderFlightAllList();
     } catch (e) {
       console.warn("Flight options failed:", e?.message || e);
       if (cheapEl) cheapEl.style.display = "none";
       if (easyEl) easyEl.style.display = "none";
     }
+  }
+
+  // Renders the All flights list, excluding the currently selected offer
+  // (since it's already shown as Best overall). Click handlers are bound
+  // via event delegation on the parent list — see selectFlightOffer.
+  function renderFlightAllList() {
+    const allBlock = document.getElementById("flight-all-block");
+    const allList = document.getElementById("flight-all-list");
+    const allCount = document.getElementById("flight-all-count");
+    if (!allBlock || !allList) return;
+    const rest = currentModalFlights.filter(o => o.offer_id !== currentModalSelectedOfferId);
+    if (rest.length === 0) {
+      allBlock.hidden = true;
+      return;
+    }
+    allBlock.hidden = false;
+    if (allCount) allCount.textContent = rest.length === 1 ? "1 more option" : `${rest.length} more options`;
+    allList.innerHTML = rest.map(renderFlightFullRow).join("");
+  }
+
+  // Delegate clicks on Cheapest / Easiest picks to selectFlightOffer.
+  // Best-overall is already the active card so clicks are no-ops there.
+  function onFlightOptionClick(ev) {
+    const card = ev.target.closest(".flight-option.clickable");
+    if (!card) return;
+    const offerId = card.dataset.offerId;
+    if (offerId) selectFlightOffer(offerId);
+  }
+
+  // Click handler: swap the chosen offer into "Best overall" and
+  // update flight price + grand total + sticky CTA in place.
+  function selectFlightOffer(offerId) {
+    const o = currentModalFlights.find(f => f.offer_id === offerId);
+    if (!o || !currentModalPackage) return;
+    currentModalSelectedOfferId = offerId;
+
+    const pkg = currentModalPackage;
+    const newFlightPrice = Math.round(Number(o.total_price) || 0);
+    const newTotal = newFlightPrice + Math.round(Number(pkg.hotel_price) || 0);
+
+    // Best-overall card (always the first .flight-option in the grid)
+    const bestCard = document.querySelector("#flight-option-grid .flight-option.active");
+    if (bestCard) {
+      const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
+      const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
+      const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
+      const stops = flightStopsLabel(o);
+      bestCard.innerHTML = `
+        <div class="flight-option-tag">Best overall</div>
+        ${airlineLogoMarkup(o, "med")}
+        <div class="flight-option-price">${fmtMoney(newFlightPrice)}</div>
+        <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
+        <div class="flight-option-bags">${bagsMarkup(o)}</div>
+        <div class="flight-option-note">Live fare · selected itinerary</div>
+      `;
+    }
+
+    // Trip total + breakdown
+    const totalEl = document.querySelector(".trip-fit-summary .price-total");
+    if (totalEl) totalEl.textContent = fmtMoney(newTotal);
+    const breakdown = document.querySelector(".trip-fit-summary .trip-fit-breakdown");
+    if (breakdown) {
+      breakdown.innerHTML = `
+        <span><b>${fmtMoney(newFlightPrice)}</b> flights</span>
+        <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>`;
+    }
+
+    // Sticky CTA
+    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
+    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+
+    // Update budget delta if it's shown
+    const budget = getUserBudget();
+    if (budget != null) {
+      const diff = Math.abs(newTotal - budget);
+      const under = newTotal < budget;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
+        el.textContent = deltaText;
+        el.classList.toggle("under", under);
+        el.classList.toggle("over", !under);
+      });
+    }
+
+    renderFlightAllList();
   }
 
   function flightStopsLabel(o) {
@@ -3111,6 +3199,38 @@
     } catch { return ""; }
   }
 
+  // Airline logo. Kiwi's airline logo CDN is the de-facto free source
+  // mapping IATA codes -> PNG. If it 404s (rare carrier, or Kiwi down),
+  // we fall back to a CSS badge with the 2-letter code.
+  function airlineLogoMarkup(o, size = "sm") {
+    const code = (o.primary_airline_code || "").toUpperCase();
+    if (!code) return `<span class="airline-logo airline-logo-${size} fallback">✈</span>`;
+    const safe = code.replace(/[^A-Z0-9]/g, "");
+    const url = `https://images.kiwi.com/airlines/64/${safe}.png`;
+    return `<span class="airline-logo airline-logo-${size}">
+      <img src="${url}" alt="${escapeHtml(o.primary_airline_name || code)}" loading="lazy"
+           onerror="this.style.display='none'; this.parentElement.classList.add('fallback'); this.parentElement.textContent='${escapeHtml(safe.slice(0,2))}';" />
+    </span>`;
+  }
+
+  // Bags markup: distinct icons for checked bag / carry-on only / no bag,
+  // honoring null/undefined by skipping (we don't know).
+  function bagsMarkup(o) {
+    const items = [];
+    if (o.checked_bag_included === true) {
+      items.push(`<span class="bag-icon" title="Checked bag included" aria-label="Checked bag included">${ICON_CHECKED_BAG}<span class="bag-label">Checked bag</span></span>`);
+    } else if (o.carry_on_included === true) {
+      items.push(`<span class="bag-icon" title="Carry-on only" aria-label="Carry-on bag included">${ICON_CARRY_ON}<span class="bag-label">Carry-on only</span></span>`);
+    } else if (o.carry_on_included === false && o.checked_bag_included === false) {
+      items.push(`<span class="bag-icon no-bag" title="No bags included" aria-label="No bags included">${ICON_NO_BAG}<span class="bag-label">No bags</span></span>`);
+    }
+    return items.join("");
+  }
+
+  const ICON_CHECKED_BAG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="13" rx="1.5"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M8 11h8M8 15h8"/></svg>`;
+  const ICON_CARRY_ON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/></svg>`;
+  const ICON_NO_BAG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/><path d="M5 5l14 14"/></svg>`;
+
   function renderFlightAltInner(tag, o) {
     const stops = flightStopsLabel(o);
     const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
@@ -3119,8 +3239,10 @@
     const refund = o.refundable === true ? "Refundable" : (o.refundable === false ? "Non-refundable" : "");
     return `
       <div class="flight-option-tag">${escapeHtml(tag)}</div>
+      ${airlineLogoMarkup(o, "med")}
       <div class="flight-option-price">${fmtMoney(o.total_price)}</div>
       <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
+      <div class="flight-option-bags">${bagsMarkup(o)}</div>
       ${refund ? `<div class="flight-option-note">${escapeHtml(refund)}</div>` : ""}
     `;
   }
@@ -3138,21 +3260,22 @@
       : "";
     const chips = [];
     if (o.refundable === true) chips.push(`<span class="flight-chip refundable">Refundable</span>`);
-    if (o.checked_bag_included === true) chips.push(`<span class="flight-chip">Checked bag</span>`);
-    else if (o.carry_on_included === true) chips.push(`<span class="flight-chip">Carry-on only</span>`);
     if (o.fare_family) chips.push(`<span class="flight-chip">${escapeHtml(String(o.fare_family))}</span>`);
     return `
-      <div class="flight-row">
+      <button type="button" class="flight-row" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="selectFlightOffer('${escapeHtml(String(o.offer_id)).replace(/'/g, "&apos;")}')">
+        ${airlineLogoMarkup(o, "sm")}
         <div class="flight-row-main">
           <div class="flight-row-airline">${escapeHtml(airline)}</div>
           <div class="flight-row-meta">${escapeHtml([stops, durStr, timeStr, layovers].filter(Boolean).join(" · "))}</div>
+          <div class="flight-row-bags">${bagsMarkup(o)}</div>
           ${chips.length ? `<div class="flight-row-chips">${chips.join("")}</div>` : ""}
         </div>
         <div class="flight-row-price">
           <div class="flight-row-total">${fmtMoney(o.total_price)}</div>
           ${o.per_adult ? `<div class="flight-row-per">${fmtMoney(o.per_adult)} / adult</div>` : ""}
+          <div class="flight-row-cta">Select →</div>
         </div>
-      </div>
+      </button>
     `;
   }
 

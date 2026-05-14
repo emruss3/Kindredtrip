@@ -3403,6 +3403,81 @@ body:not(.has-results) #results-wrap { display: none; }
   margin-top: 2px;
 }
 
+/* ---------- Airline logo + bag icons + clickable rows ---------- */
+.airline-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.airline-logo img { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
+.airline-logo.airline-logo-sm { width: 36px; height: 36px; font-size: 11.5px; }
+.airline-logo.airline-logo-med { width: 44px; height: 44px; font-size: 13px; margin: 4px 0 6px; }
+.airline-logo.fallback { background: var(--bg-soft); }
+.airline-logo.fallback img { display: none; }
+
+.flight-option-bags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.flight-row-bags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.bag-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-soft);
+  border-radius: var(--r-pill);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.bag-icon svg { flex-shrink: 0; }
+.bag-icon.no-bag { color: #9c4a26; background: #F7ECE6; }
+.bag-icon.no-bag svg { stroke: currentColor; }
+.bag-label { font-size: 11.5px; }
+
+.flight-row {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  align-items: center;
+  font: inherit;
+  border-color: var(--line);
+}
+.flight-row:hover {
+  border-color: var(--accent, #c08a3e);
+  background: #fefcf8;
+}
+.flight-row-cta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent, #c08a3e);
+  margin-top: 4px;
+  letter-spacing: -0.005em;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.flight-row:hover .flight-row-cta { opacity: 1; }
+
+.flight-option.clickable { cursor: pointer; }
+.flight-option.clickable:hover { border-color: var(--accent, #c08a3e); background: #fefcf8; }
+
 /* ---------- Proof-driven hero (sample ranked trip card) ---------- */
 .proof-strip {
   max-width: 1180px;
