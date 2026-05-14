@@ -3200,12 +3200,67 @@ body:not(.has-results) #results-wrap { display: none; }
 .room-option-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  padding: 14px 14px 12px;
+  overflow: hidden;
   transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.room-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px 12px;
+}
+.room-option-photo {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.room-option-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.room-option-photo-caption {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  background: rgba(13, 43, 69, 0.78);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.room-option-config {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: -2px;
+}
+.room-option-config b { color: var(--ink); font-weight: 600; }
+.room-option-savings {
+  font-size: 11.5px;
+  color: #1f6c43;
+  margin-top: 4px;
+  font-weight: 500;
+}
+.room-option-savings b { font-weight: 700; }
+
+/* ---------- Flight cards: dest label on Cheapest / Easiest picks ---------- */
+.flight-option-dest {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: -2px;
+  font-weight: 500;
+}
+.flight-all-dest {
+  color: var(--accent, #c08a3e);
+  font-weight: 600;
 }
 .room-option-card:hover {
   border-color: var(--line-strong, #d6d2cc);
