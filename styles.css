@@ -1247,9 +1247,10 @@ button { font-family: inherit; }
 
 .results-sidebar {
   position: sticky;
-  top: 100px;
-  max-height: calc(100vh - 120px);
+  top: 88px;
+  max-height: calc(100vh - 110px);
   overflow-y: auto;
+  padding-bottom: 24px;
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
@@ -3853,4 +3854,142 @@ body:not(.has-results) #results-wrap { display: none; }
   font-size: 12.5px;
   color: var(--ink-2);
   line-height: 1.5;
+}
+
+/* ---------- All-Inclusive prominent badge (Booking.com-style) ---------- */
+.badge.ai-prominent {
+  background: linear-gradient(180deg, #1f7d4d 0%, #176038 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border: none;
+  box-shadow: 0 1px 3px rgba(31, 125, 77, 0.25);
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.badge.ai-prominent .ai-check {
+  font-weight: 900;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ---------- Hotel class chip (3-star / 4-star / 5-star) ---------- */
+.badge.hotel-class {
+  background: #fdf6e3;
+  color: #8c5a14;
+  border: 1px solid #ecdcb3;
+  font-weight: 600;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge.hotel-class .hotel-stars {
+  color: #c89432;
+  letter-spacing: -1px;
+  font-size: 12px;
+}
+.badge.hotel-class.hotel-class-5 {
+  background: #fff3c4;
+  border-color: #f0d97a;
+  color: #6b4708;
+}
+.hotel-class-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #8c5a14;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.hotel-class-inline.hotel-class-5 { color: #6b4708; }
+
+/* ---------- Clickable room cards (mirror flight click-to-switch) ---------- */
+.room-option-card {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: #fff;
+  border: 1px solid var(--line);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.room-option-card:hover {
+  border-color: var(--accent, #c08a3e);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  transform: translateY(-1px);
+}
+.room-option-card.selected {
+  border-color: #1f7d4d;
+  box-shadow: 0 0 0 2px rgba(31, 125, 77, 0.18);
+}
+.room-option-cta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #c08a3e);
+  margin-top: 6px;
+  text-align: right;
+}
+.room-option-card.selected .room-option-cta {
+  color: #1f7d4d;
+}
+
+/* ---------- All-flights collapsible toggle ---------- */
+.flight-all-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs, 8px);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.flight-all-toggle:hover { border-color: var(--accent, #c08a3e); background: #fefcf8; }
+.flight-all-toggle-label { flex: 1; min-width: 0; }
+.flight-all-toggle .flight-all-count {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.flight-all-toggle-caret {
+  font-size: 14px;
+  color: var(--accent, #c08a3e);
+  transition: transform 200ms ease;
+}
+.flight-all-toggle[aria-expanded="true"] .flight-all-toggle-caret {
+  transform: rotate(180deg);
+}
+.flight-all-list[hidden] { display: none; }
+.flight-all-list { margin-top: 8px; }
+
+/* ---------- Modal sticky CTA: stack actions ---------- */
+.modal-cta-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .modal-cta-actions { width: 100%; flex-direction: column-reverse; }
+  .modal-cta-actions .btn { width: 100%; }
 }

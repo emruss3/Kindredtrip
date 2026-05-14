@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-modal-polish" />
-<meta name="kt-build" content="20260514-modal-polish" />
+<link rel="stylesheet" href="/styles.css?v=20260514-modal-v2" />
+<meta name="kt-build" content="20260514-modal-v2" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2395,10 +2395,25 @@
     return `<span class="badge${cls ? " " + cls : ""}"><span class="emoji">${emoji}</span>${label}</span>`;
   }
 
+  // Render a hotel-class chip (3★ / 4★ / 5★) from cap_star_rating or
+  // highlights.star_rating. Returns "" when rating is unknown / under 3.
+  function hotelClassChip(p) {
+    const r = p.resorts || {};
+    const stars = Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0);
+    if (!stars || stars < 3) return "";
+    const rounded = Math.round(stars);
+    return `<span class="badge hotel-class hotel-class-${rounded}"><span class="hotel-stars">${"★".repeat(rounded)}</span>${rounded}-star hotel</span>`;
+  }
+
   function renderCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
     const tags = p._tags;
     const badges = [];
+
+    // Hotel class chip (3/4/5 star). Surfaced as the FIRST badge so it
+    // anchors the rest of the row visually.
+    const classChip = hotelClassChip(p);
+    if (classChip) badges.push(classChip);
 
     // Always-on rating chip — includes review count when we have it
     const r5 = ratingTo5(r.avg_user_rating);
@@ -2467,7 +2482,7 @@
     // is provisional, not missing.
     const aiToggle = lastSearchSummary?.require_all_inclusive;
     if (p.has_any_ai === true) {
-      badges.push(`<span class="badge good"><span class="emoji">🍽</span>All-inclusive</span>`);
+      badges.push(`<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>`);
     } else if (aiToggle && p.hotel_supplier !== "liteapi") {
       badges.push(`<span class="badge muted">All-inclusive · rate pending</span>`);
     }
@@ -2795,8 +2810,17 @@
       ? `<span class="rating"><svg viewBox="0 0 24 24"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>${r5Modal.toFixed(1)}${reviewsModal ? ` · ${reviewsModal} reviews` : ""}</span>`
       : "";
 
+    // Hotel class chip (3/4/5 star). Same renderer used on cards.
+    const classChipStr = (() => {
+      const stars = Number(r.cap_star_rating ?? pkg.highlights?.star_rating ?? 0);
+      if (!stars || stars < 3) return "";
+      const rounded = Math.round(stars);
+      return `<span class="hotel-class-inline hotel-class-${rounded}">${"★".repeat(rounded)} ${rounded}-star hotel</span>`;
+    })();
+
     const meta = [
       r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
+      classChipStr,
       ratingStr,
       r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
       fmtSize(r.rooms_count) ? escapeHtml(fmtSize(r.rooms_count)) : null,
@@ -2904,11 +2928,12 @@
         </div>
         ${liveFlight ? `
         <div class="flight-all-block" id="flight-all-block" hidden>
-          <div class="flight-all-head">
-            <h5>All flights ${destAirportLabel ? `to <span class="flight-all-dest">${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}</span>` : "for this trip"}</h5>
+          <button type="button" class="flight-all-toggle" id="flight-all-toggle" onclick="toggleAllFlights()" aria-expanded="false">
+            <span class="flight-all-toggle-label">Show more flights ${destAirportLabel ? `to ${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}` : ""}</span>
             <span class="flight-all-count" id="flight-all-count"></span>
-          </div>
-          <div class="flight-all-list" id="flight-all-list"></div>
+            <span class="flight-all-toggle-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="flight-all-list" id="flight-all-list" hidden></div>
         </div>` : ""}
       </div>`;
 
@@ -3068,7 +3093,10 @@
           <div><b>${fmtMoney(pkg.total_price)}</b> ${isLive ? "live trip total" : "estimated trip total"}${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
           <div class="modal-cta-sub">flights + hotel · for your family</div>
         </div>
-        <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+        <div class="modal-cta-actions">
+          <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking.com</button>
+          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+        </div>
       </div>`;
 
     // Photo gallery — most resorts have ~8 Google Places photos in photo_refs.
@@ -3223,6 +3251,23 @@
     allBlock.hidden = false;
     if (allCount) allCount.textContent = rest.length === 1 ? "1 more option" : `${rest.length} more options`;
     allList.innerHTML = rest.map(renderFlightFullRow).join("");
+  }
+
+  // Expand / collapse the "All flights" list. Default hidden so users
+  // only see it if they don't like the pre-selected Best overall.
+  function toggleAllFlights() {
+    const btn = document.getElementById("flight-all-toggle");
+    const list = document.getElementById("flight-all-list");
+    if (!btn || !list) return;
+    const expanded = btn.getAttribute("aria-expanded") === "true";
+    const next = !expanded;
+    btn.setAttribute("aria-expanded", next ? "true" : "false");
+    list.hidden = !next;
+    const label = btn.querySelector(".flight-all-toggle-label");
+    if (label) {
+      const dest = label.textContent.match(/to .+$/)?.[0] || "";
+      label.textContent = next ? `Hide other flights ${dest}` : `Show more flights ${dest}`;
+    }
   }
 
   // Delegate clicks on Cheapest / Easiest picks to selectFlightOffer.
@@ -3406,12 +3451,13 @@
   }
 
   // -------- Room options: async fetch + render --------
-  // Calls get_hotel_offers with the package_id and replaces the placeholder
-  // grid with up to 8 deduped room variants. Each card shows room name,
-  // board (All-inclusive / Breakfast / Room only), refundability,
-  // occupancy, and the total + per-night price for the requested stay.
-  // If the fetch fails or returns no offers, the section is hidden so we
-  // don't leave a "loading…" stub in the modal.
+  // Mirrors the flight option flow: track loaded offers + which one is
+  // currently selected, and let the user click any room to swap it into
+  // the package total. The trip-fit-summary price + sticky CTA + budget
+  // delta all update in place — pure client-side preview, no DB writes.
+  let currentModalRooms = [];
+  let currentModalSelectedRoomId = null;
+
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
     const grid = document.getElementById("room-options-grid");
@@ -3425,7 +3471,14 @@
         return;
       }
       if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
-      grid.innerHTML = offers.map((o, i) => renderRoomOptionCard(o, i)).join("");
+      currentModalRooms = offers;
+      // Mark the package's currently-chosen room as selected so the click
+      // state matches what's reflected in the trip-fit-summary up top.
+      const pkg = currentModalPackage;
+      currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && offers.find(o => o.offer_id === pkg.hotel_offer_id))
+        ? pkg.hotel_offer_id
+        : offers[0]?.offer_id ?? null;
+      grid.innerHTML = offers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("");
     } catch (e) {
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
@@ -3437,7 +3490,7 @@
   // and adding a per-package /hotels/details call would significantly
   // slow modal open. Rotating resort photos gives every card a visual
   // anchor without misrepresenting (we never claim it's the exact room).
-  function renderRoomOptionCard(o, index = 0) {
+  function renderRoomOptionCard(o, index = 0, selectedId = null) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
     const refundable = o.refundable === true;
@@ -3479,8 +3532,10 @@
       ? `<div class="room-option-savings">Save <b>${fmtMoney(savings)}</b> vs. ${fmtMoney(initial)} list</div>`
       : "";
 
+    const safeId = String(o.offer_id).replace(/'/g, "&apos;");
+    const isActive = selectedId && selectedId === o.offer_id;
     return `
-      <article class="room-option-card">
+      <button type="button" class="room-option-card${isActive ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="selectRoomOffer('${safeId}')">
         ${photoBlock}
         <div class="room-option-body">
           <div class="room-option-top">
@@ -3497,8 +3552,62 @@
             ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
             ${savingsRow}
           </div>
+          <div class="room-option-cta">${isActive ? "✓ Selected" : "Select this room →"}</div>
         </div>
-      </article>`;
+      </button>`;
+  }
+
+  // Swap a room into the package: update modal trip total, sticky CTA,
+  // budget delta, and the active state on the card grid. The underlying
+  // package data isn't mutated — purely a client-side preview that we'll
+  // pass through to the booking partner via selectedFlightOfferId /
+  // selectedHotelOfferId when the user clicks "See hotel rates".
+  function selectRoomOffer(offerId) {
+    const o = currentModalRooms.find(r => r.offer_id === offerId);
+    if (!o || !currentModalPackage) return;
+    currentModalSelectedRoomId = offerId;
+    const pkg = currentModalPackage;
+    const newHotelPrice = Math.round(Number(o.total_price) || 0);
+
+    // Determine current flight price (may have been swapped earlier by
+    // selectFlightOffer; otherwise the package's default).
+    let flightPrice = Math.round(Number(pkg.flight_price) || 0);
+    if (currentModalSelectedOfferId) {
+      const f = currentModalFlights.find(x => x.offer_id === currentModalSelectedOfferId);
+      if (f) flightPrice = Math.round(Number(f.total_price) || 0);
+    }
+    const newTotal = flightPrice + newHotelPrice;
+
+    const totalEl = document.querySelector(".trip-fit-summary .price-total");
+    if (totalEl) totalEl.textContent = fmtMoney(newTotal);
+    const breakdown = document.querySelector(".trip-fit-summary .trip-fit-breakdown");
+    if (breakdown) {
+      breakdown.innerHTML = `
+        <span><b>${fmtMoney(flightPrice)}</b> flights</span>
+        <span><b>${fmtMoney(newHotelPrice)}</b> hotel</span>`;
+    }
+    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
+    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+
+    const budget = getUserBudget();
+    if (budget != null) {
+      const diff = Math.abs(newTotal - budget);
+      const under = newTotal < budget;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
+        el.textContent = deltaText;
+        el.classList.toggle("under", under);
+        el.classList.toggle("over", !under);
+      });
+    }
+
+    // Re-render grid so the previously selected card loses its highlight.
+    const grid = document.getElementById("room-options-grid");
+    if (grid) {
+      grid.innerHTML = currentModalRooms.map((r, i) =>
+        renderRoomOptionCard(r, i, currentModalSelectedRoomId)
+      ).join("");
+    }
   }
 
   function fmtCancelDate(iso) {
@@ -3595,6 +3704,40 @@
       if (e.key === "ArrowRight") { setModalPhoto(currentModalPhotoIdx + 1); e.preventDefault(); }
     }
   });
+
+  // Open Booking.com with the user's exact search prefilled — resort
+  // name as the search string, dates, party size, kids' ages. Booking
+  // resolves the resort and lands the user on its hotel page (or a
+  // disambiguation list if the name is ambiguous). We don't have a
+  // Booking.com affiliate ID yet so the URL omits aid/affil; once we
+  // do, append &aid=XXXXX&label=kindredtrips and the click is attributed.
+  function openBookingDotCom(packageId) {
+    const pkg = allPackages.find(p => p.package_id === packageId);
+    if (!pkg || !lastSearchSummary) return;
+    const r = pkg.resorts || {};
+    const checkin = lastSearchSummary.date_start;
+    const checkout = lastSearchSummary.date_end;
+    const adults = Number(lastSearchSummary.adults) || 2;
+    const kidAges = Array.isArray(lastSearchSummary.child_ages) ? lastSearchSummary.child_ages : [];
+    const children = kidAges.length;
+    const ss = [r.resort_name, r.area, r.country].filter(Boolean).join(" ");
+    const params = new URLSearchParams({
+      ss,
+      checkin,
+      checkout,
+      group_adults: String(adults),
+      group_children: String(children),
+      no_rooms: "1",
+      dest_type: "city",
+      src: "kindredtrips",
+    });
+    if (children > 0) {
+      // Booking expects each child age repeated, e.g. age=4&age=7.
+      kidAges.forEach((a) => params.append("age", String(a)));
+    }
+    const url = `https://www.booking.com/searchresults.html?${params.toString()}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   async function bookHotel(packageId) {
     try {

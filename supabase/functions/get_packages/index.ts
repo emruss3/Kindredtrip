@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v10_full_pkg_fields";
+const VERSION = "get_packages_v11_cap_star_rating";
 
 // v10 (2026-05-14):
 //   Added the package-level fields the frontend filter / modal relies
@@ -150,6 +150,7 @@ serve(async (req) => {
           airport_name,
           avg_user_rating,
           review_count,
+          cap_star_rating,
           hotel_brand,
           hotel_style,
           audience,
