@@ -2506,10 +2506,18 @@ body:not(.has-results) #results-wrap { display: none; }
 }
 .hidden { display: none !important; }
 
-/* ---------- Pricing-progress widget (phase 1, while start_pricing runs) ---------- */
-.pricing-progress {
+/* ---------- Pricing-progress widget (phase 1 + phase 2) ---------- */
+.pricing-progress-slot {
   position: sticky;
-  top: 72px;
+  top: 60px;
+  z-index: 20;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 12px 24px 0;
+}
+.pricing-progress-slot[hidden] { display: none; }
+.pricing-progress {
+  position: relative;
   z-index: 15;
   background: #FFF8EF;
   border: 1px solid #E8DCCB;

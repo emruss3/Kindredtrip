@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-progress-detail" />
-<meta name="kt-build" content="20260514-progress-detail" />
+<link rel="stylesheet" href="/styles.css?v=20260514-live-counts" />
+<meta name="kt-build" content="20260514-live-counts" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -666,6 +666,7 @@
 
 <div id="status" class="status"></div>
 
+<div id="pricing-progress-slot" class="pricing-progress-slot" hidden></div>
 <main id="results-wrap" class="results-wrap" hidden>
   <aside class="results-sidebar" id="results-sidebar">
     <!-- Country filter, etc. populated dynamically -->
@@ -1589,7 +1590,7 @@
     const startedAt = Date.now();
     const HARD_TIMEOUT_MS = 180_000;   // 3 minutes
     const STAGNANT_AFTER_MS = 30_000;  // give it 30s of grace
-    const POLL_INTERVAL_MS = 5_000;
+    const POLL_INTERVAL_MS = 3_000;
     let lastLiveCount = -1;
     let stagnantChecks = 0;
 
@@ -1714,8 +1715,14 @@
   //   fully_priced, live_packages, mock_packages, pricing_complete_pct,
   //   live_pct
   function showPricingProgress(summary, opts = {}) {
-    const main = document.getElementById("results-main");
-    if (!main) return;
+    // The widget lives in #pricing-progress-slot, a permanent container
+    // OUTSIDE results-main. renderResults frequently wipes results-main
+    // (showing the empty state, cards, etc.) — putting the widget in
+    // its own slot means it stays visible and animating regardless of
+    // what's happening to the cards below.
+    const slot = document.getElementById("pricing-progress-slot");
+    if (!slot) return;
+    slot.hidden = false;
     let widget = document.getElementById("pricing-progress");
     if (!widget) {
       widget = document.createElement("div");
@@ -1723,7 +1730,7 @@
       widget.className = "pricing-progress";
       widget.setAttribute("role", "status");
       widget.setAttribute("aria-live", "polite");
-      main.insertBefore(widget, main.firstChild);
+      slot.appendChild(widget);
     }
     const total = Number(summary?.total_packages) || Number(opts.totalEstimate) || 0;
     const flights = Number(summary?.with_flight_price) || 0;
@@ -1735,12 +1742,17 @@
     const denom = total > 0 ? total : 1;
     const pct = Math.min(100, Math.round((live / denom) * 100));
 
-    // Phase label: which stage of work is currently in flight?
+    // Phase label: which stage of work is actually in flight?
+    //   - Stage A: process_search_batch seeds packages with mock flight
+    //     prices (rooms stay 0). Fast — ~2-3s.
+    //   - Stage B: start_pricing fetches LiteAPI hotel rates and upgrades
+    //     flight prices from cache. Rooms grow 0 -> total. ~20s.
+    //   - Stage C: top_up_hotels_worker upgrades the remaining mock
+    //     packages to liteapi. live grows toward total. ~30-60s.
     let stage;
-    if (flights === 0 && rooms === 0) stage = "Seeding resorts…";
-    else if (rooms < total / 2) stage = "Comparing room rates across destinations…";
-    else if (live < total * 0.6) stage = "Pricing flights for your family…";
-    else if (live < total) stage = "Filling in live prices…";
+    if (flights === 0 && rooms === 0) stage = "Seeding resorts across 35 Caribbean countries…";
+    else if (rooms < total) stage = "Pricing rooms with our partner network…";
+    else if (live < total) stage = "Upgrading remaining trips to live rates…";
     else stage = "Finalizing your ranked list…";
 
     const counters = [
@@ -1763,6 +1775,8 @@
   function hidePricingProgress() {
     const w = document.getElementById("pricing-progress");
     if (w) w.remove();
+    const slot = document.getElementById("pricing-progress-slot");
+    if (slot) slot.hidden = true;
   }
 
   // Silent refetch — fetches packages, re-renders, returns the response data.
