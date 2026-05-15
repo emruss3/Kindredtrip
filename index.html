@@ -1365,6 +1365,14 @@
     if (mins === 0) return `${h}h`;
     return `${h}h ${mins}m`;
   }
+  // Parse "HH:MM" transfer time into hours (decimal). Returns 0 when
+  // unparseable so missing data doesn't penalize the resort.
+  function parseTransferHours(notes) {
+    if (!notes) return 0;
+    const m = String(notes).match(/^(\d+):(\d{1,2})(?::\d{1,2})?$/);
+    if (!m) return 0;
+    return parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
+  }
 
   // 42587 → "42k"; 1402 → "1.4k"; 230 → "230"
   function fmtReviews(n) {
@@ -2773,15 +2781,10 @@
   }
 
   // -------- Score row + "Why this ranks here" --------
-  // 0-100 family-fit score derived from familyFitInfo. Caps at 99 so we
-  // don't promise a perfect match to a card that's only data-confirmed.
+  // 0–99 family-fit score. familyFitInfo now scores directly on this
+  // scale (party-aware), so this is just a thin pass-through.
   function familyFitScore(pkg) {
-    const info = familyFitInfo(pkg);
-    // familyFitInfo.score saturates ~8-10 for very strong matches; map
-    // to a friendly 0-99 range. Clamp the bottom to 40 so even thin
-    // matches don't read as failure on screen.
-    const pct = Math.min(99, Math.max(40, 40 + info.score * 7));
-    return Math.round(pct);
+    return familyFitInfo(pkg).score;
   }
   function letterGrade(value, tiers) {
     // tiers: ordered [{ min, grade }] descending by min
@@ -3138,35 +3141,183 @@
     }
   }
 
+  // Family Fit score (0–99): party-aware. Reads adults + kids' ages from
+  // the active search so the same resort scores differently for a couple
+  // with one infant vs. a family of six. Three main components:
+  //   1. Room fit for party size — biggest swing, ±18 pts
+  //   2. Kids-club / babysitting / infants — only counts when relevant
+  //      to the actual party (kid ages, infant flag)
+  //   3. Age-appropriate amenities — waterpark, pool slide, etc.,
+  //      weighted by which age groups are in the party
+  // No artificial floor — a resort with no family signals can score
+  // below 40 if the room layouts don't fit.
   function familyFitInfo(pkg) {
     const r = pkg.resorts || {};
     const t = pkg._tags || extractTags(pkg);
-    let score = 0;
+    const adults = Number(lastSearchSummary?.adults) || 2;
+    const kidAges = (lastSearchSummary?.child_ages || []).map(Number).filter(n => Number.isFinite(n));
+    const total = adults + kidAges.length;
+
+    const hasInfants = kidAges.some(a => a <= 2);
+    const hasToddlers = kidAges.some(a => a >= 2 && a <= 4);
+    const hasYoungKids = kidAges.some(a => a >= 5 && a <= 11);
+    const hasTeens = kidAges.some(a => a >= 12);
+
+    let score = 50; // neutral base
     const reasons = [];
-    if (r.kids_club_available || t.amenities.includes("Kids Club") || t.amenities.includes("Kids Club for Under 4")) {
-      score += 2;
-      const ageNote = (r.kids_club_min_age != null || r.kids_club_max_age != null)
-        ? ` (ages ${r.kids_club_min_age ?? "?"}${r.kids_club_max_age ? `–${r.kids_club_max_age}` : "+"})`
-        : "";
-      reasons.push(`Kids club${ageNote}`);
+
+    // ---- Room fit (the dominant factor for larger families) ----
+    const has2BR = t.rooms.includes("2 Bedroom Suites");
+    const hasFamilySuite = t.rooms.includes("Family Suite");
+    const hasConnecting = t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms;
+    const guaranteedConnecting = !!r.guaranteed_connecting_rooms;
+
+    if (total <= 4) {
+      score += 8;
+      if (hasFamilySuite) { score += 3; reasons.push("Family suites available"); }
+      else if (has2BR)    { score += 3; reasons.push("Two-bedroom suites available"); }
+    } else if (total === 5) {
+      if (hasFamilySuite)         { score += 14; reasons.push(`Family suite fits ${total}`); }
+      else if (has2BR)            { score += 14; reasons.push(`Two-bedroom suite fits ${total}`); }
+      else if (guaranteedConnecting) { score += 10; reasons.push("Guaranteed connecting rooms"); }
+      else if (hasConnecting)     { score += 4; reasons.push("Connecting rooms (not guaranteed)"); }
+      else                         { score -= 14; reasons.push(`Room fit for ${total} not listed`); }
+    } else { // 6+
+      if (has2BR)                  { score += 18; reasons.push(`Two-bedroom suite fits ${total}`); }
+      else if (guaranteedConnecting) { score += 12; reasons.push("Guaranteed connecting rooms"); }
+      else if (hasConnecting)     { score += 5; reasons.push("Connecting rooms (not guaranteed)"); }
+      else                         { score -= 18; reasons.push(`Room fit for ${total} unclear`); }
     }
-    if (r.babysitting_available || t.amenities.includes("Babysitting")) { score += 1; reasons.push("Babysitting"); }
-    if (t.rooms.includes("Family Suite")) { score += 2; reasons.push("Family suites"); }
-    if (t.rooms.includes("2 Bedroom Suites")) { score += 2; reasons.push("Two-bedroom suites"); }
-    if (t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) { score += 1; reasons.push(r.guaranteed_connecting_rooms ? "Guaranteed connecting rooms" : "Connecting rooms"); }
-    // Specific water amenities — listed by name when present so users
-    // see the actual feature, not a generic "Water play" placeholder.
-    if (t.amenities.includes("Waterpark For Little Kids")) { score += 1; reasons.push("Waterpark for little kids"); }
-    else if (t.amenities.includes("Waterpark For Big Kids")) { score += 1; reasons.push("Waterpark for big kids"); }
-    else if (r.water_park) { score += 1; reasons.push("Water park"); }
-    if (t.amenities.includes("Lazy River")) { score += 1; reasons.push("Lazy river"); }
-    if (t.amenities.includes("Pool Slide")) { score += 1; reasons.push("Pool slide"); }
-    if (r.accepts_infants) reasons.push("Accepts infants");
-    let label = "Decent fit";
-    if (score >= 6) label = "Excellent";
-    else if (score >= 4) label = "Strong";
-    else if (score >= 2) label = "Good";
-    else if (score === 0) label = "Limited";
+
+    // ---- Kids-club fit (only counts if the user has kids) ----
+    if (kidAges.length > 0) {
+      const hasKidsClub = r.kids_club_available
+        || t.amenities.includes("Kids Club")
+        || t.amenities.includes("Kids Club for Under 4");
+      if (hasKidsClub) {
+        const minAge = Number(r.kids_club_min_age);
+        const maxAge = Number(r.kids_club_max_age);
+        const hasMin = Number.isFinite(minAge);
+        const hasMax = Number.isFinite(maxAge);
+        if (hasMin || hasMax) {
+          const eligible = kidAges.filter(a => (!hasMin || a >= minAge) && (!hasMax || a <= maxAge));
+          const range = hasMin && hasMax ? `${minAge}–${maxAge}` : hasMin ? `${minAge}+` : `up to ${maxAge}`;
+          if (eligible.length === kidAges.length) {
+            score += 10;
+            reasons.push(`Kids club fits all your kids (ages ${range})`);
+          } else if (eligible.length > 0) {
+            score += 4;
+            reasons.push(`Kids club fits ${eligible.length} of ${kidAges.length} kids (ages ${range})`);
+          } else {
+            // Listed but none of your kids match the age range — neutral
+            // (we don't actively penalize because some resorts list a
+            // wide range in practice that the catalog under-captures).
+            reasons.push(`Kids club ages don't match your kids (${range})`);
+          }
+        } else {
+          score += 7;
+          reasons.push("Kids club available");
+        }
+      }
+      if (hasTeens && t.amenities.includes("Teen Club")) {
+        score += 4;
+        reasons.push("Teen club");
+      }
+    }
+
+    // ---- Babysitting (relevant when young kids are in the party) ----
+    if ((hasInfants || hasToddlers) && (r.babysitting_available || t.amenities.includes("Babysitting"))) {
+      score += 4;
+      reasons.push("Babysitting available");
+    }
+
+    // ---- Infant policy (only when an infant is actually in the party) ----
+    if (hasInfants) {
+      if (r.accepts_infants === true) {
+        score += 4;
+        reasons.push("Accepts infants");
+      } else if (r.accepts_infants === false) {
+        score -= 15;
+        reasons.push("Doesn't accept infants");
+      }
+    }
+
+    // ---- Age-appropriate water amenities ----
+    if (hasInfants || hasToddlers) {
+      if (t.amenities.includes("Waterpark For Little Kids")) { score += 6; reasons.push("Waterpark for little kids"); }
+      if (t.amenities.includes("Heated Pool"))               { score += 2; reasons.push("Heated pool"); }
+    }
+    if (hasYoungKids) {
+      const bigWater = t.amenities.includes("Waterpark For Big Kids");
+      const littleWater = t.amenities.includes("Waterpark For Little Kids");
+      if (bigWater) { score += 4; if (!hasToddlers) reasons.push("Waterpark for big kids"); }
+      else if (littleWater && !(hasInfants || hasToddlers)) { score += 3; reasons.push("Water park"); }
+      if (t.amenities.includes("Pool Slide")) { score += 3; reasons.push("Pool slide"); }
+    }
+    if (t.amenities.includes("Lazy River")) {
+      score += 2;
+      reasons.push("Lazy river");
+    }
+    if (hasTeens) {
+      if (t.amenities.includes("Flowrider")) { score += 3; reasons.push("Flowrider"); }
+      if (t.amenities.includes("Arcade"))    { score += 2; reasons.push("Arcade"); }
+    }
+
+    // ---- General family-resort signals ----
+    if (t.styles.includes("Family Resort") || t.styles.includes("Family")) {
+      score += 4;
+      reasons.push("Family-focused resort");
+    }
+    if (r.on_beach === true) {
+      score += 2;
+      reasons.push("On the beach");
+    }
+
+    // ---- Total travel time (flight + stops + airport transfer) ----
+    // Travel days are the part of a trip families dread most — and the
+    // signal scales hard with kid age. Total = flight duration +
+    // stop overhead (1h per stop ≈ layover + airport friction) +
+    // airport-to-resort transfer. Brackets: <=5h easy, 5-7h fine,
+    // 7-10h long, >10h brutal. Young kids amplify the penalty.
+    const flightHrs = Number(pkg.duration_hours) || 0;
+    const stops = Number(pkg.stops) || 0;
+    const stopOverhead = stops * 1.0;
+    const transferHrs = parseTransferHours(r.airport_transfer_notes);
+    const totalTravel = flightHrs + stopOverhead + transferHrs;
+    if (flightHrs > 0) {
+      // Sensitivity multiplier: infants/toddlers amplify the penalty,
+      // teens/no-kids dampen it. Range ≈ 0.7 to 1.5.
+      const sensitivity = hasInfants ? 1.5
+                        : hasToddlers ? 1.3
+                        : hasYoungKids ? 1.1
+                        : hasTeens ? 0.85
+                        : 0.7;
+      let raw = 0;
+      if (totalTravel <= 5)       raw =  4;
+      else if (totalTravel <= 7)  raw =  0;
+      else if (totalTravel <= 10) raw = -7;
+      else                        raw = -14;
+      score += Math.round(raw * sensitivity);
+      // Surface the reason only when it's a meaningful signal either way
+      if (raw >= 4) {
+        reasons.push(`Short travel day (~${Math.round(totalTravel)}h door-to-door)`);
+      } else if (raw <= -7) {
+        reasons.push(`Long travel day (~${Math.round(totalTravel)}h door-to-door)`);
+      }
+      if (stops >= 2 && (hasInfants || hasToddlers)) {
+        score -= 4;
+        reasons.push(`${stops}+ stops with a young child`);
+      }
+    }
+
+    score = Math.max(0, Math.min(99, Math.round(score)));
+    let label;
+    if (score >= 85)      label = "Excellent";
+    else if (score >= 72) label = "Strong";
+    else if (score >= 58) label = "Good";
+    else if (score >= 42) label = "Decent";
+    else                  label = "Limited";
+
     return { score, label, reasons };
   }
 
