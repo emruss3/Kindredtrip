@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-detail-v3" />
-<meta name="kt-build" content="20260515-detail-v3" />
+<link rel="stylesheet" href="/styles.css?v=20260515-rooms-table" />
+<meta name="kt-build" content="20260515-rooms-table" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4329,15 +4329,37 @@
         return;
       }
       if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
-      currentModalRooms = offers;
+      // Sort: rooms that fit the family first (cheapest fit on top),
+      // then undersized rooms after. Within each bucket: cheapest first.
+      const adultsRoom = Number(lastSearchSummary?.adults) || 2;
+      const kidsRoom = (lastSearchSummary?.child_ages || []).length;
+      const partyTotal = adultsRoom + kidsRoom;
+      const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
+      const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
+      const sortedOffers = [...offers].sort((a, b) => {
+        const aFits = fits(a), bFits = fits(b);
+        if (aFits !== bFits) return aFits ? -1 : 1;
+        return priceOf(a) - priceOf(b);
+      });
+      currentModalRooms = sortedOffers;
       // Pre-compute what's unique about each room vs the cheapest one
       // so the cards can call it out (Sleeps 6, Ocean view, AI, etc.)
-      currentModalRoomDiffs = computeRoomDiffs(offers);
+      currentModalRoomDiffs = computeRoomDiffs(sortedOffers);
       const pkg = currentModalPackage;
-      currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && offers.find(o => o.offer_id === pkg.hotel_offer_id))
+      currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && sortedOffers.find(o => o.offer_id === pkg.hotel_offer_id))
         ? pkg.hotel_offer_id
-        : offers[0]?.offer_id ?? null;
-      grid.innerHTML = offers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("");
+        : sortedOffers[0]?.offer_id ?? null;
+      grid.innerHTML = `
+        <div class="rooms-table">
+          <div class="rooms-table-head" role="row">
+            <div>Room type</div>
+            <div>Sleeps</div>
+            <div>Inclusions</div>
+            <div>Price</div>
+            <div></div>
+          </div>
+          ${sortedOffers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("")}
+        </div>`;
     } catch (e) {
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
@@ -4535,88 +4557,62 @@
   // look them up without recomputing.
   let currentModalRoomDiffs = {};
 
+  // Booking-style table row. The .rooms-table wrapper gives us the
+  // column headings and grid template; each row inherits the same
+  // grid-template-columns so cells line up. Includes a party-fit
+  // indicator (✓ or ⚠) computed from the active search's family size.
   function renderRoomOptionCard(o, index = 0, selectedId = null) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
 
-    // Aggregate refundable signal from the new flag, but keep
-    // legacy fall-through for any old payloads.
     const refundable = o.any_refundable === true || o.refundable === true;
-    const nonRefund = o.any_refundable === false && o.refundable !== true;
     const cancelDateStr = refundable && o.cancellation_deadline ? fmtCancelDate(o.cancellation_deadline) : "";
     const refundChip = refundable
-      ? `<span class="room-chip refundable">${cancelDateStr ? `Free cancel by ${escapeHtml(cancelDateStr)}` : "Free cancellation available"}</span>`
-      : (nonRefund ? `<span class="room-chip non-refundable">Non-refundable rates</span>` : "");
-    const sleeps = (o.max_occupancy && o.max_occupancy > 0) ? `<span class="room-chip">Sleeps ${o.max_occupancy}</span>` : "";
-    const promo = (o.any_promotions === true || o.has_promotions === true)
-      ? `<span class="room-chip promo">Promo available</span>` : "";
-    const perks = Array.isArray(o.perks) && o.perks.length
-      ? `<div class="room-option-perks">${o.perks.slice(0, 3).map((p) => `<span class="room-perk">${escapeHtml(String(p))}</span>`).join("")}</div>`
+      ? `<span class="rt-chip refund">${cancelDateStr ? `Free cancel by ${escapeHtml(cancelDateStr)}` : "Free cancellation"}</span>`
       : "";
+    const promoChip = (o.any_promotions === true || o.has_promotions === true)
+      ? `<span class="rt-chip promo">Promo</span>` : "";
 
-    // Price headline: prefer the new range. Show "From $X" when
-    // min < max, single price otherwise. price_min/_max fall back to
-    // legacy total_price.
     const pMin = Number(o.price_min ?? o.total_price) || 0;
     const pMax = Number(o.price_max ?? o.total_price) || pMin;
-    const priceHeadline = pMax > pMin
-      ? `<div class="room-option-total"><span class="room-option-from">From</span> ${fmtMoney(pMin)}</div>`
-      : `<div class="room-option-total">${fmtMoney(pMin)}</div>`;
+    const priceLabel = pMax > pMin
+      ? `<span class="rt-price-from">From</span> ${fmtMoney(pMin)}`
+      : fmtMoney(pMin);
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
 
-    // Photo strategy (priority order):
-    //   1. Per-room photos from get_hotel_offers — photos[0] is the
-    //      room's hero. is_main wins if present.
-    //   2. Rotate the top-level hotel_photos gallery as a fallback.
-    //   3. Last resort: Google Places resort photo.
+    // Party-fit indicator using the active search's family size.
+    const adultsRoom = Number(lastSearchSummary?.adults) || 2;
+    const kidsRoom = (lastSearchSummary?.child_ages || []).length;
+    const partyTotal = adultsRoom + kidsRoom;
+    const sleeps = Number(o.max_occupancy) || 0;
+    const fitsParty = !sleeps || !partyTotal || sleeps >= partyTotal;
+    const fitNote = (sleeps > 0 && partyTotal > 0)
+      ? (fitsParty
+          ? `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`
+          : `<div class="rt-fit nope">⚠ Need 2 rooms for ${partyTotal}</div>`)
+      : "";
+
+    // Small photo thumb — Booking shows a tiny inline photo. Same
+    // priority order as the old card layout: per-room → hotel gallery
+    // → resort fallback.
     const offerPhotos = Array.isArray(o.photos) ? o.photos : [];
     const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
     const hotelPhotos = Array.isArray(currentModalHotelPhotos) ? currentModalHotelPhotos : [];
     let photo = null;
-    let photoLabel = "Resort view";
-    if (main && (main.hd_url || main.url)) {
-      photo = main.hd_url || main.url;
-      photoLabel = main.label || "Room photo";
-    } else if (hotelPhotos.length > 0) {
+    if (main && (main.hd_url || main.url)) photo = main.hd_url || main.url;
+    else if (hotelPhotos.length > 0) {
       const hp = hotelPhotos[index % hotelPhotos.length];
       photo = (hp && (hp.hd_url || hp.url)) || null;
-      photoLabel = "Resort photo";
     } else {
       const refs = currentModalPhotoRefs || [];
-      if (refs.length > 0) {
-        photo = modalPhotoUrl(refs[index % refs.length], 400);
-      }
+      if (refs.length > 0) photo = modalPhotoUrl(refs[index % refs.length], 200);
     }
-    const photoInner = photo
-      ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(photoLabel)}" loading="lazy" /><span class="room-option-photo-caption">${escapeHtml(photoLabel)}</span>`
-      : "";
 
-    // Party configuration this room was priced for.
-    const adults = Number(o.adult_count) || 0;
-    const kids = Number(o.child_count) || 0;
-    const configLine = adults > 0
-      ? `<div class="room-option-config">Priced for <b>${adults}</b> adult${adults === 1 ? "" : "s"}${kids > 0 ? ` + <b>${kids}</b> kid${kids === 1 ? "" : "s"}` : ""}</div>`
-      : "";
-
-    // Compare-rates affordance — visible when there are multiple rate
-    // variants behind this room (e.g. refundable vs non-refundable).
-    const variantCount = Number(o.rate_variant_count) || (Array.isArray(o.rate_variants) ? o.rate_variants.length : 0);
-    const rateOptionsLink = variantCount > 1
-      ? `<button type="button" class="room-option-variants-toggle" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="event.stopPropagation(); toggleRoomVariants('${String(o.offer_id).replace(/'/g, "&apos;")}')" aria-expanded="false">
-           <span>${variantCount} price options</span>
-           <span class="room-option-variants-caret" aria-hidden="true">▾</span>
-         </button>
-         <div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>`
-      : "";
-
-    // Diff chips — what makes THIS room different from the cheapest.
-    // Surfaces capacity uplift, AI when baseline is RO, view, suite
-    // tier, special features extracted from the room name.
-    const diffs = currentModalRoomDiffs[o.offer_id] || [];
+    // Diff chips — what makes THIS room different from the cheapest fit
+    const diffs = (currentModalRoomDiffs[o.offer_id] || []).filter(d => d.kind !== "baseline").slice(0, 2);
     const diffChips = diffs.length
-      ? `<div class="room-row-diffs">${diffs.map((d) => {
-          const cls = d.kind === "baseline" ? "diff-base"
-            : d.kind === "upgrade" ? "diff-upgrade"
+      ? `<div class="rt-diffs">${diffs.map((d) => {
+          const cls = d.kind === "upgrade" ? "diff-upgrade"
             : d.kind === "tier" ? "diff-tier"
             : d.kind === "view" ? "diff-view"
             : "diff-feature";
@@ -4624,35 +4620,51 @@
         }).join("")}</div>`
       : "";
 
+    const variantCount = Number(o.rate_variant_count) || (Array.isArray(o.rate_variants) ? o.rate_variants.length : 0);
+    const variantLink = variantCount > 1
+      ? `<button type="button" class="rt-variants-toggle" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="event.stopPropagation(); toggleRoomVariants('${String(o.offer_id).replace(/'/g, "&apos;")}')" aria-expanded="false">${variantCount} price options ▾</button>`
+      : "";
+
     const safeId = String(o.offer_id).replace(/'/g, "&apos;");
     const isActive = selectedId && selectedId === o.offer_id;
-    // Horizontal Booking-style row: photo left, details middle,
-    // price + CTA right. Collapses to a stacked card under 720px.
+    const rowClasses = [
+      "rooms-table-row",
+      isActive ? "selected" : "",
+      fitsParty ? "" : "undersized",
+    ].filter(Boolean).join(" ");
+
     return `
-      <article class="room-row${isActive ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}">
-        <button type="button" class="room-row-clickable" onclick="selectRoomOffer('${safeId}')">
-          ${photoInner ? `<div class="room-row-photo">${photoInner}</div>` : ""}
-          <div class="room-row-body">
-            <div class="room-row-name">${escapeHtml(o.room_name || "Room")}</div>
-            <div class="room-row-board">
-              <span class="room-option-board ${boardClass}">${escapeHtml(board)}</span>
-              ${sleeps}
+      <div class="rooms-table-item" data-offer-id="${escapeHtml(String(o.offer_id))}">
+        <div class="${rowClasses}" onclick="selectRoomOffer('${safeId}')" role="row">
+          <div class="rt-name">
+            ${photo ? `<img class="rt-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="rt-thumb rt-thumb-empty"></div>`}
+            <div class="rt-name-body">
+              <div class="rt-name-line">${escapeHtml(o.room_name || "Room")}</div>
+              ${diffChips}
             </div>
-            ${diffChips}
-            ${configLine}
-            <div class="room-row-meta">
-              ${refundChip}${promo}
+          </div>
+          <div class="rt-sleeps">
+            <div class="rt-sleeps-bar">
+              <svg class="rt-sleeps-ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M2 21v-2a8 8 0 0 1 16 0v2H2z"/></svg>
+              <span class="rt-sleeps-num">${sleeps || "—"}</span>
             </div>
-            ${perks}
+            ${fitNote}
           </div>
-          <div class="room-row-price">
-            ${priceHeadline}
-            ${perNight ? `<div class="room-option-pernight">${perNight} · for stay</div>` : ""}
-            <div class="room-row-cta">${isActive ? "✓ Selected" : "Select room →"}</div>
+          <div class="rt-inclusions">
+            <span class="rt-chip board-${boardClass}">${escapeHtml(board)}</span>
+            ${refundChip}${promoChip}
           </div>
-        </button>
-        ${rateOptionsLink}
-      </article>`;
+          <div class="rt-price">
+            <div class="rt-price-total">${priceLabel}</div>
+            ${perNight ? `<div class="rt-price-pernight">${perNight}</div>` : ""}
+            ${variantLink}
+          </div>
+          <div class="rt-cta">
+            <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"}" onclick="event.stopPropagation(); selectRoomOffer('${safeId}')">${isActive ? "✓ Selected" : "Select"}</button>
+          </div>
+        </div>
+        ${variantCount > 1 ? `<div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>` : ""}
+      </div>`;
   }
 
   // Render a single rate variant as an inline sub-row under the room.
