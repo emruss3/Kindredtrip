@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-results-redesign" />
-<meta name="kt-build" content="20260515-results-redesign" />
+<link rel="stylesheet" href="/styles.css?v=20260515-compare-tray" />
+<meta name="kt-build" content="20260515-compare-tray" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -680,6 +680,9 @@
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
 </div>
 
+<aside id="compare-tray" class="compare-tray" hidden></aside>
+<div class="compare-modal-overlay" id="compare-modal-overlay" onclick="if(event.target.id==='compare-modal-overlay') closeCompareModal()"></div>
+
 <footer class="site-footer">
   <div class="footer-disclosures">
     <div>
@@ -1146,6 +1149,7 @@
     priceMin: null,
     priceMax: null,
     ratingMin: 0,
+    maxStops: null,          // 0 = direct only, 1 = up to 1 stop, null = any
   };
 
   // Sidebar UI state
@@ -1250,6 +1254,7 @@
     if (exclude !== "price"   && filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
     if (exclude !== "rating"  && filters.ratingMin > 0 && (r.avg_user_rating || 0) < filters.ratingMin) return false;
     if (exclude !== "brands"  && filters.brands.size > 0 && !filters.brands.has(r.hotel_brand || "")) return false;
+    if (exclude !== "stops"   && filters.maxStops != null && pkg.stops != null && pkg.stops > filters.maxStops) return false;
 
     const t = pkg._tags;
     if (exclude !== "amenities")  for (const tag of filters.amenities)  if (!t.amenities.includes(tag)) return false;
@@ -1264,7 +1269,8 @@
       filters.amenities.size + filters.rooms.size + filters.styles.size +
       filters.highlights.size + filters.brands.size +
       (filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
-      (filters.ratingMin > 0 ? 1 : 0);
+      (filters.ratingMin > 0 ? 1 : 0) +
+      (filters.maxStops != null ? 1 : 0);
   }
 
   function clearAllFilterState() {
@@ -1277,6 +1283,7 @@
     filters.priceMin = null;
     filters.priceMax = null;
     filters.ratingMin = 0;
+    filters.maxStops = null;
     sidebarShowAll.clear();
     syncHomepageDestinationChips();
   }
@@ -2057,14 +2064,52 @@
     } else {
       const [hero, ...rest] = visible;
       const heroHtml = renderHeroCard(hero, rankBadges.get(hero.package_id), budgetBadges.get(hero.package_id));
-      const restHtml = rest.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
-      const moreHeader = rest.length
-        ? `<div class="results-list-head"><span class="results-list-head-label">More trips that fit your family</span><span class="results-list-head-count">${rest.length} more</span></div>`
-        : "";
-      body = heroHtml + moreHeader + restHtml;
+      const restHtml = viewMode === "grouped"
+        ? renderGroupedRest(rest, rankBadges, budgetBadges)
+        : renderListRest(rest, rankBadges, budgetBadges);
+      body = heroHtml + restHtml;
     }
 
     main.innerHTML = headerHtml + filterPills + body;
+    renderCompareTray();
+  }
+
+  function renderListRest(rest, rankBadges, budgetBadges) {
+    if (!rest.length) return "";
+    const cards = rest.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+    return `<div class="results-list-head"><span class="results-list-head-label">More trips that fit your family</span><span class="results-list-head-count">${rest.length} more</span></div>${cards}`;
+  }
+
+  // Group remaining results by country so users can compare regions
+  // (Aruba vs Punta Cana vs Jamaica) without scrolling a flat list.
+  // We cap each country at 5 visible cards to keep the page glanceable.
+  function renderGroupedRest(rest, rankBadges, budgetBadges) {
+    if (!rest.length) return "";
+    const groups = new Map();
+    for (const p of rest) {
+      const c = p.resorts?.country || "Other";
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(p);
+    }
+    // Country order: by best (lowest) ranked card in each country.
+    const ordered = Array.from(groups.entries());
+    const sections = ordered.map(([country, pkgs]) => {
+      const cards = pkgs.slice(0, 5).map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+      const more = pkgs.length > 5
+        ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add('${country.replace(/'/g, "\\'")}'); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
+        : "";
+      return `
+        <section class="dest-group">
+          <header class="dest-group-head">
+            <span class="dest-group-name">${escapeHtml(country)}</span>
+            <span class="dest-group-count">${pkgs.length} trip${pkgs.length === 1 ? "" : "s"}</span>
+          </header>
+          ${cards}
+          ${more}
+        </section>
+      `;
+    }).join("");
+    return `<div class="results-list-head"><span class="results-list-head-label">More trips · grouped by destination</span><span class="results-list-head-count">${groups.size} countries</span></div>${sections}`;
   }
 
   // -------- Empty state with one-click filter fixes --------
@@ -2138,9 +2183,181 @@
     if (cb) cb.checked = false;
     renderResults();
   }
+  // Reverse of loosenSearchFlag — toggle the search-time requirement
+  // from the sidebar's "Must-haves" group. Mirrors the popover checkboxes
+  // so the popover and sidebar stay in sync.
+  function setSearchFlag(flag, on) {
+    if (!lastSearchSummary) lastSearchSummary = {};
+    if (on) lastSearchSummary[flag] = true;
+    else delete lastSearchSummary[flag];
+    const cb = document.querySelector(`.search-popover-extras input[data-flag="${flag}"]`);
+    if (cb) cb.checked = !!on;
+    renderResults();
+  }
   function loosenFilter(kind) {
     if (kind === "priceMax") { filters.priceMin = null; filters.priceMax = null; }
     else if (kind === "country") { filters.country.clear(); syncHomepageDestinationChips(); }
+    renderResults();
+  }
+
+  // -------- Compare tray (1-3 pinned trips, side-by-side) --------
+  const COMPARE_MAX = 3;
+  const compareSet = new Set();
+
+  function toggleCompare(packageId, evt) {
+    if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+    if (compareSet.has(packageId)) {
+      compareSet.delete(packageId);
+    } else {
+      if (compareSet.size >= COMPARE_MAX) {
+        // Drop the first-added so the tray never grows past 3
+        compareSet.delete(compareSet.values().next().value);
+      }
+      compareSet.add(packageId);
+    }
+    renderCompareTray();
+    renderResults();
+  }
+  function clearCompare() {
+    compareSet.clear();
+    renderCompareTray();
+    renderResults();
+  }
+
+  function renderCompareTray() {
+    const tray = document.getElementById("compare-tray");
+    if (!tray) return;
+    if (compareSet.size === 0) { tray.hidden = true; tray.innerHTML = ""; return; }
+    const pkgs = Array.from(compareSet)
+      .map(id => allPackages.find(p => p.package_id === id))
+      .filter(Boolean);
+    const slots = [];
+    for (let i = 0; i < COMPARE_MAX; i++) {
+      if (pkgs[i]) {
+        const p = pkgs[i];
+        const r = p.resorts || {};
+        const photo = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 220);
+        slots.push(`
+          <div class="compare-slot filled">
+            <img class="compare-slot-photo" src="${photo}" alt="${escapeHtml(r.resort_name || "")}" loading="lazy" />
+            <div class="compare-slot-info">
+              <div class="compare-slot-name">${escapeHtml(r.resort_name || "")}</div>
+              <div class="compare-slot-meta">${escapeHtml(r.country || "")} · <b>${fmtMoney(p.total_price)}</b></div>
+            </div>
+            <button class="compare-slot-x" onclick="toggleCompare('${p.package_id}', event)" aria-label="Remove from compare">×</button>
+          </div>
+        `);
+      } else {
+        slots.push(`<div class="compare-slot empty">Add a trip<br/><span class="compare-slot-hint">Tap Compare on a card</span></div>`);
+      }
+    }
+    tray.hidden = false;
+    tray.innerHTML = `
+      <div class="compare-tray-inner">
+        <div class="compare-tray-label">
+          <b>${compareSet.size}/${COMPARE_MAX}</b> selected
+          <button class="compare-tray-clear" onclick="clearCompare()">Clear</button>
+        </div>
+        <div class="compare-tray-slots">${slots.join("")}</div>
+        <button class="btn btn-primary compare-tray-cta" ${compareSet.size < 2 ? "disabled" : ""} onclick="openCompareModal()">
+          Compare side by side →
+        </button>
+      </div>
+    `;
+  }
+
+  function openCompareModal() {
+    if (compareSet.size < 2) return;
+    const pkgs = Array.from(compareSet)
+      .map(id => allPackages.find(p => p.package_id === id))
+      .filter(Boolean);
+    if (pkgs.length < 2) return;
+
+    const cell = (p, fn) => `<td>${fn(p) ?? "—"}</td>`;
+    const r = (p) => p.resorts || {};
+    const t = (p) => p._tags || extractTags(p);
+
+    const photoCell = (p) => {
+      const rr = r(p);
+      const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs }, 320);
+      return `<div class="compare-cell-photo"><img src="${photo}" alt="${escapeHtml(rr.resort_name || "")}" loading="lazy" /><div class="compare-cell-name">${escapeHtml(rr.resort_name || "")}</div><div class="compare-cell-sub">${escapeHtml(rr.area || rr.country || "")}</div></div>`;
+    };
+    const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${fmtMoney(p.flight_price)} flights · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
+    const fitCell = (p) => `<div class="compare-cell-fit"><span class="compare-cell-fit-num">${familyFitScore(p)}</span><span class="compare-cell-fit-lbl">Family Fit</span></div>`;
+    const gradeCell = (p, k) => {
+      const g = gradesFor(p)[k];
+      return `<span class="sg-val sg-${g.charAt(0).toLowerCase()}">${g}</span>`;
+    };
+    const flightCell = (p) => {
+      const stops = p.stops === 0 ? "Direct" : p.stops != null ? `${p.stops} stop${p.stops === 1 ? "" : "s"}` : "—";
+      return `${stops}${p.duration_hours ? ` · ${p.duration_hours}h` : ""}${p.dest_airport_iata ? `<br/><span class="compare-cell-airport">to ${escapeHtml(p.dest_airport_iata)}</span>` : ""}`;
+    };
+    const roomFitCell = (p) => {
+      const rf = roomFitInfo(p);
+      return `<b>${escapeHtml(rf.headline)}</b><br/><span class="compare-cell-sub">${escapeHtml(rf.detail)}</span>`;
+    };
+    const kidsCell = (p) => {
+      const tags = t(p);
+      const kids = KIDS_AMENITY_PRIORITY.filter(tag => tags.amenities.includes(tag));
+      if (kids.length === 0) return `<span class="compare-cell-muted">—</span>`;
+      return kids.slice(0, 4).map(k => `<span class="compare-mini-chip">${escapeHtml(BADGE_SPEC[k]?.label || k)}</span>`).join("") + (kids.length > 4 ? ` <span class="compare-cell-sub">+${kids.length - 4} more</span>` : "");
+    };
+    const ratingCell = (p) => {
+      const rr = r(p);
+      const r5 = ratingTo5(rr.avg_user_rating);
+      if (r5 == null) return "—";
+      return `<b>${r5.toFixed(1)}</b> / 5${rr.review_count ? `<br/><span class="compare-cell-sub">${fmtReviews(rr.review_count)} reviews</span>` : ""}`;
+    };
+    const aiCell = (p) => p.has_any_ai === true ? `<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>` : `<span class="compare-cell-muted">—</span>`;
+    const ctaCell = (p) => `<button class="btn btn-primary" onclick="closeCompareModal(); openResortModal('${p.package_id}')">See trip details →</button>`;
+
+    const headers = pkgs.map(p => `<th>${photoCell(p)}</th>`).join("");
+    const rows = [
+      ["Total price",     pkgs.map(p => cell(p, priceCell)).join("")],
+      ["Family Fit",      pkgs.map(p => cell(p, fitCell)).join("")],
+      ["Flight ease",     pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "flight")} <span>${flightCell(p)}</span></div></td>`).join("")],
+      ["Room fit",        pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "room")} <span>${roomFitCell(p)}</span></div></td>`).join("")],
+      ["Kids amenities",  pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "kids")} <span class="compare-cell-chips">${kidsCell(p)}</span></div></td>`).join("")],
+      ["Resort rating",   pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "resort")} <span>${ratingCell(p)}</span></div></td>`).join("")],
+      ["All-inclusive",   pkgs.map(p => cell(p, aiCell)).join("")],
+      ["",                pkgs.map(p => cell(p, ctaCell)).join("")],
+    ];
+    const tbody = rows.map(([label, html]) => `<tr><th class="compare-row-label">${escapeHtml(label)}</th>${html}</tr>`).join("");
+
+    const overlay = document.getElementById("compare-modal-overlay");
+    overlay.innerHTML = `
+      <div class="compare-modal" role="dialog" aria-labelledby="compare-modal-title">
+        <div class="compare-modal-head">
+          <h2 id="compare-modal-title">Compare ${pkgs.length} trips</h2>
+          <button class="compare-modal-close" onclick="closeCompareModal()" aria-label="Close">×</button>
+        </div>
+        <div class="compare-modal-body">
+          <table class="compare-table">
+            <thead><tr><th class="compare-row-label"></th>${headers}</tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+  function closeCompareModal() {
+    const overlay = document.getElementById("compare-modal-overlay");
+    if (overlay) overlay.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const overlay = document.getElementById("compare-modal-overlay");
+      if (overlay && overlay.classList.contains("open")) closeCompareModal();
+    }
+  });
+
+  // -------- View mode (list vs grouped by destination) --------
+  let viewMode = "list"; // "list" | "grouped"
+  function setViewMode(mode) {
+    viewMode = mode;
     renderResults();
   }
 
@@ -2200,17 +2417,85 @@
       <span style="color: var(--ink-3); font-size: 13px;">${collapsed ? "Show ▾" : "Hide ▴"}</span>
     </button>`;
 
+    // Sidebar layout: ordered by the decision a parent actually makes —
+    // Must-haves at the top (the non-negotiables); then flight ease and
+    // budget which dominate the trip math; then room fit and kids
+    // amenities which decide whether the resort itself works; destination
+    // and resort quality at the bottom for the secondary trade-offs.
     return toggle + [
-      renderCountryBlock(),
-      renderTagBlock("Kids amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities"),
-      renderTagBlock("Room options", "rooms", ROOM_PRIORITY, "rooms"),
-      renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles"),
-      renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights"),
-      renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities"),
-      renderBrandBlock(),
-      renderPriceBlock(bounds),
-      renderRatingBlock(),
-    ].join("");
+      sidebarGroup("Must-haves", renderMustHavesBlock()),
+      sidebarGroup("Flight ease", renderFlightEaseBlock()),
+      sidebarGroup("Budget", renderPriceBlock(bounds)),
+      sidebarGroup("Room fit", renderTagBlock("Room types", "rooms", ROOM_PRIORITY, "rooms")),
+      sidebarGroup("Kids amenities",
+        renderTagBlock("Amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities") +
+        renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities")
+      ),
+      sidebarGroup("Destination",
+        renderCountryBlock() + renderBrandBlock()
+      ),
+      sidebarGroup("Resort quality",
+        renderRatingBlock() +
+        renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles") +
+        renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights")
+      ),
+    ].filter(Boolean).join("");
+  }
+  // Wraps a logical group of related filter blocks under one section
+  // heading. Empty groups (e.g. no brand data yet) collapse out so the
+  // sidebar doesn't read as a bunch of empty headers.
+  function sidebarGroup(title, inner) {
+    if (!inner || !inner.trim()) return "";
+    return `<div class="sidebar-group">
+      <h4 class="sidebar-group-title">${escapeHtml(title)}</h4>
+      ${inner}
+    </div>`;
+  }
+
+  // Must-haves: the search-time flags from lastSearchSummary surfaced as
+  // sidebar toggles so users can relax / re-add a constraint without
+  // re-opening the search popover. Sync goes both ways via setSearchFlag.
+  function renderMustHavesBlock() {
+    const s = lastSearchSummary || {};
+    const flags = [
+      { key: "require_kids_club",        label: "Kids club" },
+      { key: "require_all_inclusive",    label: "All-inclusive" },
+      { key: "require_direct_flight",    label: "Direct flights only" },
+      { key: "require_connecting_rooms", label: "Connecting rooms" },
+    ];
+    const rows = flags.map(f => {
+      const active = !!s[f.key];
+      return `<button class="tag-row${active ? " active" : ""}" onclick="setSearchFlag('${f.key}', ${!active})">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(f.label)}</span>
+      </button>`;
+    }).join("");
+    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+  }
+
+  // Flight ease: max stops control. Max travel hours is search-time
+  // (it bounds which routes we even price) so we don't expose it here
+  // — surfacing it would mislead since loosening it can't expand the
+  // current result set without a new search.
+  function renderFlightEaseBlock() {
+    const cur = filters.maxStops;
+    const opts = [
+      { value: null, label: "Any" },
+      { value: 0,    label: "Direct only" },
+      { value: 1,    label: "Up to 1 stop" },
+    ];
+    const rows = opts.map(o => {
+      const active = (o.value === cur);
+      return `<button class="tag-row${active ? " active" : ""}" onclick="setMaxStops(${o.value === null ? "null" : o.value})">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(o.label)}</span>
+      </button>`;
+    }).join("");
+    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+  }
+  function setMaxStops(value) {
+    filters.maxStops = value;
+    renderResults();
   }
 
   function toggleSidebarMobile() {
@@ -2406,6 +2691,10 @@
     if (filters.ratingMin > 0) {
       pills.push(`<button class="active-filter-pill" onclick="filters.ratingMin=0;renderResults();">${filters.ratingMin}+ rating<span class="x">×</span></button>`);
     }
+    if (filters.maxStops != null) {
+      const stopsLbl = filters.maxStops === 0 ? "Direct only" : `Up to ${filters.maxStops} stop${filters.maxStops === 1 ? "" : "s"}`;
+      pills.push(`<button class="active-filter-pill" onclick="filters.maxStops=null;renderResults();">${stopsLbl}<span class="x">×</span></button>`);
+    }
     if (pills.length === 0) return "";
     return `<div class="active-filters">${pills.join("")}<button class="active-filters-clear" onclick="clearAllFilters()">Clear all</button></div>`;
   }
@@ -2456,15 +2745,21 @@
         </div>
         <div class="results-header-row results-header-meta">
           <div class="rh-count">${countLabel}</div>
-          <div class="sort-controls">
-            <label for="sort_by">Sort</label>
-            <select id="sort_by" onchange="onSortChange(this.value)">
-              <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit</option>
-              <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total cost</option>
-              <option value="under_budget"${lastSortBy === "under_budget" ? " selected" : ""}>Most under budget</option>
-              <option value="shortest_travel"${lastSortBy === "shortest_travel" ? " selected" : ""}>Shortest travel day</option>
-              <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort in budget</option>
-            </select>
+          <div class="rh-controls">
+            <div class="view-toggle" role="group" aria-label="View mode">
+              <button class="view-toggle-btn${viewMode === "list" ? " active" : ""}" onclick="setViewMode('list')" aria-pressed="${viewMode === "list"}">Ranked list</button>
+              <button class="view-toggle-btn${viewMode === "grouped" ? " active" : ""}" onclick="setViewMode('grouped')" aria-pressed="${viewMode === "grouped"}">By destination</button>
+            </div>
+            <div class="sort-controls">
+              <label for="sort_by">Sort</label>
+              <select id="sort_by" onchange="onSortChange(this.value)">
+                <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit</option>
+                <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total cost</option>
+                <option value="under_budget"${lastSortBy === "under_budget" ? " selected" : ""}>Most under budget</option>
+                <option value="shortest_travel"${lastSortBy === "shortest_travel" ? " selected" : ""}>Shortest travel day</option>
+                <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort in budget</option>
+              </select>
+            </div>
           </div>
         </div>
         <div id="pricing-updater" class="pricing-updater"${updaterHidden ? " hidden" : ""}>
@@ -2795,9 +3090,10 @@
     const scoreRow = renderScoreRow(p);
     const whyLine = whyThisRanksLine(p, rankBadge, budgetBadge);
     const whyLineHtml = `<div class="card-why"><span class="card-why-label">Why this ranks here</span><span class="card-why-text">${escapeHtml(whyLine)}</span></div>`;
+    const isCompared = compareSet.has(p.package_id);
 
     return `
-      <article class="card" onclick="openResortModal('${p.package_id}')">
+      <article class="card${isCompared ? " is-compared" : ""}" onclick="openResortModal('${p.package_id}')">
         <div class="card-photo">
           <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
@@ -2824,7 +3120,12 @@
             </div>
             ${budgetPill}
           </div>
-          <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+          <div class="card-cta-row">
+            <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+            <button class="btn btn-compare${isCompared ? " active" : ""}" aria-pressed="${isCompared}" onclick="toggleCompare('${p.package_id}', event)">
+              ${isCompared ? "✓ In compare" : "Compare"}
+            </button>
+          </div>
         </div>
       </article>
     `;
@@ -2920,6 +3221,9 @@
             </div>
             ${deltaLine}
             <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+            <button class="btn btn-compare hero-compare${compareSet.has(p.package_id) ? " active" : ""}" aria-pressed="${compareSet.has(p.package_id)}" onclick="toggleCompare('${p.package_id}', event)">
+              ${compareSet.has(p.package_id) ? "✓ In compare" : "Add to compare"}
+            </button>
           </div>
         </div>
       </article>
