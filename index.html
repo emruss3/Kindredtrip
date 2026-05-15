@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-card-simplify" />
-<meta name="kt-build" content="20260515-card-simplify" />
+<link rel="stylesheet" href="/styles.css?v=20260515-detail-v3" />
+<meta name="kt-build" content="20260515-detail-v3" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3633,23 +3633,14 @@
       </div>`;
 
     // Photo gallery — most resorts have ~8 Google Places photos in photo_refs.
-    // Hero shows photo[0]; clicking a thumbnail or the prev/next arrows swaps it.
+    // Hero shows photo[0]; clicking a thumbnail swaps it. Booking-style
+    // mosaic shows 1 big photo + a 2x2 grid of thumbnails on the right.
     currentModalPhotoRefs = Array.isArray(r.photo_refs) ? r.photo_refs : [];
     currentModalPhotoAttributions = Array.isArray(r.photo_attributions) ? r.photo_attributions : [];
     currentModalPhotoIdx = 0;
-    const hasMultiPhotos = currentModalPhotoRefs.length > 1;
-    const navArrows = hasMultiPhotos ? `
-      <button type="button" class="modal-photo-nav prev" aria-label="Previous photo" onclick="setModalPhoto(currentModalPhotoIdx - 1)">‹</button>
-      <button type="button" class="modal-photo-nav next" aria-label="Next photo" onclick="setModalPhoto(currentModalPhotoIdx + 1)">›</button>
-      <div class="modal-photo-counter" id="modal-photo-counter">1 / ${currentModalPhotoRefs.length}</div>` : "";
-    const thumbnails = hasMultiPhotos ? `
-      <div class="modal-photo-strip" id="modal-photo-strip">
-        ${currentModalPhotoRefs.slice(0, 12).map((ref, i) => `
-          <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
-            <img src="/photo?ref=${encodeURIComponent(ref)}&w=200" alt="" loading="lazy" />
-          </button>
-        `).join("")}
-      </div>` : "";
+    const gridThumbsHtml = renderHeroGridThumbs(currentModalPhotoRefs);
+    const hasAttribution = currentModalPhotoRefs.length > 0
+      && (Array.isArray(r.photo_attributions) ? r.photo_attributions[0] : null);
 
     const backBar = `
       <div class="trip-back-bar">
@@ -3660,78 +3651,169 @@
         <span class="trip-back-context">${escapeHtml(r.resort_name || "Trip detail")}${r.country ? ` · ${escapeHtml(r.country)}` : ""}</span>
       </div>`;
 
-    // Booking.com / Kayak / TripAdvisor-style layout: hero photo, then
-    // a 2-column grid with main content on the left and a sticky
-    // price/CTA sidebar on the right. Rooms come first in the main
-    // column (most-clicked section), flights second, family / about
-    // sections after. Sidebar pins the price + book CTA where users
-    // expect it.
+    // Head signal line — same compact pattern as the result card, scaled
+    // for a detail page: rating · class · location · flight · AI.
+    const headR5 = ratingTo5(r.avg_user_rating);
+    const headStars = Math.round(Number(r.cap_star_rating ?? pkg.highlights?.star_rating ?? 0));
+    const headSignals = [];
+    if (headR5 != null) headSignals.push(`<span class="signal signal-rating"><span class="star">★</span>${headR5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)} reviews)</span>` : ""}</span>`);
+    if (headStars >= 3) headSignals.push(`<span class="signal signal-class">${"★".repeat(headStars)}<span class="signal-sub">${headStars}-star hotel</span></span>`);
+    const headLoc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (headLoc) headSignals.push(`<span class="signal signal-loc">${escapeHtml(headLoc)}</span>`);
+    if (pkg.stops === 0) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}</span>`);
+    else if (pkg.duration_hours) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${pkg.duration_hours}h · ${pkg.stops || 0} stop${pkg.stops === 1 ? "" : "s"}</span>`);
+    if (pkg.has_any_ai === true) headSignals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
+
+    // Sticky right rail: live price, total, breakdown, delta, dates,
+    // party, primary CTA. Mobile collapses this into a bottom bar (see
+    // .trip-mobile-cta below).
+    const adultsRail = lastSearchSummary?.adults || 2;
+    const kidsRail = lastSearchSummary?.child_ages?.length || 0;
+    const fmtRailDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—";
+    const trailingDelta = delta
+      ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>`
+      : "";
+    const rail = `
+      <aside class="trip-side-col">
+        <div class="trip-rail trip-fit-summary">
+          <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated total"}</div>
+          <p class="price-total">${fmtMoney(pkg.total_price)}</p>
+          <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
+          <div class="trip-fit-breakdown">
+            <span><b>${fmtMoney(pkg.flight_price)}</b> flights</span>
+            <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
+          </div>
+          ${trailingDelta}
+          <div class="trip-rail-dates">
+            <div><span>Check-in</span><b>${fmtRailDate(lastSearchSummary?.date_start)}</b></div>
+            <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
+            <div><span>Party</span><b>${adultsRail}A${kidsRail > 0 ? `, ${kidsRail}K` : ""}</b></div>
+          </div>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+          <button class="btn-link-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking.com</button>
+          <div class="trip-rail-actions">
+            <button type="button" class="trip-rail-action" title="Send to self" onclick="sendTripToSelf('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              <span>Email me</span>
+            </button>
+            <button type="button" class="trip-rail-action" title="Share with spouse" onclick="shareTrip('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              <span>Share</span>
+            </button>
+            <button type="button" class="trip-rail-action" title="Watch this trip" onclick="watchTrip('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span>Watch</span>
+            </button>
+          </div>
+        </div>
+      </aside>`;
+
+    // Overview facts (Sleeps / Built / Floors / Rooms) — merged from the
+    // old aboutSection into the new Overview tab.
+    const overviewFacts = aboutBits.length
+      ? `<div class="trip-fact-grid">${aboutBits.map(b => `<div class="trip-fact"><span>${escapeHtml(b.label)}</span><b>${escapeHtml(b.value)}</b></div>`).join("")}</div>`
+      : "";
+    const overviewHighlights = gw.good.length
+      ? `<ul class="trip-highlights-list">${gw.good.slice(0, 8).map(g => `<li>${escapeHtml(g)}</li>`).join("")}</ul>`
+      : "";
+    const overviewStyles = tags.styles.length
+      ? `<div class="trip-tag-grid">${renderTagList(tags.styles)}</div>`
+      : "";
+
+    // Location section — country, area, airport transfer, on-beach
+    const transferStrLoc = fmtTransfer(r.airport_transfer_notes);
+    const locFacts = [];
+    if (pkg.dest_airport_iata) locFacts.push(`Closest airport: <b>${escapeHtml(pkg.dest_airport_iata)}</b>${r.airport_name ? ` (${escapeHtml(r.airport_name)})` : ""}`);
+    if (transferStrLoc) locFacts.push(`Airport transfer: <b>${escapeHtml(transferStrLoc)}</b>`);
+    if (r.on_beach) locFacts.push(`<b>On the beach</b> — direct beach access`);
+    if (r.area) locFacts.push(`Area: <b>${escapeHtml(r.area)}</b>`);
+
+    // Booking.com / Kayak / Google-hotels-style layout:
+    //   - Photo mosaic at top (1 big + 4 grid)
+    //   - Title + signals + sticky tab nav
+    //   - 2-col body: main scrolling content on the left, sticky price
+    //     rail on the right (collapses to mobile bottom bar)
+    //   - Tabs anchor-link to sections: Overview, Rooms, Flight,
+    //     Family fit, Location
     const html = `
       ${backBar}
-      <div class="modal-photo">
-        <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
-        ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
-        ${navArrows}
-        ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr" id="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
+
+      <section class="trip-hero">
+        <div class="trip-hero-mosaic">
+          <button type="button" class="trip-hero-main" onclick="setModalPhoto((currentModalPhotoIdx + 1) % Math.max(currentModalPhotoRefs.length, 1))">
+            <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" loading="eager" />
+            ${r.country ? `<span class="trip-hero-tag">${escapeHtml(r.country)}</span>` : ""}
+          </button>
+          <div class="trip-hero-grid" id="modal-photo-strip">${gridThumbsHtml}</div>
+        </div>
+        ${hasAttribution ? `<div class="trip-hero-attr" id="modal-photo-attr">${currentModalPhotoAttributions[0] || ""} · Photo via Google</div>` : ""}
+      </section>
+
+      <div class="trip-layout-v3">
+        <main class="trip-main-col">
+          <header class="trip-head">
+            <h1 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h1>
+            <div class="trip-head-signals">${headSignals.join("")}</div>
+          </header>
+
+          <nav class="trip-tabs" role="tablist">
+            <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
+            <a href="#trip-rooms" class="trip-tab" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
+            <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
+            <a href="#trip-fit" class="trip-tab" onclick="scrollToTripSection(event, 'trip-fit')">Family fit</a>
+            <a href="#trip-location" class="trip-tab" onclick="scrollToTripSection(event, 'trip-location')">Location</a>
+          </nav>
+
+          <section id="trip-overview" class="trip-section">
+            <h2>Overview</h2>
+            ${overviewFacts}
+            ${overviewHighlights}
+            ${overviewStyles}
+            ${directRate}
+          </section>
+
+          <section id="trip-rooms" class="trip-section">
+            ${roomOptionsSection}
+          </section>
+
+          <section id="trip-flight" class="trip-section">
+            ${flightOptions}
+          </section>
+
+          <section id="trip-fit" class="trip-section">
+            <h2>Family fit</h2>
+            ${fitPills}
+            <div class="trip-fit-room">
+              <h3>Room fit for ${room.family} traveler${room.family === 1 ? "" : "s"}</h3>
+              <p class="trip-room-fit-headline">${escapeHtml(room.headline)}</p>
+              <p class="trip-room-fit-detail">${escapeHtml(room.detail)}</p>
+              <p class="trip-room-fit-check">${escapeHtml(room.check)}</p>
+              ${tags.rooms.length ? `<div class="trip-tag-grid" style="margin-top: 8px;">${renderTagList(tags.rooms)}</div>` : ""}
+            </div>
+            ${allKidTagsInOrder.length ? `<div class="trip-fit-kids"><h3>Kids amenities</h3><div class="trip-tag-grid">${renderKidTagList(allKidTagsInOrder)}</div></div>` : ""}
+            ${activityTags.length ? `<div class="trip-fit-activities"><h3>Activities</h3><div class="trip-tag-grid">${renderTagList(activityTags)}</div></div>` : ""}
+            ${gw.watch.length ? `<div class="trip-fit-watch"><h3>Watch-outs</h3><ul>${gw.watch.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : ""}
+          </section>
+
+          <section id="trip-location" class="trip-section">
+            <h2>Getting there &amp; around</h2>
+            ${locFacts.length ? `<ul class="trip-loc-facts">${locFacts.map(f => `<li>${f}</li>`).join("")}</ul>` : `<p class="trip-loc-empty">Location details coming soon.</p>`}
+          </section>
+        </main>
+
+        ${rail}
       </div>
-      ${thumbnails}
-      <div class="modal-body trip-layout">
-        <div class="trip-layout-header">
-          <h2 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h2>
-          <div class="meta">${meta}</div>
-          ${fitPills}
+
+      ${compareSection ? `<section class="trip-alts">${compareSection}</section>` : ""}
+
+      <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
+
+      <div class="trip-mobile-cta">
+        <div class="trip-mobile-cta-info">
+          <div class="trip-mobile-cta-price"><b>${fmtMoney(pkg.total_price)}</b></div>
+          <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>
         </div>
-
-        <section class="trip-summary-strip">
-          ${tripFitTotal}
-          ${tripFitBudget}
-          <div class="trip-summary-actions">
-            <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking</button>
-            <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-          </div>
-        </section>
-
-        ${roomOptionsSection}
-        ${flightOptions}
-
-        <div class="trip-layout-grid trip-layout-grid-secondary">
-          <div class="trip-layout-main">
-            ${whyFamily}
-            ${roomFitSection}
-            ${aboutSection}
-
-            ${activityTags.length ? `
-            <div class="modal-section">
-              <h4>Activities &amp; amenities</h4>
-              <div class="tag-grid">${renderTagList(activityTags)}</div>
-            </div>` : ""}
-
-            ${tags.styles.length ? `
-            <div class="modal-section">
-              <h4>Resort style</h4>
-              <div class="tag-grid">${renderTagList(tags.styles)}</div>
-            </div>` : ""}
-
-            ${budgetSection}
-            ${compareSection}
-          </div>
-
-          <aside class="trip-layout-sidebar">
-            ${saveShare}
-          </aside>
-        </div>
-
-        <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
-      </div>
-      <div class="trip-dock" id="trip-dock">
-        <div class="trip-dock-info">
-          <div class="trip-dock-price"><b>${fmtMoney(pkg.total_price)}</b><span class="trip-dock-suffix">total · flights + hotel</span></div>
-          ${delta ? `<div class="trip-dock-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
-        </div>
-        <div class="trip-dock-actions">
-          <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking</button>
-          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-        </div>
+        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
       </div>
     `;
 
@@ -3894,22 +3976,22 @@
         <span><b>${fmtMoney(newFlightPrice)}</b> flights</span>
         <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>`;
     }
-
-    // Sticky CTA
-    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
-    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+    const mobilePrice = document.querySelector(".trip-mobile-cta-price b");
+    if (mobilePrice) mobilePrice.textContent = fmtMoney(newTotal);
 
     // Update budget delta if it's shown
     const budget = getUserBudget();
     if (budget != null) {
       const diff = Math.abs(newTotal - budget);
       const under = newTotal < budget;
-      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} your budget`;
       document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
         el.textContent = deltaText;
         el.classList.toggle("under", under);
         el.classList.toggle("over", !under);
       });
+      const mobileSub = document.querySelector(".trip-mobile-cta-sub");
+      if (mobileSub) mobileSub.textContent = `flights + hotel · ${fmtMoney(diff)} ${under ? "under" : "over"}`;
     }
 
     renderFlightAllList();
@@ -4120,6 +4202,42 @@
   // individual offer doesn't carry its own photos[].
   let currentModalHotelPhotos = [];
 
+  // Booking-style hero mosaic: 1 big photo (the hero) + up to 4 thumbs
+  // in a 2x2 grid on the right. The last thumb gets a "+N photos"
+  // overlay if there are more than 5 total. We pull from positions
+  // 1..4 of currentModalPhotoRefs; the big photo is whichever
+  // currentModalPhotoIdx points at.
+  function renderHeroGridThumbs(refs) {
+    if (!Array.isArray(refs) || refs.length <= 1) return "";
+    const slots = refs.slice(1, 5);
+    const more = refs.length > 5 ? refs.length - 5 : 0;
+    return slots.map((ref, i) => {
+      const idx = i + 1; // global photo index for setModalPhoto
+      const src = typeof ref === "string" && /^https?:\/\//.test(ref)
+        ? escapeHtml(ref)
+        : `/photo?ref=${encodeURIComponent(ref)}&w=400`;
+      const moreOverlay = (i === slots.length - 1 && more > 0)
+        ? `<span class="trip-hero-grid-more">+${more} photos</span>`
+        : "";
+      return `<button type="button" class="trip-hero-grid-cell" onclick="setModalPhoto(${idx})" aria-label="Photo ${idx + 1}">
+        <img src="${src}" alt="" loading="lazy" />
+        ${moreOverlay}
+      </button>`;
+    }).join("");
+  }
+
+  // Smooth-scroll an anchor click to a trip-section, accounting for the
+  // sticky topbar + sticky tab nav above it. Also briefly highlights the
+  // section so the user has a visual cue they jumped.
+  function scrollToTripSection(evt, id) {
+    if (evt) evt.preventDefault();
+    const el = document.getElementById(id);
+    if (!el) return;
+    // scroll-margin-top in CSS gives us the right offset for sticky bars
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.querySelectorAll(".trip-tabs .trip-tab").forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + id));
+  }
+
   // Swap the modal hero + thumbnail strip to the LiteAPI hotel
   // gallery when we have it (actual interior / pool / dining shots
   // hot-linked from cupid.travel — more relevant than the Google
@@ -4134,16 +4252,7 @@
     currentModalPhotoRefs = urls.slice(0, 12);
     currentModalPhotoIdx = 0;
     const strip = document.getElementById("modal-photo-strip");
-    if (strip) {
-      strip.innerHTML = currentModalPhotoRefs.map((u, i) => `
-        <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
-          <img src="${escapeHtml(u)}" alt="" loading="lazy" />
-        </button>`).join("");
-    }
-    // Show nav arrows + counter (the original render hides them when
-    // there's only 1 photo; with LiteAPI we usually have 8-12).
-    const counter = document.getElementById("modal-photo-counter");
-    if (counter) counter.textContent = `1 / ${currentModalPhotoRefs.length}`;
+    if (strip) strip.innerHTML = renderHeroGridThumbs(currentModalPhotoRefs);
   }
 
   // Each room card gets a photo rotated from the resort's photo gallery.
@@ -4480,18 +4589,20 @@
         <span><b>${fmtMoney(flightPrice)}</b> flights</span>
         <span><b>${fmtMoney(hotelPrice)}</b> hotel</span>`;
     }
-    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
-    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+    const mobilePrice = document.querySelector(".trip-mobile-cta-price b");
+    if (mobilePrice) mobilePrice.textContent = fmtMoney(newTotal);
     const budget = getUserBudget();
     if (budget != null) {
       const diff = Math.abs(newTotal - budget);
       const under = newTotal < budget;
-      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} your budget`;
       document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
         el.textContent = deltaText;
         el.classList.toggle("under", under);
         el.classList.toggle("over", !under);
       });
+      const mobileSub = document.querySelector(".trip-mobile-cta-sub");
+      if (mobileSub) mobileSub.textContent = `flights + hotel · ${fmtMoney(diff)} ${under ? "under" : "over"}`;
     }
   }
 
