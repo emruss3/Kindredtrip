@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-compare-tray" />
-<meta name="kt-build" content="20260515-compare-tray" />
+<link rel="stylesheet" href="/styles.css?v=20260515-card-simplify" />
+<meta name="kt-build" content="20260515-card-simplify" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1746,6 +1746,11 @@
     const slot = document.getElementById("pricing-progress-slot");
     if (!slot) return;
     slot.hidden = false;
+    // Body flag for CSS: while the big pricing widget is visible, the
+    // sticky results-header becomes static and its small inline
+    // "refreshing prices" banner is suppressed so the two status
+    // surfaces don't compete for attention at the top of the page.
+    document.body.classList.add("kt-pricing-active");
     let widget = document.getElementById("pricing-progress");
     if (!widget) {
       widget = document.createElement("div");
@@ -1859,6 +1864,7 @@
     if (w) w.remove();
     const slot = document.getElementById("pricing-progress-slot");
     if (slot) slot.hidden = true;
+    document.body.classList.remove("kt-pricing-active");
   }
 
   // Silent refetch — fetches packages, re-renders, returns the response data.
@@ -2947,149 +2953,42 @@
   function renderCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
     const tags = p._tags;
-    const badges = [];
 
-    // Hotel class chip (3/4/5 star). Surfaced as the FIRST badge so it
-    // anchors the rest of the row visually.
-    const classChip = hotelClassChip(p);
-    if (classChip) badges.push(classChip);
-
-    // Always-on rating chip — includes review count when we have it
+    // Signal line — the four or five things a parent actually scans:
+    // rating, hotel class, location, flight, all-inclusive. Everything
+    // else (kid amenities, room layouts) moves into the detail page.
     const r5 = ratingTo5(r.avg_user_rating);
-    const rc = fmtReviews(r.review_count);
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
     if (r5 != null) {
-      const reviews = rc ? ` <span class="reviews">· ${rc} reviews</span>` : "";
-      badges.push(`<span class="badge rating"><span class="star">★</span>${r5.toFixed(1)}${reviews}</span>`);
+      signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)})</span>` : ""}</span>`);
     }
-
-    // Direct flight (good)
-    if (p.stops === 0 || r.direct_flight) {
-      badges.push(`<span class="badge good"><span class="emoji">✈</span>Direct flight</span>`);
+    if (stars >= 3) {
+      signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
     }
-
-    // On the beach (good) — boolean column or strong text signal
-    if (r.on_beach === true || tags.rooms.includes("Beach Front Rooms") || tags.highlights.includes("Great Beach")) {
-      badges.push(`<span class="badge good"><span class="emoji">🏖</span>On the beach</span>`);
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    if (p.stops === 0) {
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${p.duration_hours}h` : ""}</span>`);
+    } else if (p.duration_hours) {
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${p.duration_hours}h · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
     }
-
-    // Kid amenities by priority
-    const seenLabels = new Set();
-    for (const tag of KIDS_AMENITY_PRIORITY) {
-      if (!tags.amenities.includes(tag)) continue;
-      const spec = BADGE_SPEC[tag];
-      if (!spec || seenLabels.has(spec.label)) continue;
-      seenLabels.add(spec.label);
-      badges.push(badgeFor(tag));
-      if (badges.length >= 6) break;
-    }
-
-    // Family room callouts (kid)
-    if (badges.length < 7) {
-      if (tags.rooms.includes("Family Suite")) badges.push(`<span class="badge kid"><span class="emoji">🛏</span>Family suites</span>`);
-      else if (tags.rooms.includes("2 Bedroom Suites")) badges.push(`<span class="badge kid"><span class="emoji">🛏</span>2-bdrm suites</span>`);
-    }
-    if (badges.length < 7 && (tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms)) {
-      badges.push(`<span class="badge"><span class="emoji">🚪</span>Connecting rooms</span>`);
-    }
-    if (badges.length < 7 && tags.rooms.includes("Swim Up Rooms")) {
-      badges.push(`<span class="badge"><span class="emoji">🏊</span>Swim-up rooms</span>`);
-    }
-
-    // Watch-out signals — secondary, separate from primary ranking badge
-    const watchouts = [];
-    if (r.country === "Cuba") watchouts.push("U.S. travel rules apply");
-    if (p.stops != null && p.stops >= 2) watchouts.push("Long travel day");
-    if (p.warnings) watchouts.push(String(p.warnings));
-
-    // Sparse-data placeholder — only when we genuinely have no kid-fit signal
-    const hasKidSignal = seenLabels.size > 0
-      || tags.rooms.includes("Family Suite") || tags.rooms.includes("2 Bedroom Suites")
-      || tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms
-      || tags.styles.includes("Family") || tags.styles.includes("Family Resort");
-    if (!hasKidSignal) {
-      badges.push(`<span class="badge muted">Curated family resort</span>`);
-    }
-
-    // Offer-depth badges (new from start_pricing v4: multi-offer storage)
-    if (p.max_offer_occupancy && p.max_offer_occupancy > 0) {
-      badges.push(`<span class="badge"><span class="emoji">🛏</span>Sleeps ${p.max_offer_occupancy}</span>`);
-    }
-    // All-inclusive confirmation. Always show when has_any_ai is true so the
-    // user gets visible confirmation that their toggle is being honored. For
-    // mock-priced packages (no LiteAPI offers yet) when the user has the
-    // toggle on, show a quieter "AI rate pending" so they know the AI status
-    // is provisional, not missing.
-    const aiToggle = lastSearchSummary?.require_all_inclusive;
     if (p.has_any_ai === true) {
-      badges.push(`<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>`);
-    } else if (aiToggle && p.hotel_supplier !== "liteapi") {
-      badges.push(`<span class="badge muted">All-inclusive · rate pending</span>`);
+      signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
     }
-    // Kids club confirmation is already handled by the KIDS_AMENITY_PRIORITY
-    // loop above (which renders "Kids 1+" or "Kids club" from BADGE_SPEC).
-    // Don't double up — the loop is more informative because it tells the
-    // user the minimum age when applicable.
-    if (p.has_any_refundable) {
-      badges.push(`<span class="badge"><span class="emoji">↩</span>Refundable</span>`);
-    }
-    // Room option count omitted from card badges — it's a backend
-    // signal, not a useful selling point. Surfaced in the modal where
-    // users actually browse rooms.
 
-    const stopsStr = p.stops != null
-      ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
-      : null;
-    const duration = p.duration_hours ? `${p.duration_hours}h travel` : null;
-    const transferStr = fmtTransfer(r.airport_transfer_notes);
-    const flightCost = p.flight_price != null ? `${fmtMoney(p.flight_price)} flights` : null;
+    // Family Fit — one chip, just the number + qualitative label.
+    // Letter grades move to the detail page; they were too much for a
+    // glance-and-decide flow.
+    const fitScore = familyFitScore(p);
+    const fitInfo = familyFitInfo(p);
 
-    const flightOptionsCount = p.flight_offer_count && p.flight_offer_count > 1
-      ? `${p.flight_offer_count} flight options`
-      : null;
-    const flightParts = [
-      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}` : null,
-      stopsStr,
-      duration,
-      transferStr ? `${transferStr} transfer` : null,
-      flightCost,
-      flightOptionsCount,
-    ].filter(Boolean);
-    const flightRow = flightParts.length
-      ? `<div class="card-flight"><span class="card-flight-icon">✈</span>${flightParts.join(" · ")}</div>`
-      : "";
-
-    const sizeStr = fmtSize(r.rooms_count);
-    const meta = [
-      r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
-      r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
-      sizeStr ? escapeHtml(sizeStr) : null,
-    ].filter(Boolean).join(`<span class="dot">·</span>`);
-
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
-
-    const titleRow = `
-      <div class="card-title-row">
-        <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
-        ${rankBadge ? `<span class="${rankBadge.cls}">${escapeHtml(rankBadge.label)}</span>` : ""}
-      </div>
-    `;
-
-    const watchoutRow = watchouts.length
-      ? `<div class="card-watchout">${watchouts.map(w => `<span class="badge warn"><span class="emoji">⚠</span>${escapeHtml(w)}</span>`).join("")}</div>`
-      : "";
+    // One italic line that explains the rank, no labeled box.
+    const whyLine = whyThisRanksLine(p, rankBadge, budgetBadge);
 
     const isLiveCard = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
-    const deltaRow = delta
-      ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>`
-      : "";
-    const budgetPill = budgetBadge
-      ? `<div class="${budgetBadge.cls}">${escapeHtml(budgetBadge.label)}</div>`
-      : "";
-
-    const scoreRow = renderScoreRow(p);
-    const whyLine = whyThisRanksLine(p, rankBadge, budgetBadge);
-    const whyLineHtml = `<div class="card-why"><span class="card-why-label">Why this ranks here</span><span class="card-why-text">${escapeHtml(whyLine)}</span></div>`;
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
     const isCompared = compareSet.has(p.package_id);
 
     return `
@@ -3099,82 +2998,63 @@
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
         </div>
         <div class="card-body">
-          ${titleRow}
-          <div class="card-meta">${meta}</div>
-          ${scoreRow}
-          ${flightRow}
-          <div class="badges">${badges.join("")}</div>
-          ${whyLineHtml}
-          ${watchoutRow}
+          <div class="card-title-row">
+            <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+            ${rankBadge ? `<span class="${rankBadge.cls}">${escapeHtml(rankBadge.label)}</span>` : ""}
+          </div>
+          <div class="card-signals">${signals.join("")}</div>
+          <div class="card-fit">
+            <span class="card-fit-num">${fitScore}</span>
+            <span class="card-fit-lbl">Family Fit · ${escapeHtml(fitInfo.label)}</span>
+          </div>
+          <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
         <div class="card-price">
-          <div class="price-block-top">
-            <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Estimated total"}</div>
-            <div class="price-sub">flights + hotel</div>
-            <p class="price-total">${fmtMoney(p.total_price)}</p>
-            <div class="price-suffix">for your family</div>
-            ${deltaRow}
-            <div class="price-breakdown">
-              <div><b>${fmtMoney(p.flight_price)}</b> flights</div>
-              <div><b>${fmtMoney(p.hotel_price)}</b> hotel</div>
-            </div>
-            ${budgetPill}
+          <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Estimated total"}</div>
+          <p class="price-total">${fmtMoney(p.total_price)}</p>
+          <div class="price-sub">flights + hotel</div>
+          <div class="price-breakdown-inline">
+            <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
+            <span class="dot">·</span>
+            <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
           </div>
-          <div class="card-cta-row">
-            <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
-            <button class="btn btn-compare${isCompared ? " active" : ""}" aria-pressed="${isCompared}" onclick="toggleCompare('${p.package_id}', event)">
-              ${isCompared ? "✓ In compare" : "Compare"}
-            </button>
-          </div>
+          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+          <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+          <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
         </div>
       </article>
     `;
   }
 
-  // Hero card for the #1 result. Same data as renderCard but a more
-  // premium layout: full-width image strip, bigger price block, an
-  // explicit "Best overall for your family" eyebrow, and the reasons
-  // surfaced inline rather than as small chips.
+  // Hero card for the #1 result — same simplification principle as the
+  // regular card but bigger photo + larger typography. Same data, fewer
+  // competing chips: one signal line, one Family Fit chip, top 2 reasons
+  // inline, price block, primary CTA.
   function renderHeroCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
-    const tags = p._tags || extractTags(p);
     const fit = familyFitInfo(p);
     const score = familyFitScore(p);
-    const grades = gradesFor(p);
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1000);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
     const isLive = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
-    const classChip = hotelClassChip(p);
-    const r5 = ratingTo5(r.avg_user_rating);
-    const ratingChip = r5 != null
-      ? `<span class="badge rating"><span class="star">★</span>${r5.toFixed(1)}${r.review_count ? ` <span class="reviews">· ${fmtReviews(r.review_count)} reviews</span>` : ""}</span>`
-      : "";
-    const aiChip = p.has_any_ai === true
-      ? `<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>`
-      : "";
-    const directChip = p.stops === 0
-      ? `<span class="badge good"><span class="emoji">✈</span>Direct flight</span>`
-      : "";
-    const beachChip = (r.on_beach === true || tags.rooms.includes("Beach Front Rooms") || tags.highlights.includes("Great Beach"))
-      ? `<span class="badge good"><span class="emoji">🏖</span>On the beach</span>`
-      : "";
-    const heroBadges = [classChip, ratingChip, directChip, beachChip, aiChip].filter(Boolean).join("");
+    const eyebrow = rankBadge?.label || "Best overall for your family";
+    const isCompared = compareSet.has(p.package_id);
 
-    const reasons = fit.reasons.slice(0, 4);
+    const r5 = ratingTo5(r.avg_user_rating);
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
+    if (r5 != null) signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)})</span>` : ""}</span>`);
+    if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    if (p.stops === 0) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${p.duration_hours}h` : ""}</span>`);
+    else if (p.duration_hours) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${p.duration_hours}h · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+    if (p.has_any_ai === true) signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
+
+    const reasons = fit.reasons.slice(0, 3);
     const reasonsHtml = reasons.length
       ? `<ul class="hero-reasons">${reasons.map(rsn => `<li>${escapeHtml(rsn)}</li>`).join("")}</ul>`
-      : "";
-
-    const flightLine = [
-      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}` : null,
-      p.stops != null ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`) : null,
-      p.duration_hours ? `${p.duration_hours}h travel` : null,
-    ].filter(Boolean).join(" · ");
-
-    const deltaLine = delta
-      ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>`
-      : "";
-    const eyebrow = rankBadge?.label || "Best overall for your family";
+      : `<p class="hero-why-text">${escapeHtml(whyThisRanksLine(p, rankBadge, budgetBadge))}</p>`;
 
     return `
       <article class="hero-card" onclick="openResortModal('${p.package_id}')">
@@ -3186,44 +3066,25 @@
         <div class="hero-card-body">
           <div class="hero-card-info">
             <h3 class="hero-card-title">${escapeHtml(r.resort_name || "Unknown resort")}</h3>
-            <div class="hero-card-meta">
-              ${r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || "")}
-              ${r.hotel_brand ? `<span class="dot">·</span>${escapeHtml(r.hotel_brand)}` : ""}
+            <div class="card-signals">${signals.join("")}</div>
+            <div class="card-fit hero-fit">
+              <span class="card-fit-num">${score}</span>
+              <span class="card-fit-lbl">Family Fit · ${escapeHtml(fit.label)}</span>
             </div>
-            <div class="hero-score">
-              <div class="hero-score-num">
-                <span class="hero-score-val">${score}</span>
-                <span class="hero-score-lbl">Family Fit</span>
-              </div>
-              <div class="hero-score-grades">
-                <span class="score-grade"><span class="sg-label">Price</span><span class="sg-val sg-${grades.price.charAt(0).toLowerCase()}">${grades.price}</span></span>
-                <span class="score-grade"><span class="sg-label">Flight</span><span class="sg-val sg-${grades.flight.charAt(0).toLowerCase()}">${grades.flight}</span></span>
-                <span class="score-grade"><span class="sg-label">Resort</span><span class="sg-val sg-${grades.resort.charAt(0).toLowerCase()}">${grades.resort}</span></span>
-                <span class="score-grade"><span class="sg-label">Room</span><span class="sg-val sg-${grades.room.charAt(0).toLowerCase()}">${grades.room}</span></span>
-                <span class="score-grade"><span class="sg-label">Kids</span><span class="sg-val sg-${grades.kids.charAt(0).toLowerCase()}">${grades.kids}</span></span>
-              </div>
-            </div>
-            <div class="hero-badges">${heroBadges}</div>
-            <div class="hero-why">
-              <span class="hero-why-label">Why it wins</span>
-              ${reasonsHtml || `<p class="hero-why-text">${escapeHtml(whyThisRanksLine(p, rankBadge, budgetBadge))}</p>`}
-            </div>
-            ${flightLine ? `<div class="hero-flight"><span class="card-flight-icon">✈</span>${flightLine}</div>` : ""}
+            ${reasonsHtml}
           </div>
           <div class="hero-card-pricing">
             <div class="hero-price-eyebrow${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated total"}</div>
             <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
-            <div class="hero-price-sub">total · flights + hotel · family of ${(lastSearchSummary?.adults || 2) + (lastSearchSummary?.child_ages?.length || 0)}</div>
+            <div class="hero-price-sub">total · flights + hotel</div>
             <div class="hero-price-split">
               <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
               <span class="dot">·</span>
               <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
             </div>
-            ${deltaLine}
+            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}
             <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
-            <button class="btn btn-compare hero-compare${compareSet.has(p.package_id) ? " active" : ""}" aria-pressed="${compareSet.has(p.package_id)}" onclick="toggleCompare('${p.package_id}', event)">
-              ${compareSet.has(p.package_id) ? "✓ In compare" : "Add to compare"}
-            </button>
+            <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
           </div>
         </div>
       </article>
