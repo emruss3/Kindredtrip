@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-trip-layout-v2" />
-<meta name="kt-build" content="20260514-trip-layout-v2" />
+<link rel="stylesheet" href="/styles.css?v=20260514-rooms-table-dock" />
+<meta name="kt-build" content="20260514-rooms-table-dock" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3191,10 +3191,20 @@
           ${fitPills}
         </div>
 
-        <div class="trip-layout-grid">
+        <section class="trip-summary-strip">
+          ${tripFitTotal}
+          ${tripFitBudget}
+          <div class="trip-summary-actions">
+            <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking</button>
+            <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+          </div>
+        </section>
+
+        ${roomOptionsSection}
+        ${flightOptions}
+
+        <div class="trip-layout-grid trip-layout-grid-secondary">
           <div class="trip-layout-main">
-            ${roomOptionsSection}
-            ${flightOptions}
             ${whyFamily}
             ${roomFitSection}
             ${aboutSection}
@@ -3216,24 +3226,21 @@
           </div>
 
           <aside class="trip-layout-sidebar">
-            <div class="trip-sidebar-card">
-              <section class="trip-fit-summary">
-                <div class="trip-fit-top">
-                  ${tripFitTotal}
-                  ${tripFitBudget}
-                </div>
-              </section>
-              <div class="trip-sidebar-actions">
-                <button class="btn btn-primary btn-lg btn-block" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-                <button class="btn btn-secondary btn-block" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking.com</button>
-              </div>
-              <div class="trip-sidebar-note">Price shown is for your dates and party. You'll review and confirm with our booking partner before paying.</div>
-            </div>
             ${saveShare}
           </aside>
         </div>
 
         <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
+      </div>
+      <div class="trip-dock" id="trip-dock">
+        <div class="trip-dock-info">
+          <div class="trip-dock-price"><b>${fmtMoney(pkg.total_price)}</b><span class="trip-dock-suffix">total · flights + hotel</span></div>
+          ${delta ? `<div class="trip-dock-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+        </div>
+        <div class="trip-dock-actions">
+          <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking</button>
+          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+        </div>
       </div>
     `;
 
@@ -3603,8 +3610,9 @@
       }
       if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
       currentModalRooms = offers;
-      // Mark the package's currently-chosen room as selected so the click
-      // state matches what's reflected in the trip-fit-summary up top.
+      // Pre-compute what's unique about each room vs the cheapest one
+      // so the cards can call it out (Sleeps 6, Ocean view, AI, etc.)
+      currentModalRoomDiffs = computeRoomDiffs(offers);
       const pkg = currentModalPackage;
       currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && offers.find(o => o.offer_id === pkg.hotel_offer_id))
         ? pkg.hotel_offer_id
@@ -3662,6 +3670,124 @@
   //   - any_refundable / any_promotions: aggregate flags
   // One CARD per room category. Clicking the card selects the cheapest
   // rate. "X price options" link expands rate_variants for refinement.
+  // Pull distinctive features out of a room name string. Returns an
+  // ordered list of feature tags from the highest-signal keywords we
+  // see across LiteAPI's room names ("Ocean View", "Junior Suite",
+  // "Family Room", "Swim-Up", etc.). Used to surface what's different
+  // between rooms instead of just showing the name verbatim.
+  function extractRoomFeatures(name) {
+    const n = String(name || "").toLowerCase();
+    const tags = [];
+    // Room tier (only one — first match wins)
+    const tiers = [
+      { kw: ["presidential", "presidente"], label: "Presidential suite", kind: "tier" },
+      { kw: ["royal suite"], label: "Royal suite", kind: "tier" },
+      { kw: ["master suite"], label: "Master suite", kind: "tier" },
+      { kw: ["family suite"], label: "Family suite", kind: "tier" },
+      { kw: ["honeymoon"], label: "Honeymoon suite", kind: "tier" },
+      { kw: ["junior suite", "jr suite", "jr. suite"], label: "Junior suite", kind: "tier" },
+      { kw: ["one bedroom suite", "1 bedroom suite", "1-bedroom suite"], label: "1-bedroom suite", kind: "tier" },
+      { kw: ["two bedroom suite", "2 bedroom suite", "2-bedroom suite"], label: "2-bedroom suite", kind: "tier" },
+      { kw: ["suite"], label: "Suite", kind: "tier" },
+      { kw: ["villa"], label: "Villa", kind: "tier" },
+      { kw: ["bungalow"], label: "Bungalow", kind: "tier" },
+      { kw: ["family room", "family deluxe"], label: "Family room", kind: "tier" },
+      { kw: ["club", "concierge"], label: "Club access", kind: "tier" },
+      { kw: ["preferred"], label: "Preferred club", kind: "tier" },
+      { kw: ["premium"], label: "Premium", kind: "tier" },
+      { kw: ["deluxe"], label: "Deluxe", kind: "tier" },
+      { kw: ["superior"], label: "Superior", kind: "tier" },
+    ];
+    for (const t of tiers) {
+      if (t.kw.some((k) => n.includes(k))) { tags.push({ label: t.label, kind: "tier" }); break; }
+    }
+    // View
+    const views = [
+      { kw: ["ocean front", "oceanfront", "beachfront", "beach front"], label: "Beachfront" },
+      { kw: ["ocean view", "sea view"], label: "Ocean view" },
+      { kw: ["partial ocean", "ocean facing"], label: "Partial ocean" },
+      { kw: ["pool view"], label: "Pool view" },
+      { kw: ["garden view"], label: "Garden view" },
+      { kw: ["lagoon view"], label: "Lagoon view" },
+      { kw: ["mountain view"], label: "Mountain view" },
+    ];
+    for (const v of views) {
+      if (v.kw.some((k) => n.includes(k))) { tags.push({ label: v.label, kind: "view" }); break; }
+    }
+    // Feature add-ons (multiple allowed)
+    const features = [
+      { kw: ["swim up", "swim-up"], label: "Swim-up access" },
+      { kw: ["jacuzzi", "whirlpool", "hot tub"], label: "Jacuzzi" },
+      { kw: ["plunge pool", "private pool"], label: "Plunge pool" },
+      { kw: ["balcony"], label: "Balcony" },
+      { kw: ["terrace"], label: "Terrace" },
+      { kw: ["walk-out", "walk out"], label: "Walk-out" },
+      { kw: ["loft"], label: "Loft" },
+      { kw: ["connecting"], label: "Connecting available" },
+    ];
+    for (const f of features) {
+      if (f.kw.some((k) => n.includes(k))) tags.push({ label: f.label, kind: "feature" });
+    }
+    // Bed config
+    const beds = [
+      { kw: ["king size bed", "1 king", "king bed"], label: "King bed" },
+      { kw: ["2 queens", "two queens", "2 queen", "twin queens"], label: "2 queen beds" },
+      { kw: ["1 queen", "queen bed"], label: "Queen bed" },
+      { kw: ["2 doubles", "two doubles", "2 double"], label: "2 double beds" },
+    ];
+    for (const b of beds) {
+      if (b.kw.some((k) => n.includes(k))) { tags.push({ label: b.label, kind: "bed" }); break; }
+    }
+    return tags;
+  }
+
+  // Compare all rooms in the current modal and decorate each with the
+  // diffs that make it stand out vs. the cheapest room (the baseline
+  // user is comparing UP from). Returns map<offer_id, diffs[]>.
+  //
+  // Diffs include: capacity uplift, board uplift (AI when baseline is
+  // RO), feature/view differences, refundability when baseline isn't.
+  function computeRoomDiffs(offers) {
+    const diffs = {};
+    if (!offers.length) return diffs;
+    // Baseline = cheapest by price_min, then largest capacity tie-break.
+    const sorted = [...offers].sort((a, b) =>
+      (Number(a.price_min ?? a.total_price) || 0) - (Number(b.price_min ?? b.total_price) || 0)
+    );
+    const base = sorted[0];
+    const baseFeatures = new Set(extractRoomFeatures(base.room_name).map(f => `${f.kind}:${f.label}`));
+    const baseOcc = Number(base.max_occupancy) || 0;
+    const baseAI = base.is_all_inclusive === true;
+    const baseRefundable = base.any_refundable === true || base.refundable === true;
+
+    for (const o of offers) {
+      const out = [];
+      if (o.offer_id === base.offer_id) {
+        out.push({ kind: "baseline", label: "Lowest price" });
+      } else {
+        const occ = Number(o.max_occupancy) || 0;
+        if (baseOcc > 0 && occ > baseOcc) {
+          out.push({ kind: "upgrade", label: `Sleeps ${occ}` });
+        }
+        const isAI = o.is_all_inclusive === true;
+        if (isAI && !baseAI) out.push({ kind: "upgrade", label: "All-inclusive" });
+        const isRefundable = o.any_refundable === true || o.refundable === true;
+        if (isRefundable && !baseRefundable) out.push({ kind: "feature", label: "Refundable" });
+        const features = extractRoomFeatures(o.room_name);
+        for (const f of features) {
+          const k = `${f.kind}:${f.label}`;
+          if (!baseFeatures.has(k)) out.push({ kind: f.kind, label: f.label });
+        }
+      }
+      diffs[o.offer_id] = out;
+    }
+    return diffs;
+  }
+
+  // Holds the most recently computed diffs so renderRoomOptionCard can
+  // look them up without recomputing.
+  let currentModalRoomDiffs = {};
+
   function renderRoomOptionCard(o, index = 0, selectedId = null) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
@@ -3714,8 +3840,8 @@
         photo = modalPhotoUrl(refs[index % refs.length], 400);
       }
     }
-    const photoBlock = photo
-      ? `<div class="room-option-photo"><img src="${escapeHtml(photo)}" alt="${escapeHtml(photoLabel)}" loading="lazy" /><span class="room-option-photo-caption">${escapeHtml(photoLabel)}</span></div>`
+    const photoInner = photo
+      ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(photoLabel)}" loading="lazy" /><span class="room-option-photo-caption">${escapeHtml(photoLabel)}</span>`
       : "";
 
     // Party configuration this room was priced for.
@@ -3736,27 +3862,46 @@
          <div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>`
       : "";
 
+    // Diff chips — what makes THIS room different from the cheapest.
+    // Surfaces capacity uplift, AI when baseline is RO, view, suite
+    // tier, special features extracted from the room name.
+    const diffs = currentModalRoomDiffs[o.offer_id] || [];
+    const diffChips = diffs.length
+      ? `<div class="room-row-diffs">${diffs.map((d) => {
+          const cls = d.kind === "baseline" ? "diff-base"
+            : d.kind === "upgrade" ? "diff-upgrade"
+            : d.kind === "tier" ? "diff-tier"
+            : d.kind === "view" ? "diff-view"
+            : "diff-feature";
+          return `<span class="diff-chip ${cls}">${escapeHtml(d.label)}</span>`;
+        }).join("")}</div>`
+      : "";
+
     const safeId = String(o.offer_id).replace(/'/g, "&apos;");
     const isActive = selectedId && selectedId === o.offer_id;
+    // Horizontal Booking-style row: photo left, details middle,
+    // price + CTA right. Collapses to a stacked card under 720px.
     return `
-      <article class="room-option-card${isActive ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}">
-        <button type="button" class="room-option-clickable" onclick="selectRoomOffer('${safeId}')">
-          ${photoBlock}
-          <div class="room-option-body">
-            <div class="room-option-top">
-              <div class="room-option-name">${escapeHtml(o.room_name || "Room")}</div>
-              <div class="room-option-board ${boardClass}">${escapeHtml(board)}</div>
+      <article class="room-row${isActive ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}">
+        <button type="button" class="room-row-clickable" onclick="selectRoomOffer('${safeId}')">
+          ${photoInner ? `<div class="room-row-photo">${photoInner}</div>` : ""}
+          <div class="room-row-body">
+            <div class="room-row-name">${escapeHtml(o.room_name || "Room")}</div>
+            <div class="room-row-board">
+              <span class="room-option-board ${boardClass}">${escapeHtml(board)}</span>
+              ${sleeps}
             </div>
+            ${diffChips}
             ${configLine}
-            <div class="room-option-chips">
-              ${refundChip}${sleeps}${promo}
+            <div class="room-row-meta">
+              ${refundChip}${promo}
             </div>
             ${perks}
-            <div class="room-option-price">
-              ${priceHeadline}
-              ${perNight ? `<div class="room-option-pernight">${perNight} · total for stay</div>` : ""}
-            </div>
-            <div class="room-option-cta">${isActive ? "✓ Selected" : "Select this room →"}</div>
+          </div>
+          <div class="room-row-price">
+            ${priceHeadline}
+            ${perNight ? `<div class="room-option-pernight">${perNight} · for stay</div>` : ""}
+            <div class="room-row-cta">${isActive ? "✓ Selected" : "Select room →"}</div>
           </div>
         </button>
         ${rateOptionsLink}
