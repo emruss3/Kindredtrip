@@ -1365,6 +1365,19 @@
     if (mins === 0) return `${h}h`;
     return `${h}h ${mins}m`;
   }
+  // Decimal hours → "Xh Ym" (e.g. 6.5 → "6h 30m", 7 → "7h", 0.5 → "30m").
+  // We round to the nearest minute so 6.499999 doesn't render as "6h 30m"
+  // off-by-one.
+  function fmtFlightDuration(hours) {
+    const h = Number(hours);
+    if (!Number.isFinite(h) || h <= 0) return null;
+    const totalMin = Math.round(h * 60);
+    const hh = Math.floor(totalMin / 60);
+    const mm = totalMin % 60;
+    if (hh === 0) return `${mm}m`;
+    if (mm === 0) return `${hh}h`;
+    return `${hh}h ${mm}m`;
+  }
   // Parse "HH:MM" transfer time into hours (decimal). Returns 0 when
   // unparseable so missing data doesn't penalize the resort.
   function parseTransferHours(notes) {
@@ -2300,7 +2313,7 @@
     };
     const flightCell = (p) => {
       const stops = p.stops === 0 ? "Direct" : p.stops != null ? `${p.stops} stop${p.stops === 1 ? "" : "s"}` : "—";
-      return `${stops}${p.duration_hours ? ` · ${p.duration_hours}h` : ""}${p.dest_airport_iata ? `<br/><span class="compare-cell-airport">to ${escapeHtml(p.dest_airport_iata)}</span>` : ""}`;
+      return `${stops}${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}${p.dest_airport_iata ? `<br/><span class="compare-cell-airport">to ${escapeHtml(p.dest_airport_iata)}</span>` : ""}`;
     };
     const roomFitCell = (p) => {
       const rf = roomFitInfo(p);
@@ -2968,9 +2981,9 @@
     const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
     if (p.stops === 0) {
-      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${p.duration_hours}h` : ""}</span>`);
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
     } else if (p.duration_hours) {
-      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${p.duration_hours}h · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
     }
     if (p.has_any_ai === true) {
       signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
@@ -3046,8 +3059,8 @@
     if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
     const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
-    if (p.stops === 0) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${p.duration_hours}h` : ""}</span>`);
-    else if (p.duration_hours) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${p.duration_hours}h · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+    if (p.stops === 0) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
+    else if (p.duration_hours) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
     if (p.has_any_ai === true) signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
 
     const reasons = fit.reasons.slice(0, 3);
@@ -3195,10 +3208,18 @@
         || t.amenities.includes("Kids Club")
         || t.amenities.includes("Kids Club for Under 4");
       if (hasKidsClub) {
-        const minAge = Number(r.kids_club_min_age);
-        const maxAge = Number(r.kids_club_max_age);
+        // NB: r.kids_club_min_age / max_age are NULL for most resorts.
+        // Number(null) === 0 — we MUST check for null explicitly,
+        // otherwise an absent range becomes a bogus "ages 0–0" that
+        // excludes every kid in the party.
+        const minAgeRaw = r.kids_club_min_age;
+        const maxAgeRaw = r.kids_club_max_age;
+        const minAge = minAgeRaw == null ? null : Number(minAgeRaw);
+        const maxAge = maxAgeRaw == null ? null : Number(maxAgeRaw);
         const hasMin = Number.isFinite(minAge);
-        const hasMax = Number.isFinite(maxAge);
+        // max=0 is also catalog noise (a "kids club" capped at 0 years
+        // old isn't real), so reject it the same way.
+        const hasMax = Number.isFinite(maxAge) && maxAge > 0;
         if (hasMin || hasMax) {
           const eligible = kidAges.filter(a => (!hasMin || a >= minAge) && (!hasMax || a <= maxAge));
           const range = hasMin && hasMax ? `${minAge}–${maxAge}` : hasMin ? `${minAge}+` : `up to ${maxAge}`;
@@ -3324,7 +3345,7 @@
   function travelEaseInfo(pkg) {
     if (pkg.stops == null) return { label: "—", note: "—" };
     const stopsStr = pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`;
-    const dur = pkg.duration_hours ? `${pkg.duration_hours}h` : "";
+    const dur = pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)}` : "";
     const transferStr = fmtTransfer(pkg.resorts?.airport_transfer_notes);
     return {
       label: pkg.stops === 0 ? "Easy" : pkg.stops >= 2 ? "Long day" : "Manageable",
@@ -3584,7 +3605,7 @@
             <div class="flight-option-meta">${escapeHtml([
               destAirportLabel,
               pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
-              pkg.duration_hours ? `${pkg.duration_hours}h travel` : null,
+              pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)} travel` : null,
             ].filter(Boolean).join(" · "))}</div>
             <div class="flight-option-note">${liveFlight ? "Live fare for your family" : "Estimated total for your family"}</div>
           </article>
@@ -3743,7 +3764,7 @@
                 <div class="alt-card-body">
                   <div class="alt-card-why">${escapeHtml(why)}</div>
                   <div class="alt-card-name">${escapeHtml(ar.resort_name || "Alternative")}</div>
-                  <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${a.duration_hours}h` : ""}</div>
+                  <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${fmtFlightDuration(a.duration_hours)}` : ""}</div>
                   <div class="alt-card-price"><b>${fmtMoney(a.total_price)}</b><span class="alt-card-price-sub"> total</span></div>
                   ${aDelta ? `<div class="budget-delta small ${aDelta.under ? "under" : "over"}">${fmtMoney(aDelta.diff)} ${aDelta.under ? "under" : "over"}</div>` : ""}
                 </div>
@@ -3807,8 +3828,8 @@
     if (headStars >= 3) headSignals.push(`<span class="signal signal-class">${"★".repeat(headStars)}<span class="signal-sub">${headStars}-star hotel</span></span>`);
     const headLoc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (headLoc) headSignals.push(`<span class="signal signal-loc">${escapeHtml(headLoc)}</span>`);
-    if (pkg.stops === 0) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}</span>`);
-    else if (pkg.duration_hours) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${pkg.duration_hours}h · ${pkg.stops || 0} stop${pkg.stops === 1 ? "" : "s"}</span>`);
+    if (pkg.stops === 0) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}</span>`);
+    else if (pkg.duration_hours) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(pkg.duration_hours)} · ${pkg.stops || 0} stop${pkg.stops === 1 ? "" : "s"}</span>`);
     if (pkg.has_any_ai === true) headSignals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
 
     // Sticky right rail: live price, total, breakdown, delta, dates,
@@ -4827,7 +4848,7 @@
       `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
     ];
     if (delta) lines.push(`${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget (${fmtMoney(delta.budget)})`);
-    if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}`);
+    if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}`);
     lines.push("");
     lines.push("Open in KindredTrips: " + location.href);
     return lines.join("\n");
