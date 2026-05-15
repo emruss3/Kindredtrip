@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-detail-page" />
-<meta name="kt-build" content="20260514-detail-page" />
+<link rel="stylesheet" href="/styles.css?v=20260514-hotel-photos-fallback" />
+<meta name="kt-build" content="20260514-hotel-photos-fallback" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3635,20 +3635,23 @@
     // Photo strategy (priority order):
     //   1. Real room photo from LiteAPI matched by normalized room name
     //      (e.g. "double luxury room" → "double luxury room").
-    //   2. Real room photo matched by room_type_id (rate-specific IDs
-    //      rarely match LiteAPI's catalog IDs, but try anyway).
-    //   3. Rotating resort gallery photo as a visual anchor.
-    // Caption tells the user which source they're seeing.
+    //   2. Real room photo matched by room_type_id.
+    //   3. Rotate through LiteAPI's hotel photo gallery (these include
+    //      actual room interiors, pools, lobby — far more relevant
+    //      than the Google Places exterior shot).
+    //   4. Last resort: resort gallery photo.
     const roomTypeId = o.room_type_id != null ? String(o.room_type_id) : null;
     const normName = (o.room_name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
     const byName = (currentModalRoomPhotos.by_name || {})[normName] || [];
     const byId = roomTypeId && currentModalRoomPhotos.by_id
       ? (currentModalRoomPhotos.by_id[roomTypeId] || [])
       : [];
+    const hotelPhotos = Array.isArray(currentModalRoomPhotos.hotel) ? currentModalRoomPhotos.hotel : [];
     let photo = null;
-    let isRoomPhoto = false;
-    if (byName.length > 0) { photo = byName[0]; isRoomPhoto = true; }
-    else if (byId.length > 0) { photo = byId[0]; isRoomPhoto = true; }
+    let photoLabel = "Resort view";
+    if (byName.length > 0) { photo = byName[0]; photoLabel = "Room photo"; }
+    else if (byId.length > 0) { photo = byId[0]; photoLabel = "Room photo"; }
+    else if (hotelPhotos.length > 0) { photo = hotelPhotos[index % hotelPhotos.length]; photoLabel = "Resort photo"; }
     else {
       const refs = currentModalPhotoRefs || [];
       if (refs.length > 0) {
@@ -3656,7 +3659,7 @@
       }
     }
     const photoBlock = photo
-      ? `<div class="room-option-photo"><img src="${escapeHtml(photo)}" alt="${isRoomPhoto ? "Room photo" : "Resort view"}" loading="lazy" /><span class="room-option-photo-caption">${isRoomPhoto ? "Room photo" : "Resort view"}</span></div>`
+      ? `<div class="room-option-photo"><img src="${escapeHtml(photo)}" alt="${escapeHtml(photoLabel)}" loading="lazy" /><span class="room-option-photo-caption">${escapeHtml(photoLabel)}</span></div>`
       : "";
 
     // Party configuration this rate was priced for ("2 adults" / "2 adults + 2 kids")
