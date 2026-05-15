@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-room-categories" />
-<meta name="kt-build" content="20260514-room-categories" />
+<link rel="stylesheet" href="/styles.css?v=20260514-trip-layout-v2" />
+<meta name="kt-build" content="20260514-trip-layout-v2" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3169,6 +3169,12 @@
         <span class="trip-back-context">${escapeHtml(r.resort_name || "Trip detail")}${r.country ? ` · ${escapeHtml(r.country)}` : ""}</span>
       </div>`;
 
+    // Booking.com / Kayak / TripAdvisor-style layout: hero photo, then
+    // a 2-column grid with main content on the left and a sticky
+    // price/CTA sidebar on the right. Rooms come first in the main
+    // column (most-clicked section), flights second, family / about
+    // sections after. Sidebar pins the price + book CTA where users
+    // expect it.
     const html = `
       ${backBar}
       <div class="modal-photo">
@@ -3178,45 +3184,54 @@
         ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr" id="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
       </div>
       ${thumbnails}
-      <div class="modal-body">
-        <div class="modal-header">
+      <div class="modal-body trip-layout">
+        <div class="trip-layout-header">
           <h2 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h2>
           <div class="meta">${meta}</div>
-        </div>
-
-        <section class="trip-fit-summary">
-          <div class="trip-fit-top">
-            ${tripFitTotal}
-            ${tripFitBudget}
-          </div>
           ${fitPills}
-        </section>
-
-        ${flightOptions}
-        ${whyFamily}
-        ${roomFitSection}
-        ${roomOptionsSection}
-        ${budgetSection}
-        ${aboutSection}
-
-        ${activityTags.length ? `
-        <div class="modal-section">
-          <h4>Activities &amp; amenities</h4>
-          <div class="tag-grid">${renderTagList(activityTags)}</div>
         </div>
-        ` : ""}
 
-        ${tags.styles.length ? `
-        <div class="modal-section">
-          <h4>Resort style</h4>
-          <div class="tag-grid">${renderTagList(tags.styles)}</div>
+        <div class="trip-layout-grid">
+          <div class="trip-layout-main">
+            ${roomOptionsSection}
+            ${flightOptions}
+            ${whyFamily}
+            ${roomFitSection}
+            ${aboutSection}
+
+            ${activityTags.length ? `
+            <div class="modal-section">
+              <h4>Activities &amp; amenities</h4>
+              <div class="tag-grid">${renderTagList(activityTags)}</div>
+            </div>` : ""}
+
+            ${tags.styles.length ? `
+            <div class="modal-section">
+              <h4>Resort style</h4>
+              <div class="tag-grid">${renderTagList(tags.styles)}</div>
+            </div>` : ""}
+
+            ${budgetSection}
+            ${compareSection}
+          </div>
+
+          <aside class="trip-layout-sidebar">
+            <div class="trip-sidebar-card">
+              <section class="trip-fit-summary">
+                <div class="trip-fit-top">
+                  ${tripFitTotal}
+                  ${tripFitBudget}
+                </div>
+              </section>
+              <div class="trip-sidebar-actions">
+                <button class="btn btn-primary btn-lg btn-block" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+                <button class="btn btn-secondary btn-block" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking.com</button>
+              </div>
+              <div class="trip-sidebar-note">Price shown is for your dates and party. You'll review and confirm with our booking partner before paying.</div>
+            </div>
+            ${saveShare}
+          </aside>
         </div>
-        ` : ""}
-
-        ${compareSection}
-        ${saveShare}
-
-        ${stickyCta}
 
         <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
       </div>
