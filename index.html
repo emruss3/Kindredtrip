@@ -2068,7 +2068,16 @@
 
   function renderResults() {
     const filtered = applyClientSort(
-      allPackages.filter(packageMeetsSearchRequirements).filter(packageMatchesFilters)
+      allPackages
+        // Live-only: hide mock-priced flight packages. start_pricing
+        // sets flight_supplier='mock' for routes that haven't been
+        // resolved by the external Sabre/Travelport worker. Showing
+        // only live-priced results means every visible trip has a real
+        // fare from a real carrier, at the cost of fewer rows until
+        // the worker catches up.
+        .filter((p) => p.flight_supplier !== "mock")
+        .filter(packageMeetsSearchRequirements)
+        .filter(packageMatchesFilters)
     );
     const visible = filtered.slice(0, 25);
     const rankBadges = computeRankingBadges(visible);
