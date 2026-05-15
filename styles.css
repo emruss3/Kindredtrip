@@ -2210,6 +2210,75 @@ details.rank-explainer > p {
 .modal::-webkit-scrollbar { width: 6px; }
 .modal::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
 
+/* ---------- Trip detail "page" mode (replaces the cramped popup) ---------- */
+/* Same #modal-overlay + #modal elements, but with .page-mode they fill the
+ * viewport and feel like navigation rather than an overlay. */
+.modal-overlay.page-mode {
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  display: block;
+  overflow-y: auto;
+}
+.modal-overlay.page-mode .modal {
+  background: var(--bg);
+  border-radius: 0;
+  max-width: 1180px;
+  max-height: none;
+  margin: 0 auto;
+  box-shadow: none;
+  transform: none;
+  padding: var(--s-6) var(--s-8) var(--s-24);
+}
+@media (max-width: 720px) {
+  .modal-overlay.page-mode .modal { padding: var(--s-4) var(--s-5) var(--s-12); }
+}
+.modal-overlay.page-mode .modal-photo { border-radius: var(--r-md); }
+.modal-overlay.page-mode .modal-close { display: none; }
+
+/* Back-to-results bar that lives at top of the page mode. Sticky so it
+ * stays accessible while the user scrolls deep into the detail. */
+.trip-back-bar {
+  position: sticky;
+  top: 60px;
+  z-index: 12;
+  background: rgba(250, 250, 247, 0.92);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  margin: 0 calc(-1 * var(--s-8));
+  padding: 12px var(--s-8);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+.trip-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  transition: background 0.15s ease;
+}
+.trip-back-link:hover { background: var(--bg-soft); }
+.trip-back-link svg { width: 16px; height: 16px; }
+.trip-back-context {
+  font-size: 13px;
+  color: var(--ink-3);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .modal-photo {
   position: relative;
   height: 280px;
@@ -2547,6 +2616,11 @@ body:not(.has-results) #results-wrap { display: none; }
   padding: 12px 24px 0;
 }
 .pricing-progress-slot[hidden] { display: none; }
+/* Inside the trip detail page the progress widget is irrelevant —
+ * the user has already navigated past the results list. Status banner
+ * is also redundant there. */
+body.trip-detail-open .pricing-progress-slot,
+body.trip-detail-open #status { display: none !important; }
 .pricing-progress {
   position: relative;
   z-index: 15;
