@@ -2068,12 +2068,9 @@
     if (visible.length === 0) {
       body = renderEmptyState();
     } else {
-      const [hero, ...rest] = visible;
-      const heroHtml = renderHeroCard(hero, rankBadges.get(hero.package_id), budgetBadges.get(hero.package_id));
-      const restHtml = viewMode === "grouped"
-        ? renderGroupedRest(rest, rankBadges, budgetBadges)
-        : renderListRest(rest, rankBadges, budgetBadges);
-      body = heroHtml + restHtml;
+      body = viewMode === "grouped"
+        ? renderGroupedRest(visible, rankBadges, budgetBadges)
+        : renderListRest(visible, rankBadges, budgetBadges);
     }
 
     main.innerHTML = headerHtml + filterPills + body;
@@ -2082,8 +2079,7 @@
 
   function renderListRest(rest, rankBadges, budgetBadges) {
     if (!rest.length) return "";
-    const cards = rest.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
-    return `<div class="results-list-head"><span class="results-list-head-label">More trips that fit your family</span><span class="results-list-head-count">${rest.length} more</span></div>${cards}`;
+    return rest.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
   }
 
   // Group remaining results by country so users can compare regions
