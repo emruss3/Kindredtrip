@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-room-photos-by-name" />
-<meta name="kt-build" content="20260514-room-photos-by-name" />
+<link rel="stylesheet" href="/styles.css?v=20260514-detail-page" />
+<meta name="kt-build" content="20260514-detail-page" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3141,7 +3141,17 @@
         `).join("")}
       </div>` : "";
 
+    const backBar = `
+      <div class="trip-back-bar">
+        <button type="button" class="trip-back-link" onclick="closeModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back to results
+        </button>
+        <span class="trip-back-context">${escapeHtml(r.resort_name || "Trip detail")}${r.country ? ` · ${escapeHtml(r.country)}` : ""}</span>
+      </div>`;
+
     const html = `
+      ${backBar}
       <div class="modal-photo">
         <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
         ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
@@ -3149,9 +3159,6 @@
         ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr" id="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
       </div>
       ${thumbnails}
-      <button class="modal-close" onclick="closeModal()" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
       <div class="modal-body">
         <div class="modal-header">
           <h2 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h2>
@@ -3197,10 +3204,23 @@
     `;
 
     const modal = document.getElementById("modal");
+    const overlay = document.getElementById("modal-overlay");
     modal.innerHTML = html;
-    document.getElementById("modal-overlay").classList.add("open");
-    document.body.style.overflow = "hidden";
-    modal.scrollTop = 0;
+    // page-mode flips the overlay from popup -> full-page layout so
+    // trip details get the room they need to read.
+    overlay.classList.add("open", "page-mode");
+    // Scroll the page (not the overlay) so the sticky back-bar lands at
+    // the top. Body keeps its normal scroll — we want page-style nav.
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    document.body.classList.add("trip-detail-open");
+    // Push a real URL so this feels like navigation, not a modal. The
+    // browser back button + closeModal will undo it.
+    try {
+      const targetUrl = `${location.pathname}?trip=${encodeURIComponent(packageId)}${location.hash || ""}`;
+      if (history.state?.trip !== packageId) {
+        history.pushState({ trip: packageId }, "", targetUrl);
+      }
+    } catch { /* ignore */ }
 
     // Reset the room-photo cache before kicking off the next fetch so
     // a stale set from a previous modal can't leak into this resort.
@@ -3807,14 +3827,46 @@
     }
   }
 
-  function closeModal() {
-    document.getElementById("modal-overlay").classList.remove("open");
+  // Internal close — clears UI state but does NOT touch history.
+  // Used by popstate when the user navigates back via browser.
+  function closeModalUI() {
+    const overlay = document.getElementById("modal-overlay");
+    if (overlay) overlay.classList.remove("open", "page-mode");
     document.body.style.overflow = "";
+    document.body.classList.remove("trip-detail-open");
+  }
+
+  // User-initiated close (Back button, ESC). Tears down the URL state
+  // so the address bar matches what the user sees.
+  function closeModal() {
+    closeModalUI();
+    if (history.state && history.state.trip) {
+      // Pop our pushed state without reloading. If we can't, just
+      // clear the ?trip param via replaceState as a safety net.
+      try { history.back(); }
+      catch {
+        const cleanUrl = location.pathname + location.hash;
+        history.replaceState(null, "", cleanUrl);
+      }
+    }
   }
 
   function closeModalIfBackdrop(e) {
     if (e.target === e.currentTarget) closeModal();
   }
+
+  // Browser back button → close the detail view without re-navigating.
+  window.addEventListener("popstate", (e) => {
+    const overlay = document.getElementById("modal-overlay");
+    const wasOpen = overlay?.classList.contains("open");
+    const stillTrip = e.state && e.state.trip;
+    if (wasOpen && !stillTrip) closeModalUI();
+    // If the new state IS a trip, the user navigated forward — re-open
+    // (only if we have the package loaded into allPackages).
+    if (stillTrip && !wasOpen && allPackages.some((p) => p.package_id === stillTrip)) {
+      openResortModal(stillTrip);
+    }
+  });
 
   // ESC closes modal; ←/→ navigates the photo gallery while open
   document.addEventListener("keydown", (e) => {
