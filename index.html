@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-rooms-table" />
-<meta name="kt-build" content="20260515-rooms-table" />
+<link rel="stylesheet" href="/styles.css?v=20260515-bk-flights" />
+<meta name="kt-build" content="20260515-bk-flights" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3595,47 +3595,48 @@
       ? `<span class="modal-section-count">${pkg.flight_offer_count} options available</span>`
       : "";
     const liveFlight = pkg.flight_supplier === "liteapi";
-    const flightOptions = `
-      <div class="modal-section flight-options" id="flight-options-section">
-        <h4>Flight options for this resort ${flightCountNote}</h4>
-        <div class="flight-option-grid" id="flight-option-grid" onclick="onFlightOptionClick(event)">
-          <article class="flight-option active">
-            <div class="flight-option-tag">Best overall</div>
-            <div class="flight-option-price">${fmtMoney(pkg.flight_price)}${liveFlight ? "" : ` <span class="flight-option-est">est.</span>`}</div>
-            <div class="flight-option-meta">${escapeHtml([
-              destAirportLabel,
-              pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
-              pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)} travel` : null,
-            ].filter(Boolean).join(" · "))}</div>
-            <div class="flight-option-note">${liveFlight ? "Live fare for your family" : "Estimated total for your family"}</div>
-          </article>
-          ${liveFlight ? `
-          <article class="flight-option loading" id="flight-cheapest">
-            <div class="flight-option-tag">Cheapest</div>
-            <div class="flight-option-placeholder-note">Loading…</div>
-          </article>
-          <article class="flight-option loading" id="flight-easiest">
-            <div class="flight-option-tag">Easiest with kids</div>
-            <div class="flight-option-placeholder-note">Loading…</div>
-          </article>` : `
-          <article class="flight-option placeholder">
-            <div class="flight-option-tag">Cheapest</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
-          </article>
-          <article class="flight-option placeholder">
-            <div class="flight-option-tag">Easiest with kids</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
-          </article>`}
-        </div>
-        ${liveFlight ? `
-        <div class="flight-all-block" id="flight-all-block" hidden>
-          <button type="button" class="flight-all-toggle" id="flight-all-toggle" onclick="toggleAllFlights()" aria-expanded="true">
-            <span class="flight-all-toggle-label">Hide other flights ${destAirportLabel ? `to ${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}` : ""}</span>
-            <span class="flight-all-count" id="flight-all-count"></span>
-            <span class="flight-all-toggle-caret" aria-hidden="true">▾</span>
+    // Booking.com-style airfare layout: Best / Cheapest / Fastest sort
+    // tabs above a scrollable list of flight cards. Each card has an
+    // outbound + return leg with timeline (DEP — stops/duration — ARR),
+    // a fare-class column on the right (price + bags + CTA), and an
+    // optional "Fare options" expander for upgrade tiers. For
+    // mock-priced packages we keep the placeholder until live offers
+    // arrive.
+    const flightOptions = liveFlight ? `
+      <div class="modal-section bk-flights" id="flight-options-section">
+        <h2>Flight options ${flightCountNote}</h2>
+        <div class="bk-flight-tabs" id="flight-sort-tabs" role="tablist">
+          <button type="button" class="bk-flight-tab active" data-sort="best" onclick="setFlightSort('best')" role="tab" aria-selected="true">
+            <span class="bk-flight-tab-label">Best</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-best">—</span>
           </button>
-          <div class="flight-all-list" id="flight-all-list"></div>
-        </div>` : ""}
+          <button type="button" class="bk-flight-tab" data-sort="cheapest" onclick="setFlightSort('cheapest')" role="tab" aria-selected="false">
+            <span class="bk-flight-tab-label">Cheapest</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-cheapest">—</span>
+          </button>
+          <button type="button" class="bk-flight-tab" data-sort="fastest" onclick="setFlightSort('fastest')" role="tab" aria-selected="false">
+            <span class="bk-flight-tab-label">Fastest</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-fastest">—</span>
+          </button>
+        </div>
+        <p class="bk-flights-disclaimer">Live fares from carriers — prices may change if there are <a href="#" onclick="event.preventDefault()">additional baggage fees</a>.</p>
+        <div class="bk-flight-list" id="flight-options-list">
+          <div class="bk-flight-loading">Loading flight options…</div>
+        </div>
+        <!-- Compatibility: empty containers preserved so older selectors don't crash -->
+        <div class="bk-flight-compat" id="flight-option-grid" hidden></div>
+        <div id="flight-all-block" hidden><div id="flight-all-list"></div><span id="flight-all-count"></span></div>
+      </div>` : `
+      <div class="modal-section bk-flights" id="flight-options-section">
+        <h2>Flight options</h2>
+        <div class="bk-flight-empty">
+          <p><b>Live fares pending.</b> Your flight search is still resolving for this resort. The trip total above is our estimated cost based on typical fares for this route.</p>
+          <p>${escapeHtml([
+            destAirportLabel,
+            pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
+            pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)} travel (typical)` : null,
+          ].filter(Boolean).join(" · "))}</p>
+        </div>
       </div>`;
 
     // ---- Why this resort works for your family ----
@@ -4011,75 +4012,210 @@
     if (liveFlight) loadFlightOptions(pkg.package_id);
   }
 
-  // -------- Flight options: async fetch + render --------
-  // Calls get_flight_offers and populates two areas of the modal:
-  //   1. The three Top-picks cards (Best / Cheapest / Easiest)
-  //   2. The full "All flights" list below, sorted cheapest first
-  // get_flight_offers returns up to 15 offers with full segment data.
-  // Clicking any row in (2) swaps that flight into the "Best overall"
-  // card and updates the modal totals — purely client-side preview,
-  // no DB writes.
+  // -------- Flight options: async fetch + render (Booking-style) --------
+  // get_flight_offers returns up to 15 offers with full segment data
+  // (outbound + return times, stops, layover airports, fare family,
+  // bags, refundability). We render them as a sortable list with three
+  // tabs: Best / Cheapest / Fastest. Clicking a card selects it and
+  // updates the trip total + sticky CTA in place.
   let currentModalFlights = [];
   let currentModalPicks = null;
   let currentModalSelectedOfferId = null;
   let currentModalPackage = null;
+  let currentFlightSort = "best";
 
   async function loadFlightOptions(packageId) {
     const pkg = allPackages.find((p) => p.package_id === packageId);
     currentModalPackage = pkg || null;
-    const cheapEl = document.getElementById("flight-cheapest");
-    const easyEl = document.getElementById("flight-easiest");
-    const allBlock = document.getElementById("flight-all-block");
-    const allList = document.getElementById("flight-all-list");
-    if (!cheapEl && !easyEl && !allBlock) return;
+    const list = document.getElementById("flight-options-list");
+    if (!list) return;
     try {
       const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}&limit=15`, { method: "GET" });
       currentModalPicks = data?.picks || null;
       currentModalFlights = Array.isArray(data?.offers) ? data.offers : [];
-      currentModalSelectedOfferId = currentModalPicks?.best?.offer_id || currentModalFlights[0]?.offer_id || null;
-
-      if (currentModalPicks?.cheapest && cheapEl) {
-        cheapEl.classList.remove("loading");
-        cheapEl.innerHTML = renderFlightAltInner("Cheapest", currentModalPicks.cheapest);
-        cheapEl.dataset.offerId = currentModalPicks.cheapest.offer_id;
-        cheapEl.classList.add("clickable");
-      } else if (cheapEl) {
-        cheapEl.style.display = "none";
-      }
-      if (currentModalPicks?.easiest && easyEl) {
-        easyEl.classList.remove("loading");
-        easyEl.innerHTML = renderFlightAltInner("Easiest with kids", currentModalPicks.easiest);
-        easyEl.dataset.offerId = currentModalPicks.easiest.offer_id;
-        easyEl.classList.add("clickable");
-      } else if (easyEl) {
-        easyEl.style.display = "none";
-      }
-
-      renderFlightAllList();
+      // Default selection: the server's "best" pick if present,
+      // otherwise the cheapest first.
+      currentModalSelectedOfferId = currentModalPicks?.best?.offer_id
+        || (sortFlightsBy(currentModalFlights, "cheapest")[0]?.offer_id ?? null);
+      currentFlightSort = "best";
+      updateFlightTabSubtitles();
+      renderFlightListCards();
     } catch (e) {
       console.warn("Flight options failed:", e?.message || e);
-      if (cheapEl) cheapEl.style.display = "none";
-      if (easyEl) easyEl.style.display = "none";
+      if (list) list.innerHTML = `<div class="bk-flight-empty"><p>Couldn't load flight options.</p></div>`;
     }
   }
 
-  // Renders the All flights list, excluding the currently selected offer
-  // (since it's already shown as Best overall). Click handlers are bound
-  // via event delegation on the parent list — see selectFlightOffer.
-  function renderFlightAllList() {
-    const allBlock = document.getElementById("flight-all-block");
-    const allList = document.getElementById("flight-all-list");
-    const allCount = document.getElementById("flight-all-count");
-    if (!allBlock || !allList) return;
-    const rest = currentModalFlights.filter(o => o.offer_id !== currentModalSelectedOfferId);
-    if (rest.length === 0) {
-      allBlock.hidden = true;
+  // Sort tab change: re-render the list in the new order. Selection
+  // is sticky — the previously chosen offer keeps its highlighted
+  // state regardless of sort.
+  function setFlightSort(sort) {
+    currentFlightSort = sort;
+    document.querySelectorAll("#flight-sort-tabs .bk-flight-tab").forEach((b) => {
+      const isActive = b.dataset.sort === sort;
+      b.classList.toggle("active", isActive);
+      b.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    renderFlightListCards();
+  }
+
+  // Sort helpers. The server includes a `picks.best` already; for the
+  // "Best" tab we float that to the top (if present) and sort the
+  // remainder cheapest-first as a reasonable secondary order.
+  function sortFlightsBy(flights, sort) {
+    const list = [...flights];
+    if (sort === "cheapest") {
+      return list.sort((a, b) => (Number(a.total_price) || Infinity) - (Number(b.total_price) || Infinity));
+    }
+    if (sort === "fastest") {
+      const dur = (o) => Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? Infinity);
+      return list.sort((a, b) => dur(a) - dur(b));
+    }
+    // "best": pin picks.best, then sort the rest by a balanced score
+    // (price + travel-time penalty + stops penalty).
+    const bestId = currentModalPicks?.best?.offer_id || null;
+    const score = (o) => (Number(o.total_price) || 0)
+      + (Number(o.total_duration_minutes ?? 0) / 60) * 20
+      + ((Number(o.outbound_stops ?? 0) + Number(o.return_stops ?? 0))) * 80;
+    list.sort((a, b) => score(a) - score(b));
+    if (bestId) {
+      const idx = list.findIndex((o) => o.offer_id === bestId);
+      if (idx > 0) {
+        const [pin] = list.splice(idx, 1);
+        list.unshift(pin);
+      }
+    }
+    return list;
+  }
+
+  // Annotate the tabs with the leading price/duration so the user can
+  // pre-scan tradeoffs before clicking. Mirrors Kayak/Booking.
+  function updateFlightTabSubtitles() {
+    if (currentModalFlights.length === 0) return;
+    const cheapest = sortFlightsBy(currentModalFlights, "cheapest")[0];
+    const fastest = sortFlightsBy(currentModalFlights, "fastest")[0];
+    const best = sortFlightsBy(currentModalFlights, "best")[0];
+    const fmtSub = (o, kind) => {
+      if (!o) return "—";
+      const price = fmtMoney(o.total_price);
+      const dur = Number(o.total_duration_minutes ?? 0);
+      const durStr = dur > 0 ? `${Math.floor(dur / 60)}h ${dur % 60}m` : "";
+      return kind === "fastest" ? `${durStr} · ${price}` : `${price} · ${durStr}`;
+    };
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set("bk-tab-sub-best", fmtSub(best, "best"));
+    set("bk-tab-sub-cheapest", fmtSub(cheapest, "cheapest"));
+    set("bk-tab-sub-fastest", fmtSub(fastest, "fastest"));
+  }
+
+  function renderFlightListCards() {
+    const list = document.getElementById("flight-options-list");
+    if (!list) return;
+    if (currentModalFlights.length === 0) {
+      list.innerHTML = `<div class="bk-flight-empty"><p>No live flight options for this resort yet.</p></div>`;
       return;
     }
-    allBlock.hidden = false;
-    if (allCount) allCount.textContent = rest.length === 1 ? "1 more option" : `${rest.length} more options`;
-    allList.innerHTML = rest.map(renderFlightFullRow).join("");
+    const sorted = sortFlightsBy(currentModalFlights, currentFlightSort);
+    list.innerHTML = sorted.map((o, i) => renderBookingFlightCard(o, i, sorted)).join("");
   }
+
+  // Format flight time + date short. ISO "2026-06-13T15:01:00Z" →
+  // { time: "3:01 PM", date: "Jun 13" }
+  function fmtFlightTimeShort(iso) {
+    if (!iso) return { time: "", date: "" };
+    try {
+      const d = new Date(iso);
+      return {
+        time: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        date: d.toLocaleDateString([], { month: "short", day: "numeric" }),
+      };
+    } catch { return { time: "", date: "" }; }
+  }
+
+  // One leg row (outbound or return). Booking shows airline logo on the
+  // left, DEP time/airport/date | timeline (stops · duration) | ARR
+  // time/airport/date.
+  function renderFlightLegRow(o, kind) {
+    const isOut = kind === "outbound";
+    const depIso = isOut ? o.outbound_departure_time : o.return_departure_time;
+    const arrIso = isOut ? o.outbound_arrival_time   : o.return_arrival_time;
+    const stops  = isOut ? Number(o.outbound_stops ?? 0) : Number(o.return_stops ?? 0);
+    const dur    = isOut ? Number(o.outbound_duration_minutes ?? 0) : Number(o.return_duration_minutes ?? 0);
+    if (!depIso && !arrIso && dur <= 0) return "";
+
+    const dep = fmtFlightTimeShort(depIso);
+    const arr = fmtFlightTimeShort(arrIso);
+    const durStr = dur > 0
+      ? `${Math.floor(dur / 60)}h ${(dur % 60).toString().padStart(2, "0")}m`
+      : "";
+    const stopsStr = stops === 0 ? "Direct" : (stops === 1 ? "1 stop" : `${stops} stops`);
+    const origin = (lastSearchSummary?.origin_iata || "").toUpperCase();
+    const dest = (currentModalPackage?.dest_airport_iata || "").toUpperCase();
+    const fromCode = isOut ? origin : dest;
+    const toCode   = isOut ? dest   : origin;
+
+    return `
+      <div class="bk-leg">
+        <span class="bk-leg-logo">${airlineLogoMarkup(o, "sm")}</span>
+        <div class="bk-leg-dep">
+          <div class="bk-leg-time">${escapeHtml(dep.time || "—")}</div>
+          <div class="bk-leg-airport">${escapeHtml(fromCode || "")}${dep.date ? ` · ${escapeHtml(dep.date)}` : ""}</div>
+        </div>
+        <div class="bk-leg-mid">
+          <div class="bk-leg-stops-pill">${escapeHtml(stopsStr)}</div>
+          <div class="bk-leg-line"></div>
+          <div class="bk-leg-dur">${escapeHtml(durStr)}</div>
+        </div>
+        <div class="bk-leg-arr">
+          <div class="bk-leg-time">${escapeHtml(arr.time || "—")}</div>
+          <div class="bk-leg-airport">${escapeHtml(toCode || "")}${arr.date ? ` · ${escapeHtml(arr.date)}` : ""}</div>
+        </div>
+      </div>`;
+  }
+
+  // Eyebrow chips above the card — match Booking's badges ("Cheapest",
+  // "Fastest", "Flexible ticket upgrade available").
+  function flightEyebrowChips(o, allSorted) {
+    const chips = [];
+    const cheapest = sortFlightsBy(currentModalFlights, "cheapest")[0];
+    const fastest  = sortFlightsBy(currentModalFlights, "fastest")[0];
+    if (cheapest && cheapest.offer_id === o.offer_id) chips.push(`<span class="bk-eyebrow cheapest">Cheapest</span>`);
+    if (fastest && fastest.offer_id === o.offer_id && (!cheapest || cheapest.offer_id !== fastest.offer_id))
+      chips.push(`<span class="bk-eyebrow fastest">Fastest</span>`);
+    if (currentModalPicks?.best?.offer_id === o.offer_id) chips.push(`<span class="bk-eyebrow best">Best overall</span>`);
+    if (o.refundable === true) chips.push(`<span class="bk-eyebrow flex">Flexible ticket</span>`);
+    return chips.length ? `<div class="bk-flight-eyebrow">${chips.join("")}</div>` : "";
+  }
+
+  function renderBookingFlightCard(o, index, sortedAll) {
+    const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
+    const fareClass = o.fare_family || (o.checked_bag_included === true ? "Main Cabin" : "Basic Economy");
+    const isSelected = o.offer_id === currentModalSelectedOfferId;
+    const safeId = String(o.offer_id).replace(/'/g, "&apos;");
+    return `
+      <article class="bk-flight-card${isSelected ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="selectFlightOffer('${safeId}')">
+        ${flightEyebrowChips(o, sortedAll)}
+        <div class="bk-flight-body">
+          <div class="bk-flight-main">
+            ${renderFlightLegRow(o, "outbound")}
+            ${renderFlightLegRow(o, "return")}
+            <div class="bk-flight-airline">${escapeHtml(airline)}</div>
+          </div>
+          <div class="bk-flight-side">
+            <div class="bk-fare-class">${escapeHtml(fareClass)}</div>
+            <div class="bk-fare-bags">${bagsMarkup(o)}</div>
+            <div class="bk-fare-price">${fmtMoney(o.total_price)}</div>
+            ${o.per_adult ? `<div class="bk-fare-per">${fmtMoney(o.per_adult)} / adult</div>` : ""}
+            <button type="button" class="btn ${isSelected ? "btn-secondary" : "btn-primary"} bk-fare-cta" onclick="event.stopPropagation(); selectFlightOffer('${safeId}')">${isSelected ? "✓ Selected" : "Select flight"}</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  // Compatibility shim — the Booking-style list uses
+  // renderFlightListCards now. Kept as an alias so older call sites
+  // (selectFlightOffer's flight-update path) still work.
+  function renderFlightAllList() { renderFlightListCards(); }
 
   // Expand / collapse the "All flights" list. Default hidden so users
   // only see it if they don't like the pre-selected Best overall.
@@ -4118,22 +4254,8 @@
     const newFlightPrice = Math.round(Number(o.total_price) || 0);
     const newTotal = newFlightPrice + Math.round(Number(pkg.hotel_price) || 0);
 
-    // Best-overall card (always the first .flight-option in the grid)
-    const bestCard = document.querySelector("#flight-option-grid .flight-option.active");
-    if (bestCard) {
-      const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
-      const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
-      const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
-      const stops = flightStopsLabel(o);
-      bestCard.innerHTML = `
-        <div class="flight-option-tag">Best overall</div>
-        ${airlineLogoMarkup(o, "med")}
-        <div class="flight-option-price">${fmtMoney(newFlightPrice)}</div>
-        <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
-        <div class="flight-option-bags">${bagsMarkup(o)}</div>
-        <div class="flight-option-note">Live fare · selected itinerary</div>
-      `;
-    }
+    // Re-render the Booking-style list so the new selection lights up
+    renderFlightListCards();
 
     // Trip total + breakdown
     const totalEl = document.querySelector(".trip-fit-summary .price-total");
