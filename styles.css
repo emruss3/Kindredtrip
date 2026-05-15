@@ -4139,6 +4139,106 @@ body.trip-detail-open #status { display: none !important; }
 .room-option-card.selected .room-option-cta {
   color: #1f7d4d;
 }
+.room-option-clickable {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.room-option-from {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  margin-right: 4px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* "X price options" toggle + rate variants expander ---------- */
+.room-option-variants-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: calc(100% - 28px);
+  margin: 0 14px 14px;
+  padding: 8px 12px;
+  background: var(--bg-soft);
+  border: 1px dashed var(--line-strong, #d6d2cc);
+  border-radius: var(--r-xs, 8px);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.room-option-variants-toggle:hover {
+  border-color: var(--accent, #c08a3e);
+  background: #fefcf8;
+}
+.room-option-variants-caret {
+  font-size: 13px;
+  color: var(--accent, #c08a3e);
+  transition: transform 200ms ease;
+}
+.room-option-variants-toggle[aria-expanded="true"] .room-option-variants-caret {
+  transform: rotate(180deg);
+}
+.room-option-variants {
+  border-top: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+.room-option-variants[hidden] { display: none; }
+.rate-variant-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.rate-variant-row:last-child { border-bottom: 0; }
+.rate-variant-row:hover { background: #fefcf8; }
+.rate-variant-row.selected {
+  background: rgba(31, 125, 77, 0.06);
+  box-shadow: inset 3px 0 0 #1f7d4d;
+}
+.rate-variant-main { flex: 1; min-width: 0; }
+.rate-variant-board {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rate-variant-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+.rate-variant-price { text-align: right; flex-shrink: 0; }
+.rate-variant-total {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.rate-variant-per {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
 
 /* ---------- All-flights collapsible toggle ---------- */
 .flight-all-toggle {
