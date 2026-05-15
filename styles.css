@@ -2248,46 +2248,115 @@ details.rank-explainer > p {
 }
 .modal-overlay.page-mode .modal-close { display: none; }
 
-/* Narrower content column inside the page so paragraphs + form-like
- * sections stay readable instead of sprawling across 1080px. Hero
- * stays wide; everything below it sits in a comfortable column. */
+/* Booking.com / Kayak-style trip detail body: full-width hero + thumbs
+ * above, then 2-column grid (main content + sticky sidebar). */
 .modal-overlay.page-mode .modal-body {
-  max-width: 880px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: var(--s-2) 0 var(--s-6);
 }
-.modal-overlay.page-mode .modal-photo-strip {
-  max-width: 880px;
-  margin: 0 auto;
+.modal-overlay.page-mode .modal-photo-strip { padding-top: 8px; }
+.trip-layout { display: flex; flex-direction: column; gap: var(--s-6); }
+.trip-layout-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-top: var(--s-2);
 }
-.modal-overlay.page-mode .modal-header h2 {
+.trip-layout-header h2 {
+  font-family: "Playfair Display", "Charter", Georgia, serif;
   font-size: 36px;
-  line-height: 1.15;
+  line-height: 1.1;
   letter-spacing: -0.01em;
-  margin-bottom: 6px;
+  margin: 0;
+  color: var(--ink);
 }
 @media (max-width: 720px) {
-  .modal-overlay.page-mode .modal-header h2 { font-size: 26px; }
+  .trip-layout-header h2 { font-size: 26px; }
 }
-/* Make trip-fit-summary the visual anchor on the page — bigger price,
- * stronger card treatment. */
-.modal-overlay.page-mode .trip-fit-summary {
-  padding: var(--s-6);
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(13, 43, 69, 0.04);
+.trip-layout-header .meta {
+  font-size: 14px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.modal-overlay.page-mode .price-total {
-  font-size: 36px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+
+/* The grid itself: main content takes flex space, sidebar is a fixed
+ * 360px sticky column on desktop. Collapses to single column under
+ * 920px so phones / narrow tablets still get a readable layout. */
+.trip-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--s-7);
+  align-items: start;
 }
-.modal-overlay.page-mode .modal-section {
-  margin-bottom: var(--s-7);
+@media (max-width: 920px) {
+  .trip-layout-grid { grid-template-columns: 1fr; gap: var(--s-5); }
 }
-.modal-overlay.page-mode .modal-section h4 {
+.trip-layout-main { min-width: 0; display: flex; flex-direction: column; gap: var(--s-6); }
+.trip-layout-main > * { margin-bottom: 0; }
+.trip-layout-main .modal-section { margin-bottom: 0; }
+.trip-layout-main .modal-section h4 {
   font-size: 18px;
   font-weight: 700;
+  letter-spacing: -0.005em;
   margin-bottom: var(--s-3);
+}
+
+/* Sticky price + CTA sidebar. On desktop it pins at top:88px (clear
+ * of the back-bar). Stacks naturally below main column on narrow. */
+.trip-layout-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+@media (min-width: 921px) {
+  .trip-layout-sidebar {
+    position: sticky;
+    top: 140px;
+    align-self: start;
+  }
+}
+.trip-sidebar-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-5);
+  box-shadow: 0 2px 8px rgba(13, 43, 69, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.trip-sidebar-card .trip-fit-summary {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.trip-sidebar-card .trip-fit-top {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: 1fr;
+}
+.trip-sidebar-card .price-total {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.trip-sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn.btn-block { width: 100%; justify-content: center; }
+.trip-sidebar-note {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.45;
+  padding: 0 2px;
 }
 
 /* Back-to-results bar that lives at top of the page mode. Sticky so it
