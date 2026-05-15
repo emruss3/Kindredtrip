@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-hotel-photos-fallback" />
-<meta name="kt-build" content="20260514-hotel-photos-fallback" />
+<link rel="stylesheet" href="/styles.css?v=20260514-per-offer-photos" />
+<meta name="kt-build" content="20260514-per-offer-photos" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -2608,13 +2608,25 @@
   let currentModalPhotoAttributions = [];
   let currentModalPhotoIdx = 0;
 
+  // Photo source can be either a Google Places ref string (rendered
+  // through our /photo proxy) OR a direct LiteAPI URL (rendered as-is).
+  // Returns a usable <img src=> for an entry in currentModalPhotoRefs.
+  function modalPhotoUrl(ref, w) {
+    if (!ref) return "";
+    if (typeof ref === "string") {
+      if (/^https?:\/\//.test(ref)) return ref;
+      return `/photo?ref=${encodeURIComponent(ref)}&w=${w}`;
+    }
+    return ref?.url || ref?.hd_url || "";
+  }
+
   function setModalPhoto(i) {
     const refs = currentModalPhotoRefs;
     if (!refs || refs.length === 0) return;
     const idx = ((i % refs.length) + refs.length) % refs.length;
     currentModalPhotoIdx = idx;
     const img = document.getElementById("modal-photo-hero");
-    if (img) img.src = `/photo?ref=${encodeURIComponent(refs[idx])}&w=1200`;
+    if (img) img.src = modalPhotoUrl(refs[idx], 1200);
     const counter = document.getElementById("modal-photo-counter");
     if (counter) counter.textContent = `${idx + 1} / ${refs.length}`;
     document.querySelectorAll(".modal-photo-thumb").forEach((t, n) => {
@@ -2622,10 +2634,17 @@
     });
     const attrEl = document.getElementById("modal-photo-attr");
     if (attrEl) {
-      const a = (currentModalPhotoAttributions || [])[idx] || (currentModalPhotoAttributions || [])[0] || "";
-      attrEl.innerHTML = `${a} · Photo via Google`;
+      // LiteAPI photos: no Google attribution. Google refs: keep the
+      // attribution string we cached when the modal was built.
+      const ref = refs[idx];
+      const isDirect = typeof ref === "string" ? /^https?:\/\//.test(ref) : true;
+      if (isDirect) {
+        attrEl.innerHTML = "Photo via the resort";
+      } else {
+        const a = (currentModalPhotoAttributions || [])[idx] || (currentModalPhotoAttributions || [])[0] || "";
+        attrEl.innerHTML = `${a} · Photo via Google`;
+      }
     }
-    // Scroll the active thumbnail into view in the strip
     const activeThumb = document.querySelector(".modal-photo-thumb.active");
     if (activeThumb && activeThumb.scrollIntoView) {
       activeThumb.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
@@ -3222,13 +3241,10 @@
       }
     } catch { /* ignore */ }
 
-    // Reset the room-photo cache before kicking off the next fetch so
-    // a stale set from a previous modal can't leak into this resort.
-    currentModalRoomPhotos = {};
-    if (liveHotel) {
-      loadRoomOptions(pkg.package_id);
-      loadRoomPhotosForModal(pkg.package_id);
-    }
+    // Reset per-modal photo state so a previous resort's images
+    // can't leak into this one.
+    currentModalHotelPhotos = [];
+    if (liveHotel) loadRoomOptions(pkg.package_id);
     if (liveFlight) loadFlightOptions(pkg.package_id);
   }
 
@@ -3551,38 +3567,6 @@
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
   // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by
-  // renderRoomOptionCard to pick a room-specific image instead of the
-  // rotating resort photo fallback.
-  let currentModalRoomPhotos = {};
-
-  // Kick off the LiteAPI room-photo fetch in parallel with the package
-  // load. We don't block on it — if it returns after the cards render,
-  // we just re-render to swap in the better photos.
-  async function loadRoomPhotosForModal(packageId) {
-    const pkg = currentModalPackage;
-    const hotelId = pkg?.resorts?.liteapi_hotel_id;
-    if (!hotelId) return;
-    try {
-      const data = await callFn(`get_room_photos?hotel_id=${encodeURIComponent(hotelId)}`, { method: "GET" });
-      if (data) {
-        currentModalRoomPhotos = {
-          by_id: data.room_photos || {},
-          by_name: data.room_photos_by_name || {},
-          hotel: data.hotel_photos || [],
-        };
-        // If rooms are already rendered, re-render to pick up the real photos.
-        const grid = document.getElementById("room-options-grid");
-        if (grid && currentModalRooms.length) {
-          grid.innerHTML = currentModalRooms.map((o, i) =>
-            renderRoomOptionCard(o, i, currentModalSelectedRoomId)
-          ).join("");
-        }
-      }
-    } catch (e) {
-      console.warn("get_room_photos failed:", e?.message || e);
-    }
-  }
-
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
     const grid = document.getElementById("room-options-grid");
@@ -3591,6 +3575,13 @@
     try {
       const data = await callFn(`get_hotel_offers?package_id=${encodeURIComponent(packageId)}&limit=20`, { method: "GET" });
       const offers = Array.isArray(data?.offers) ? data.offers : [];
+      // Top-level hotel_photos from get_hotel_offers — used by the
+      // modal hero gallery and as a fallback when an offer has no
+      // per-room photos of its own.
+      currentModalHotelPhotos = Array.isArray(data?.hotel_photos) ? data.hotel_photos : [];
+      // Update the hero photo + gallery if LiteAPI gave us a better
+      // set than the Google Places refs we started with.
+      applyHeroFromHotelPhotos(currentModalHotelPhotos);
       if (offers.length === 0) {
         section.style.display = "none";
         return;
@@ -3608,6 +3599,37 @@
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
     }
+  }
+
+  // Holds the top-level hotel_photos array from the most recent
+  // get_hotel_offers call. Used as the fallback rotation when an
+  // individual offer doesn't carry its own photos[].
+  let currentModalHotelPhotos = [];
+
+  // Swap the modal hero + thumbnail strip to the LiteAPI hotel
+  // gallery when we have it (actual interior / pool / dining shots
+  // hot-linked from cupid.travel — more relevant than the Google
+  // Places exterior we start with).
+  function applyHeroFromHotelPhotos(photos) {
+    if (!Array.isArray(photos) || photos.length === 0) return;
+    const urls = photos.map(p => (p && (p.hd_url || p.url)) || null).filter(Boolean);
+    if (!urls.length) return;
+    const hero = document.getElementById("modal-photo-hero");
+    if (hero) hero.src = urls[0];
+    // Plain URL strings — modalPhotoUrl detects http(s) and renders as-is.
+    currentModalPhotoRefs = urls.slice(0, 12);
+    currentModalPhotoIdx = 0;
+    const strip = document.getElementById("modal-photo-strip");
+    if (strip) {
+      strip.innerHTML = currentModalPhotoRefs.map((u, i) => `
+        <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
+          <img src="${escapeHtml(u)}" alt="" loading="lazy" />
+        </button>`).join("");
+    }
+    // Show nav arrows + counter (the original render hides them when
+    // there's only 1 photo; with LiteAPI we usually have 8-12).
+    const counter = document.getElementById("modal-photo-counter");
+    if (counter) counter.textContent = `1 / ${currentModalPhotoRefs.length}`;
   }
 
   // Each room card gets a photo rotated from the resort's photo gallery.
@@ -3633,29 +3655,28 @@
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
 
     // Photo strategy (priority order):
-    //   1. Real room photo from LiteAPI matched by normalized room name
-    //      (e.g. "double luxury room" → "double luxury room").
-    //   2. Real room photo matched by room_type_id.
-    //   3. Rotate through LiteAPI's hotel photo gallery (these include
-    //      actual room interiors, pools, lobby — far more relevant
-    //      than the Google Places exterior shot).
-    //   4. Last resort: resort gallery photo.
-    const roomTypeId = o.room_type_id != null ? String(o.room_type_id) : null;
-    const normName = (o.room_name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-    const byName = (currentModalRoomPhotos.by_name || {})[normName] || [];
-    const byId = roomTypeId && currentModalRoomPhotos.by_id
-      ? (currentModalRoomPhotos.by_id[roomTypeId] || [])
-      : [];
-    const hotelPhotos = Array.isArray(currentModalRoomPhotos.hotel) ? currentModalRoomPhotos.hotel : [];
+    //   1. Per-offer photos from get_hotel_offers — each offer carries
+    //      its own photos[] now ({ url, hd_url, is_main, label }).
+    //   2. Rotate through the top-level hotel_photos gallery as a
+    //      fallback so cards differ even without per-offer photos.
+    //   3. Last resort: Google Places resort photo.
+    const offerPhotos = Array.isArray(o.photos) ? o.photos : [];
+    const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
+    const hotelPhotos = Array.isArray(currentModalHotelPhotos) ? currentModalHotelPhotos : [];
     let photo = null;
     let photoLabel = "Resort view";
-    if (byName.length > 0) { photo = byName[0]; photoLabel = "Room photo"; }
-    else if (byId.length > 0) { photo = byId[0]; photoLabel = "Room photo"; }
-    else if (hotelPhotos.length > 0) { photo = hotelPhotos[index % hotelPhotos.length]; photoLabel = "Resort photo"; }
-    else {
+    if (main && (main.hd_url || main.url)) {
+      photo = main.hd_url || main.url;
+      photoLabel = main.label || "Room photo";
+    } else if (hotelPhotos.length > 0) {
+      const hp = hotelPhotos[index % hotelPhotos.length];
+      photo = (hp && (hp.hd_url || hp.url)) || null;
+      photoLabel = "Resort photo";
+    } else {
       const refs = currentModalPhotoRefs || [];
       if (refs.length > 0) {
-        photo = `/photo?ref=${encodeURIComponent(refs[index % refs.length])}&w=400`;
+        const ref = refs[index % refs.length];
+        photo = modalPhotoUrl(ref, 400);
       }
     }
     const photoBlock = photo
