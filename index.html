@@ -4887,6 +4887,13 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
+  // Standalone room catalog (resort_rooms) from get_hotel_offers. The
+  // Rooms section uses this as the canonical card identity and groups
+  // matching rate offers under each catalog room as bookable variants.
+  let currentModalCatalogRooms = [];
+  // Per-modal set of catalog-room keys whose rate variant list is fully
+  // expanded (default shows top 3 rates per room).
+  let currentModalExpandedRates = new Set();
   // Resort-level fallback flags computed once per modal. Used to
   // shape the empty-state copy when zero rooms fit the searched
   // family — pointing the user at connecting rooms or family suites
@@ -5137,9 +5144,12 @@
       // below so we don't show two parallel sets of room cards (one
       // with pricing, one with photos / size / views).
       const catalogRooms = Array.isArray(data?.catalog_rooms) ? data.catalog_rooms : [];
+      currentModalCatalogRooms = catalogRooms;
+      currentModalExpandedRates = new Set();
       renderResortLiteapiContent(data?.resort);
-      // Hide the standalone catalog panel — it was duplicating the rate
-      // rows and forcing users to read two sets of cards per resort.
+      // The standalone catalog panel is no longer rendered — catalog
+      // rooms are now THE Rooms section, with rate offers grouped under
+      // each room as bookable variants.
       const catalogEl = document.getElementById("trip-catalog-rooms");
       if (catalogEl) { catalogEl.hidden = true; catalogEl.innerHTML = ""; }
       // Build normalized-name → catalog room map once, then attach the
@@ -5238,20 +5248,63 @@
   // When zero rooms fit, the section surfaces an empty-state callout
   // (connecting-room note if guaranteed, otherwise advice to try a
   // different resort).
+  // Render the unified Rooms section: one card per catalog room (real
+  // photos / size / beds / views / description / amenities), with all
+  // matching bookable rate variants stacked underneath. Rate offers
+  // that don't match any catalog row fall into a synthetic group so
+  // we don't lose bookable inventory.
   function rerenderRoomGrid() {
     const grid = document.getElementById("room-options-grid");
     if (!grid || currentModalRooms.length === 0) return;
     const adultsRoom = Number(lastSearchSummary?.adults) || 2;
     const kidsRoom = (lastSearchSummary?.child_ages || []).length;
     const partyTotal = adultsRoom + kidsRoom;
-    const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
-    const fitting = currentModalRooms.filter(fits);
 
+    // Group: catalog rooms first (seeded with empty rates lists), then
+    // attach each rate to its catalog match, otherwise create a
+    // synthetic group keyed by the rate's own room_name.
+    const groups = new Map();
+    for (const c of currentModalCatalogRooms) {
+      const k = normalizeRoomName(c.room_name);
+      if (!k || groups.has(k)) continue;
+      groups.set(k, { key: k, catalog: c, name: c.room_name, rates: [] });
+    }
+    for (const o of currentModalRooms) {
+      const k = normalizeRoomName(o.room_name);
+      if (!k) continue;
+      if (!groups.has(k)) groups.set(k, { key: k, catalog: null, name: o.room_name, rates: [] });
+      groups.get(k).rates.push(o);
+    }
+
+    const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
+    const fits = (g) => {
+      if (partyTotal === 0) return true;
+      const catMax = Number(g.catalog?.max_occupancy);
+      if (Number.isFinite(catMax) && catMax > 0) return catMax >= partyTotal;
+      const rateMax = Number(g.rates[0]?.max_occupancy);
+      if (Number.isFinite(rateMax) && rateMax > 0) return rateMax >= partyTotal;
+      return true; // unknown capacity — let it through rather than hide
+    };
+
+    // Only render groups that have at least one bookable rate. Catalog
+    // rooms without a rate are excluded (they're not bookable for these
+    // dates anyway — keeping them as decorative cards re-introduces the
+    // "two parallel lists" feeling the user just asked us to drop).
+    const renderable = Array.from(groups.values())
+      .filter(g => g.rates.length > 0);
+
+    for (const g of renderable) g.rates.sort((a, b) => priceOf(a) - priceOf(b));
+
+    // Fitting first, then undersized; within each bucket cheapest first.
+    renderable.sort((a, b) => {
+      const af = fits(a), bf = fits(b);
+      if (af !== bf) return af ? -1 : 1;
+      return priceOf(a.rates[0]) - priceOf(b.rates[0]);
+    });
+
+    const fitting = renderable.filter(fits);
     if (fitting.length === 0) {
       const cap = currentModalResortConnecting;
-      // No single room at this resort sleeps the party. We don't show
-      // smaller rooms because "book 2" without a connecting guarantee
-      // is a false out. Surface the resort's actual capabilities.
       let body;
       if (cap.connecting) {
         body = `
@@ -5271,16 +5324,141 @@
     }
 
     grid.innerHTML = `
-      <div class="rooms-table">
-        <div class="rooms-table-head" role="row">
-          <div>Room</div>
-          <div>Sleeps</div>
-          <div>Price</div>
-          <div></div>
-        </div>
-        ${fitting.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")}
+      <div class="rooms-v2-list">
+        ${fitting.map(g => renderRoomGroupCard(g, partyTotal)).join("")}
       </div>`;
   }
+
+  // One card per room type. Catalog data drives the left "what is this
+  // room" column (photo / size / beds / view / description / amenities);
+  // each matching rate offer becomes a bookable row in the right column
+  // (board + refundable + price + Select).
+  function renderRoomGroupCard(g, partyTotal) {
+    const cat = g.catalog;
+
+    // Photo: catalog first (real interior shots), then the first rate
+    // offer's photos, then the hotel gallery.
+    let photo = catalogPhotoUrl(cat);
+    if (!photo) {
+      const offerPhotos = (g.rates[0] && Array.isArray(g.rates[0].photos)) ? g.rates[0].photos : [];
+      const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
+      photo = (main && (main.hd_url || main.url)) || null;
+    }
+    if (!photo && Array.isArray(currentModalHotelPhotos) && currentModalHotelPhotos.length > 0) {
+      const hp = currentModalHotelPhotos[0];
+      photo = (hp && (hp.hd_url || hp.url)) || null;
+    }
+
+    // Sleeps headline + adult/child split from the catalog. Falls back
+    // to the rate offer's max_occupancy when it's clearly bigger than
+    // the party (i.e. the rate priced for more than we searched for).
+    let sleepsHead = "";
+    let sleepsSub = "";
+    if (cat) {
+      const max = Number(cat.max_occupancy);
+      if (Number.isFinite(max) && max > 0) {
+        sleepsHead = `Sleeps ${max}`;
+        const a = Number(cat.max_adults), c = Number(cat.max_children);
+        if (Number.isFinite(a) && a > 0) {
+          const parts = [`${a} adult${a === 1 ? "" : "s"}`];
+          if (Number.isFinite(c) && c > 0) parts.push(`${c} child${c === 1 ? "" : "ren"}`);
+          sleepsSub = parts.join(" + ");
+        }
+      }
+    } else if (Number(g.rates[0]?.max_occupancy) > partyTotal) {
+      sleepsHead = `Sleeps ${Number(g.rates[0].max_occupancy)}`;
+    }
+
+    const meta = catalogRowMeta(cat);
+    const desc = cat?.description || "";
+    const descPreview = desc.length > 0
+      ? (desc.length > 200 ? desc.slice(0, 200).replace(/\s+\S*$/, "") + "…" : desc)
+      : "";
+
+    const amenityNames = Array.isArray(cat?.room_amenities)
+      ? cat.room_amenities.map(a => String(a?.name || "").trim()).filter(Boolean).slice(0, 6)
+      : [];
+    const amenityChips = amenityNames.length
+      ? `<ul class="rv-amenities">${amenityNames.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>`
+      : "";
+
+    const fitTag = partyTotal > 0
+      ? `<div class="rv-fit fits">✓ Fits your family</div>`
+      : "";
+
+    const expanded = currentModalExpandedRates.has(g.key);
+    const visibleRates = expanded ? g.rates : g.rates.slice(0, 3);
+    const hiddenCount = g.rates.length - visibleRates.length;
+    const ratesHtml = visibleRates.map(o => renderRateRow(o, currentModalSelectedRoomId)).join("");
+    const moreBtn = hiddenCount > 0
+      ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show ${hiddenCount} more rate${hiddenCount === 1 ? "" : "s"}</button>`
+      : (expanded && g.rates.length > 3
+        ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show fewer</button>`
+        : "");
+
+    return `
+      <article class="room-v2-card">
+        <div class="room-v2-photo">
+          ${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(g.name || "Room")}" loading="lazy" />` : `<div class="room-v2-photo-empty"></div>`}
+        </div>
+        <div class="room-v2-main">
+          <h4 class="room-v2-name">${escapeHtml(g.name || "Room")}</h4>
+          ${sleepsHead ? `<div class="room-v2-sleeps"><b>${escapeHtml(sleepsHead)}</b>${sleepsSub ? ` <span class="rv-sub">(${escapeHtml(sleepsSub)})</span>` : ""}</div>` : ""}
+          ${meta ? `<div class="room-v2-meta">${escapeHtml(meta)}</div>` : ""}
+          ${descPreview ? `<p class="room-v2-desc">${escapeHtml(descPreview)}</p>` : ""}
+          ${amenityChips}
+          ${fitTag}
+        </div>
+        <div class="room-v2-rates">
+          ${ratesHtml}
+          ${moreBtn}
+        </div>
+      </article>`;
+  }
+
+  // One bookable rate row inside a room card. Board + refundable +
+  // promo chips + price + Select button. Selecting calls the existing
+  // selectRoomOffer flow so the trip total updates exactly like before.
+  function renderRateRow(o, selectedId) {
+    const board = boardLabel(o);
+    const refundable = o.any_refundable === true || o.refundable === true;
+    const cancelDate = refundable && o.cancellation_deadline ? fmtCancelDate(o.cancellation_deadline) : "";
+    const refundChip = refundable
+      ? `<span class="rv-rate-chip refund">${cancelDate ? `Free cancel by ${escapeHtml(cancelDate)}` : "Free cancellation"}</span>`
+      : (o.refundable === false ? `<span class="rv-rate-chip warn">Non-refundable</span>` : "");
+    const promoChip = (o.any_promotions === true || o.has_promotions === true)
+      ? `<span class="rv-rate-chip promo">Promo</span>` : "";
+    const aiChip = o.is_all_inclusive ? `<span class="rv-rate-chip ai">✓ All-inclusive</span>` : "";
+
+    const pMin = Number(o.price_min ?? o.total_price) || 0;
+    const pMax = Number(o.price_max ?? o.total_price) || pMin;
+    const priceLabel = pMax > pMin
+      ? `<span class="rv-price-from">From</span> ${fmtMoney(pMin)}`
+      : fmtMoney(pMin);
+    const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
+
+    const safeId = String(o.offer_id).replace(/'/g, "&apos;");
+    const isActive = selectedId && selectedId === o.offer_id;
+    return `
+      <div class="room-v2-rate${isActive ? " selected" : ""}">
+        <div class="rv-rate-info">
+          <div class="rv-rate-board">${escapeHtml(board)}</div>
+          <div class="rv-rate-chips">${aiChip}${refundChip}${promoChip}</div>
+        </div>
+        <div class="rv-rate-price">
+          <div class="rv-rate-price-total">${priceLabel}</div>
+          ${perNight ? `<div class="rv-rate-price-pernight">${perNight}</div>` : ""}
+        </div>
+        <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"} rv-rate-cta" onclick="selectRoomOffer('${safeId}')">${isActive ? "✓ Selected" : "Select"}</button>
+      </div>`;
+  }
+
+  function toggleRoomVariantsExpand(key) {
+    if (currentModalExpandedRates.has(key)) currentModalExpandedRates.delete(key);
+    else currentModalExpandedRates.add(key);
+    rerenderRoomGrid();
+  }
+  window.toggleRoomVariantsExpand = toggleRoomVariantsExpand;
 
   // Holds the top-level hotel_photos array from the most recent
   // get_hotel_offers call. Used as the fallback rotation when an

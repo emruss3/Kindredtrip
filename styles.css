@@ -7690,3 +7690,196 @@ body.trip-detail-open #status { display: none !important; }
   background: #F3E2E2;
   color: #8A2A2A;
 }
+
+/* Unified Rooms section v2 — catalog room as the card, rate offers
+   stacked underneath as bookable variants. */
+.rooms-v2-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.room-v2-card {
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  gap: 20px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.room-v2-photo {
+  position: relative;
+  min-height: 200px;
+}
+.room-v2-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.room-v2-photo-empty {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-soft);
+}
+.room-v2-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 0 14px 0;
+  min-width: 0;
+}
+.room-v2-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink-1);
+  margin: 0;
+  line-height: 1.25;
+}
+.room-v2-sleeps {
+  font-size: 14px;
+  color: var(--ink-1);
+}
+.room-v2-sleeps b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.room-v2-sleeps .rv-sub {
+  color: var(--ink-3);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.room-v2-meta {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.room-v2-desc {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+.rv-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.rv-amenities li {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.rv-fit.fits {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--good, #1F6F3B);
+  margin-top: auto;
+  padding-top: 6px;
+}
+.room-v2-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 14px 0;
+  border-left: 1px solid var(--line-soft);
+  padding-left: 16px;
+}
+.room-v2-rate {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+}
+.room-v2-rate.selected {
+  border-color: var(--accent, #1f6feb);
+  background: #EAF2FF;
+}
+.rv-rate-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rv-rate-board {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.rv-rate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rv-rate-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  color: var(--ink-2);
+}
+.rv-rate-chip.refund { color: #1F6F3B; border-color: #C8E6CF; background: #F0F8F2; }
+.rv-rate-chip.warn   { color: #8A4A1F; border-color: #F0CDA8; background: #FBF1E5; }
+.rv-rate-chip.ai     { color: #1F6F3B; border-color: #C8E6CF; background: #F0F8F2; }
+.rv-rate-chip.promo  { color: #8A2A6A; border-color: #E5BFD8; background: #FBF0F7; }
+.rv-rate-price {
+  text-align: right;
+}
+.rv-rate-price-total {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rv-price-from {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+  margin-right: 2px;
+}
+.rv-rate-price-pernight {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.rv-rate-cta {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  margin-top: 4px;
+}
+.rv-more {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--accent, #1f6feb);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .room-v2-card {
+    grid-template-columns: 1fr;
+  }
+  .room-v2-photo { min-height: 180px; }
+  .room-v2-main { padding: 12px 14px 0; }
+  .room-v2-rates {
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+    padding: 12px 14px 14px;
+  }
+}
