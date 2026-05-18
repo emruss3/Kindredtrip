@@ -5506,6 +5506,48 @@ body.trip-detail-open #status { display: none !important; }
 .hero-why-text { font-size: 13.5px; color: var(--ink-1); margin: 0; font-style: italic; }
 .hero-card-pricing .btn-compare-link { margin-top: 4px; }
 
+/* ---------- Pending (no-mock policy) skeleton card ---------- */
+.card-pending { cursor: default; opacity: 0.96; }
+.card-pending:hover { box-shadow: none; border-color: var(--line); }
+.card-pending .card-photo img { filter: saturate(0.85); }
+.card-pending-note {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-style: italic;
+  margin: 4px 0 0;
+}
+.card-pending-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+.price-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+  align-items: flex-end;
+}
+.skel {
+  display: block;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bg-soft) 0%, #ECECE6 50%, var(--bg-soft) 100%);
+  background-size: 200% 100%;
+  animation: kt-skel-shimmer 1.4s linear infinite;
+}
+.skel-line { height: 12px; }
+.skel-line-lg { width: 120px; height: 24px; }
+.skel-line-md { width: 90px; }
+.skel-line-sm { width: 140px; height: 9px; }
+@keyframes kt-skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (max-width: 720px) {
+  .price-skeleton { align-items: flex-start; }
+}
+
 /* =====================================================================
  * Trip detail page — Booking/Kayak/Google-style redesign (v3)
  * Hero mosaic + sticky tab nav + 2-col with sticky right-rail price.

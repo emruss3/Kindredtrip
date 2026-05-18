@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-bk-flights" />
-<meta name="kt-build" content="20260515-bk-flights" />
+<link rel="stylesheet" href="/styles.css?v=20260515-no-mock" />
+<meta name="kt-build" content="20260515-no-mock" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -124,7 +124,7 @@
       "name": "Are KindredTrips prices live or estimates?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Prices on KindredTrips search results are estimated based on current market rates for your dates and family composition. When users click through to book on a partner site, that site shows live, bookable rates. Most of the time the live rate is within a few percent of our estimate. Estimated prices are clearly labeled."
+        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding live prices' placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through."
       }
     }
   ]
@@ -407,7 +407,6 @@
         </div>
         <div class="trust-legend">
           <span class="trust-legend-item"><span class="trust-dot live-dot"></span>Live partner rate</span>
-          <span class="trust-legend-item"><span class="trust-dot est-dot"></span>Estimated price (we'll tell you when)</span>
         </div>
       </div>
     </article>
@@ -592,7 +591,7 @@
     <details class="faq-item">
       <summary>Are KindredTrips prices live or estimates?</summary>
       <div class="faq-answer">
-        <p>Prices on KindredTrips search results are estimated based on current market rates for your dates and family composition. When users click through to book on a partner site, that site shows live, bookable rates. Most of the time the live rate is within a few percent of our estimate. Estimated prices are clearly labeled.</p>
+        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding live prices…" placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through.</p>
       </div>
     </details>
   </div>
@@ -1586,7 +1585,7 @@
         if (pricedCount === 0) {
           showError("Pricing is slow or temporarily unavailable. Please try the search again in a moment.");
         } else {
-          setStatus("Pricing is slow right now — some trips may show estimated prices. We'll keep refining.");
+          setStatus("Pricing is slow right now — some trips are still finding live rates. New live results will appear as carriers confirm.");
         }
       }
 
@@ -2066,16 +2065,19 @@
     return true;
   }
 
+  // Per the v24 no-mock contract: server nulls out prices on any
+  // package that isn't fully live. We detect that and render a
+  // skeleton card instead of hiding the row, so users see resort
+  // context with a "finding live prices…" state rather than a gap.
+  function isPricesPending(p) {
+    return p?.prices_pending === true
+      || p?.is_live === false
+      || (p?.total_price == null && p?.flight_supplier !== "liteapi");
+  }
+
   function renderResults() {
     const filtered = applyClientSort(
       allPackages
-        // Live-only: hide mock-priced flight packages. start_pricing
-        // sets flight_supplier='mock' for routes that haven't been
-        // resolved by the external Sabre/Travelport worker. Showing
-        // only live-priced results means every visible trip has a real
-        // fare from a real carrier, at the cost of fewer rows until
-        // the worker catches up.
-        .filter((p) => p.flight_supplier !== "mock")
         .filter(packageMeetsSearchRequirements)
         .filter(packageMatchesFilters)
     );
@@ -2109,7 +2111,10 @@
 
   function renderListRest(rest, rankBadges, budgetBadges) {
     if (!rest.length) return "";
-    return rest.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+    return rest.map((p) => isPricesPending(p)
+      ? renderPendingCard(p)
+      : renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))
+    ).join("");
   }
 
   // Group remaining results by country so users can compare regions
@@ -2971,6 +2976,46 @@
     return `<span class="badge hotel-class hotel-class-${rounded}"><span class="hotel-stars">${"★".repeat(rounded)}</span>${rounded}-star hotel</span>`;
   }
 
+  // Skeleton card for packages where the server hasn't returned live
+  // prices yet (is_live:false / prices_pending:true). Per the no-mock
+  // policy we never show an estimated number and never expose booking
+  // CTAs — just resort context and a "finding live prices…" state.
+  function renderPendingCard(p) {
+    const r = p.resorts || {};
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
+    const r5 = ratingTo5(r.avg_user_rating);
+    if (r5 != null) signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}</span>`);
+    if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    return `
+      <article class="card card-pending" aria-busy="true">
+        <div class="card-photo">
+          <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
+          <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
+        </div>
+        <div class="card-body">
+          <div class="card-title-row">
+            <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+          </div>
+          <div class="card-signals">${signals.join("")}</div>
+          <p class="card-pending-note">Finding live prices from carriers for your dates…</p>
+        </div>
+        <div class="card-price">
+          <div class="price-from live">Live price</div>
+          <div class="price-skeleton" aria-hidden="true">
+            <span class="skel skel-line skel-line-lg"></span>
+            <span class="skel skel-line skel-line-md"></span>
+            <span class="skel skel-line skel-line-sm"></span>
+          </div>
+          <p class="card-pending-sub">Prices appear once a carrier confirms a live fare for your party.</p>
+        </div>
+      </article>
+    `;
+  }
+
   function renderCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
     const tags = p._tags;
@@ -3031,7 +3076,7 @@
           <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
         <div class="card-price">
-          <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Estimated total"}</div>
+          <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Live price"}</div>
           <p class="price-total">${fmtMoney(p.total_price)}</p>
           <div class="price-sub">flights + hotel</div>
           <div class="price-breakdown-inline">
@@ -3095,7 +3140,7 @@
             ${reasonsHtml}
           </div>
           <div class="hero-card-pricing">
-            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated total"}</div>
+            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
             <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
             <div class="hero-price-sub">total · flights + hotel</div>
             <div class="hero-price-split">
@@ -3560,7 +3605,7 @@
 
     const tripFitTotal = `
       <div class="trip-fit-total">
-        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated trip total"}</div>
+        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">
@@ -3639,7 +3684,7 @@
       <div class="modal-section bk-flights" id="flight-options-section">
         <h2>Flight options</h2>
         <div class="bk-flight-empty">
-          <p><b>Live fares pending.</b> Your flight search is still resolving for this resort. The trip total above is our estimated cost based on typical fares for this route.</p>
+          <p><b>Live fares pending.</b> Your flight search is still resolving for this resort. Live fares appear here once a carrier confirms a rate for your party.</p>
           <p>${escapeHtml([
             destAirportLabel,
             pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
@@ -3696,7 +3741,7 @@
         <h4>Room options</h4>
         <div class="room-options-empty">
           <p><b>Live rates pending.</b> This resort is still being priced from our partner. Room-by-room totals will appear here once pricing finishes.</p>
-          <p class="room-options-empty-sub">In the meantime, the trip total above is our estimated rate based on resort tier and country. Click "See hotel rates" to view the partner's live room list.</p>
+          <p class="room-options-empty-sub">Live room rates appear here once the partner confirms availability for your dates. Click "See hotel rates" to view the partner's live room list now.</p>
         </div>
       </div>`;
 
@@ -3801,7 +3846,7 @@
     const stickyCta = `
       <div class="modal-cta-sticky">
         <div class="modal-cta-info">
-          <div><b>${fmtMoney(pkg.total_price)}</b> ${isLive ? "live trip total" : "estimated trip total"}${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
+          <div><b>${fmtMoney(pkg.total_price)}</b> ${isLive ? "live trip total" : "live trip total"}${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
           <div class="modal-cta-sub">flights + hotel · for your family</div>
         </div>
         <div class="modal-cta-actions">
@@ -3854,7 +3899,7 @@
     const rail = `
       <aside class="trip-side-col">
         <div class="trip-rail trip-fit-summary">
-          <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated total"}</div>
+          <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
           <p class="price-total">${fmtMoney(pkg.total_price)}</p>
           <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
           <div class="trip-fit-breakdown">
@@ -4973,7 +5018,7 @@
     const r = pkg.resorts || {};
     const delta = budgetDelta(pkg);
     const isLive = pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi";
-    const totalLabel = isLive ? "Live trip total" : "Estimated trip total";
+    const totalLabel = "Live trip total";
     const lines = [
       `${r.resort_name || "Resort"}${r.country ? ` — ${r.country}` : ""}`,
       `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
