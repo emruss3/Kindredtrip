@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-reorder" />
-<meta name="kt-build" content="20260515-reorder" />
+<link rel="stylesheet" href="/styles.css?v=20260515-room-expand" />
+<meta name="kt-build" content="20260515-room-expand" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4093,7 +4093,11 @@
     // Reset per-modal photo state so a previous resort's images
     // can't leak into this one.
     currentModalHotelPhotos = [];
+    currentModalRoomPhotos = {};
+    currentModalRoomDetails = {};
+    currentModalExpandedRooms = new Set();
     if (liveHotel) loadRoomOptions(pkg.package_id);
+    if (liveHotel && r.liteapi_hotel_id) loadRoomPhotosAndDetails(r.liteapi_hotel_id);
     if (liveFlight) loadFlightOptions(pkg.package_id);
     loadResortReviews(pkg.package_id);
     // Activate the scroll-spy that drives the .trip-tab .active state
@@ -4550,6 +4554,16 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
+  // Maps from get_room_photos: per-room photo arrays + descriptive
+  // metadata (description, beds, amenities, size, occupancy split,
+  // view). Both keyed by LiteAPI roomTypeId. Loaded async after the
+  // modal mounts; the expand panel renders empty state until they
+  // arrive. Lookups in the renderer go via offer.room_type_id.
+  let currentModalRoomPhotos = {};
+  let currentModalRoomDetails = {};
+  // Tracks which room cards the user has expanded — set of offer_ids.
+  // Persists across re-renders (e.g. when async room details land).
+  let currentModalExpandedRooms = new Set();
   // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
@@ -4605,6 +4619,43 @@
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
     }
+  }
+
+  // Async-load per-room photos and descriptive metadata from
+  // get_room_photos (LiteAPI hotel detail). Fires in parallel with
+  // loadRoomOptions; when it lands we re-render any rows that are
+  // already painted so expand panels can show the new data.
+  async function loadRoomPhotosAndDetails(liteapiHotelId) {
+    if (!liteapiHotelId) return;
+    try {
+      const data = await callFn(`get_room_photos?hotel_id=${encodeURIComponent(liteapiHotelId)}`, { method: "GET" });
+      currentModalRoomPhotos = data?.room_photos || {};
+      currentModalRoomDetails = data?.room_details || {};
+      // If the rooms grid is already painted, re-render so each row
+      // can pick up its thumb + amenities/beds chips in the summary
+      // and a populated expand panel.
+      rerenderRoomGrid();
+    } catch (e) {
+      console.warn("Room photos/details failed:", e?.message || e);
+    }
+  }
+
+  // Re-render the rooms grid in place, preserving which rows the user
+  // has expanded. Called when photos/details land after the initial
+  // paint, or after a select changes the active room.
+  function rerenderRoomGrid() {
+    const grid = document.getElementById("room-options-grid");
+    if (!grid || currentModalRooms.length === 0) return;
+    grid.innerHTML = `
+      <div class="rooms-table">
+        <div class="rooms-table-head" role="row">
+          <div>Room</div>
+          <div>Sleeps</div>
+          <div>Price</div>
+          <div></div>
+        </div>
+        ${currentModalRooms.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("")}
+      </div>`;
   }
 
   // Holds the top-level hotel_photos array from the most recent
@@ -5064,34 +5115,57 @@
 
     const safeId = String(o.offer_id).replace(/'/g, "&apos;");
     const isActive = selectedId && selectedId === o.offer_id;
+    const isExpanded = currentModalExpandedRooms.has(o.offer_id);
     const rowClasses = [
       "rooms-table-row",
       isActive ? "selected" : "",
       fitsParty ? "" : "undersized",
+      isExpanded ? "expanded" : "",
     ].filter(Boolean).join(" ");
 
-    // 4-column layout (was 5 — the standalone Inclusions column was the
-    // cramped one). Inclusion chips now live below the room name and
-    // diff chips, where they have room to wrap.
+    // Per-room data from get_room_photos (loaded async). Falls back to
+    // the offer's own photo + hotel-level photos when LiteAPI hasn't
+    // populated this room_type_id yet.
+    const detailKey = o.room_type_id ? String(o.room_type_id) : null;
+    const roomPhotos = detailKey ? (currentModalRoomPhotos[detailKey] || []) : [];
+    const roomDetail = detailKey ? (currentModalRoomDetails[detailKey] || null) : null;
+    const bedSummary = roomDetail?.bed_summary || null;
+    const roomView = roomDetail?.view || null;
+
+    // Bed + view chips in the summary row — short signal, doesn't
+    // wait for an expand. Falls back silently when data isn't ready.
+    const summaryDetailChips = [
+      bedSummary ? `<span class="rt-detail-chip rt-bed-chip">${escapeHtml(bedSummary)}</span>` : "",
+      roomView ? `<span class="rt-detail-chip rt-view-chip">${escapeHtml(roomView)}</span>` : "",
+    ].filter(Boolean).join("");
+
+    // 4-column layout. Inclusion chips live below the room name and
+    // diff chips so they have room to wrap.
     const inclusionChips = [
       `<span class="rt-chip board-${boardClass}">${escapeHtml(board)}</span>`,
       refundChip,
       promoChip,
     ].filter(Boolean).join("");
+
     return `
       <div class="rooms-table-item" data-offer-id="${escapeHtml(String(o.offer_id))}">
-        <div class="${rowClasses}" onclick="selectRoomOffer('${safeId}')" role="row">
+        <div class="${rowClasses}" onclick="toggleRoomExpand('${safeId}')" role="row" aria-expanded="${isExpanded ? "true" : "false"}">
           <div class="rt-name">
             ${photo ? `<img class="rt-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="rt-thumb rt-thumb-empty"></div>`}
             <div class="rt-name-body">
               <div class="rt-name-line">${escapeHtml(o.room_name || "Room")}</div>
               ${diffChips}
-              <div class="rt-inclusions">${inclusionChips}</div>
+              <div class="rt-inclusions">${inclusionChips}${summaryDetailChips}</div>
+              <button type="button" class="rt-detail-toggle" aria-expanded="${isExpanded ? "true" : "false"}" onclick="event.stopPropagation(); toggleRoomExpand('${safeId}')">
+                ${isExpanded ? "Hide details" : "Show details"}
+                <svg class="rt-detail-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
             </div>
           </div>
           <div class="rt-sleeps">
             <div class="rt-sleeps-bar">
               <svg class="rt-sleeps-ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M2 21v-2a8 8 0 0 1 16 0v2H2z"/></svg>
+              <span class="rt-sleeps-label">Sleeps</span>
               <span class="rt-sleeps-num">${sleeps || "—"}</span>
             </div>
             ${fitNote}
@@ -5105,8 +5179,161 @@
             <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"}" onclick="event.stopPropagation(); selectRoomOffer('${safeId}')">${isActive ? "✓ Selected" : "Select"}</button>
           </div>
         </div>
+        ${isExpanded ? renderRoomExpandPanel(o, roomPhotos, roomDetail, safeId, isActive) : ""}
         ${variantCount > 1 ? `<div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>` : ""}
       </div>`;
+  }
+
+  // Toggle the expand panel under a room row. Clicking anywhere on the
+  // row triggers this (we stop propagation on the inner Select button
+  // so picking a room doesn't accidentally expand a different one).
+  function toggleRoomExpand(offerId) {
+    if (currentModalExpandedRooms.has(offerId)) currentModalExpandedRooms.delete(offerId);
+    else currentModalExpandedRooms.add(offerId);
+    rerenderRoomGrid();
+  }
+  window.toggleRoomExpand = toggleRoomExpand;
+
+  // Booking-style expand panel — shown under the room row when the
+  // user clicks. Three columns on wide viewports:
+  //   1. Photo gallery (up to 6 thumbs, lightbox on click)
+  //   2. Room facts (occupancy split, bed config, size, view)
+  //   3. Amenities + description + booking terms
+  // Falls back gracefully when LiteAPI hasn't given us details for
+  // this room_type_id yet.
+  function renderRoomExpandPanel(o, photos, detail, safeId, isActive) {
+    // ---- 1. Photos ----
+    let photosBlock = "";
+    if (Array.isArray(photos) && photos.length > 0) {
+      const slots = photos.slice(0, 6);
+      photosBlock = `
+        <div class="rt-expand-photos">
+          ${slots.map((p, i) => `
+            <button type="button" class="rt-expand-photo${i === 0 ? " rt-expand-photo-main" : ""}" onclick="openRoomPhotoLightbox('${safeId}', ${i})" aria-label="Photo ${i + 1} of ${slots.length}">
+              <img src="${escapeHtml(p)}" alt="" loading="lazy" />
+            </button>`).join("")}
+        </div>`;
+    } else {
+      photosBlock = `<div class="rt-expand-photos rt-expand-photos-empty"><span>Room photos coming soon</span></div>`;
+    }
+
+    // ---- 2. Facts column ----
+    const adultCount = Number(o.adult_count) || 0;
+    const childCount = Number(o.child_count) || 0;
+    const occupancyBreakdown = (adultCount > 0 || childCount > 0)
+      ? `${adultCount} adult${adultCount === 1 ? "" : "s"}${childCount > 0 ? `, ${childCount} child${childCount === 1 ? "" : "ren"}` : ""}`
+      : (o.max_occupancy ? `Up to ${o.max_occupancy} guests` : null);
+    const maxAdults = detail?.max_adults;
+    const maxChildren = detail?.max_children;
+    const sizeStr = detail?.size ? `${detail.size.value} ${detail.size.unit}` : null;
+    const facts = [
+      { label: "Sleeps", value: o.max_occupancy ? `${o.max_occupancy} guests` : null },
+      { label: "Booked for", value: occupancyBreakdown },
+      { label: "Max occupancy", value: (maxAdults || maxChildren) ? `${maxAdults || 0} adults${maxChildren ? `, ${maxChildren} children` : ""}` : null },
+      { label: "Beds", value: detail?.bed_summary },
+      { label: "Room size", value: sizeStr },
+      { label: "View", value: detail?.view },
+    ].filter(f => f.value);
+    const factsBlock = facts.length
+      ? `<dl class="rt-expand-facts">
+          ${facts.map(f => `<div class="rt-expand-fact"><dt>${escapeHtml(f.label)}</dt><dd>${escapeHtml(f.value)}</dd></div>`).join("")}
+        </dl>`
+      : "";
+
+    // ---- 3. Amenities + description + terms ----
+    const amenities = Array.isArray(detail?.amenities) ? detail.amenities.slice(0, 18) : [];
+    const amenitiesBlock = amenities.length
+      ? `<div class="rt-expand-amenities">
+          <h4>Room amenities</h4>
+          <ul>${amenities.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>
+        </div>`
+      : "";
+
+    const descBlock = detail?.description
+      ? `<div class="rt-expand-desc"><h4>About this room</h4><p>${escapeHtml(detail.description)}</p></div>`
+      : "";
+
+    // Booking terms summary — refund + cancellation deadline + payment
+    // types + supplier. Each line only shows if we have the data.
+    const refundable = o.any_refundable === true || o.refundable === true;
+    const cancelDate = refundable && o.cancellation_deadline ? fmtCancelDate(o.cancellation_deadline) : null;
+    const paymentTypes = Array.isArray(o.payment_types) ? o.payment_types : [];
+    const termsItems = [
+      refundable
+        ? `<li class="rt-terms-good">✓ ${cancelDate ? `Free cancellation until ${escapeHtml(cancelDate)}` : "Free cancellation"}</li>`
+        : (o.refundable === false ? `<li class="rt-terms-warn">Non-refundable</li>` : ""),
+      o.is_all_inclusive
+        ? `<li class="rt-terms-good">✓ All-inclusive (meals, drinks, on-site activities)</li>`
+        : (o.board_name ? `<li>Board: ${escapeHtml(o.board_name)}</li>` : ""),
+      (o.any_promotions || o.has_promotions) ? `<li class="rt-terms-good">✓ Limited-time promotion applied</li>` : "",
+      paymentTypes.length ? `<li>Payment: ${escapeHtml(paymentTypes.join(", "))}</li>` : "",
+      o.supplier ? `<li class="rt-terms-meta">Inventory: ${escapeHtml(o.supplier)}</li>` : "",
+    ].filter(Boolean);
+    const termsBlock = termsItems.length
+      ? `<div class="rt-expand-terms"><h4>Booking terms</h4><ul>${termsItems.join("")}</ul></div>`
+      : "";
+
+    const ctaBlock = `
+      <div class="rt-expand-cta">
+        <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"} btn-lg" onclick="event.stopPropagation(); selectRoomOffer('${safeId}')">
+          ${isActive ? "✓ Selected for trip total" : "Select this room"}
+        </button>
+      </div>`;
+
+    return `
+      <div class="rt-expand-panel">
+        ${photosBlock}
+        <div class="rt-expand-body">
+          <div class="rt-expand-col-left">
+            ${factsBlock}
+            ${termsBlock}
+          </div>
+          <div class="rt-expand-col-right">
+            ${descBlock}
+            ${amenitiesBlock}
+          </div>
+        </div>
+        ${ctaBlock}
+      </div>`;
+  }
+
+  // Open a fullscreen lightbox cycling through the photo array for
+  // this room offer. Reuses the existing modal-photo state machinery
+  // by repointing currentModalPhotoRefs.
+  function openRoomPhotoLightbox(offerId, startIdx) {
+    const detailKey = (() => {
+      const o = currentModalRooms.find(r => r.offer_id === offerId);
+      return o?.room_type_id ? String(o.room_type_id) : null;
+    })();
+    const photos = detailKey ? (currentModalRoomPhotos[detailKey] || []) : [];
+    if (!photos.length) return;
+    // The simplest lightbox: open a centered overlay with the chosen
+    // image + prev/next nav. Keep it self-contained so the trip-detail
+    // page state isn't disturbed.
+    showRoomPhotoLightbox(photos, startIdx);
+  }
+  window.openRoomPhotoLightbox = openRoomPhotoLightbox;
+
+  function showRoomPhotoLightbox(photos, startIdx) {
+    let idx = Math.max(0, Math.min(startIdx | 0, photos.length - 1));
+    const existing = document.getElementById("room-photo-lightbox");
+    if (existing) existing.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "room-photo-lightbox";
+    overlay.className = "room-photo-lightbox";
+    const render = () => {
+      overlay.innerHTML = `
+        <button type="button" class="rpl-close" aria-label="Close" onclick="this.closest('.room-photo-lightbox').remove()">×</button>
+        <button type="button" class="rpl-prev" aria-label="Previous photo" ${idx === 0 ? "disabled" : ""}>‹</button>
+        <img class="rpl-img" src="${escapeHtml(photos[idx])}" alt="" />
+        <button type="button" class="rpl-next" aria-label="Next photo" ${idx === photos.length - 1 ? "disabled" : ""}>›</button>
+        <div class="rpl-counter">${idx + 1} / ${photos.length}</div>`;
+      overlay.querySelector(".rpl-prev")?.addEventListener("click", () => { idx = Math.max(0, idx - 1); render(); });
+      overlay.querySelector(".rpl-next")?.addEventListener("click", () => { idx = Math.min(photos.length - 1, idx + 1); render(); });
+    };
+    render();
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
   }
 
   // Render a single rate variant as an inline sub-row under the room.
@@ -5225,12 +5452,7 @@
     updateTotalsInPlace(flightPrice, newHotelPrice);
 
     // Re-render the grid so highlight + variant-expander state reset.
-    const grid = document.getElementById("room-options-grid");
-    if (grid) {
-      grid.innerHTML = currentModalRooms.map((r, i) =>
-        renderRoomOptionCard(r, i, currentModalSelectedRoomId)
-      ).join("");
-    }
+    rerenderRoomGrid();
   }
 
   function fmtCancelDate(iso) {
