@@ -6834,28 +6834,65 @@ body.trip-detail-open #status { display: none !important; }
 /* Toggle button that reveals the individual-review list. Sits between
  * the summary card and the (initially hidden) list. */
 .trip-reviews-toggle {
-  align-self: flex-start;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  margin: var(--s-3) 0 var(--s-3);
-  padding: 10px 16px;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 var(--s-2);
+  padding: 12px 16px;
   background: #fff;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  font-size: 13.5px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink);
   cursor: pointer;
+  text-align: left;
   transition: background 0.12s, border-color 0.12s;
-  letter-spacing: -0.005em;
 }
 .trip-reviews-toggle:hover { background: var(--bg-soft); border-color: var(--ink-3); }
+.trip-reviews-teaser {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.trip-reviews-teaser-score b {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.trip-reviews-teaser-suffix {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-weight: 500;
+  margin-left: 2px;
+}
+.trip-reviews-teaser-meta {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trip-reviews-toggle-label {
+  font-size: 13px;
+  color: var(--ink-2);
+}
 .trip-reviews-toggle-chev {
-  width: 14px; height: 14px;
+  width: 16px; height: 16px;
   transition: transform 0.18s ease;
+  flex-shrink: 0;
 }
 .trip-reviews-toggle[aria-expanded="true"] .trip-reviews-toggle-chev { transform: rotate(180deg); }
+.trip-reviews-collapsible {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
 
 .trip-reviews-list {
   display: flex;
