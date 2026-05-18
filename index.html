@@ -4131,6 +4131,13 @@
     currentModalRoomPhotos = {};
     currentModalRoomDetails = {};
     currentModalExpandedRooms = new Set();
+    currentModalUndersizedRevealed = false;
+    currentModalResortConnecting = (() => {
+      const rooms = tags.rooms || [];
+      const connecting = rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms === true;
+      const familySuite = rooms.includes("Family Suite") || rooms.includes("2 Bedroom Suites");
+      return { connecting, familySuite };
+    })();
     if (liveHotel) loadRoomOptions(pkg.package_id);
     if (liveHotel && r.liteapi_hotel_id) loadRoomPhotosAndDetails(r.liteapi_hotel_id);
     if (liveFlight) loadFlightOptions(pkg.package_id);
@@ -4634,6 +4641,15 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
+  // Whether the user has clicked "Show smaller rooms" — rooms that
+  // don't fit the family are collapsed by default. Suggesting "book
+  // two rooms" only makes sense when the resort actually offers
+  // guaranteed connecting rooms; otherwise it's a false out.
+  let currentModalUndersizedRevealed = false;
+  // Resort-level fallback flags computed once per modal so the room
+  // fit note can speak honestly. Filled in by loadRoomOptions from
+  // currentModalPackage.resorts and its _tags.
+  let currentModalResortConnecting = { connecting: false, familySuite: false };
   // Maps from get_room_photos: per-room photo arrays + descriptive
   // metadata (description, beds, amenities, size, occupancy split,
   // view). Both keyed by LiteAPI roomTypeId. Loaded async after the
@@ -4682,19 +4698,18 @@
       // so the cards can call it out (Sleeps 6, Ocean view, AI, etc.)
       currentModalRoomDiffs = computeRoomDiffs(sortedOffers);
       const pkg = currentModalPackage;
+      // Prefer a fitting room as the default selected, fall back to the
+      // package's original choice if nothing fits.
+      const firstFit = sortedOffers.find(o => {
+        const adults = Number(lastSearchSummary?.adults) || 2;
+        const kids = (lastSearchSummary?.child_ages || []).length;
+        const total = adults + kids;
+        return !o.max_occupancy || total === 0 || Number(o.max_occupancy) >= total;
+      });
       currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && sortedOffers.find(o => o.offer_id === pkg.hotel_offer_id))
         ? pkg.hotel_offer_id
-        : sortedOffers[0]?.offer_id ?? null;
-      grid.innerHTML = `
-        <div class="rooms-table">
-          <div class="rooms-table-head" role="row">
-            <div>Room</div>
-            <div>Sleeps</div>
-            <div>Price</div>
-            <div></div>
-          </div>
-          ${sortedOffers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("")}
-        </div>`;
+        : (firstFit?.offer_id ?? sortedOffers[0]?.offer_id ?? null);
+      rerenderRoomGrid();
     } catch (e) {
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
@@ -4723,9 +4738,48 @@
   // Re-render the rooms grid in place, preserving which rows the user
   // has expanded. Called when photos/details land after the initial
   // paint, or after a select changes the active room.
+  //
+  // Rooms that DON'T fit the family are hidden behind a "Show smaller
+  // rooms" toggle. Family of 6 in a "sleeps 5" room is a false out —
+  // a second room only helps when the resort offers guaranteed
+  // connecting rooms, which is a separate signal we surface in the
+  // toggle copy.
   function rerenderRoomGrid() {
     const grid = document.getElementById("room-options-grid");
     if (!grid || currentModalRooms.length === 0) return;
+    const adultsRoom = Number(lastSearchSummary?.adults) || 2;
+    const kidsRoom = (lastSearchSummary?.child_ages || []).length;
+    const partyTotal = adultsRoom + kidsRoom;
+    const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
+    const fitting = currentModalRooms.filter(fits);
+    const undersized = currentModalRooms.filter(o => !fits(o));
+
+    const fittingHtml = fitting.length
+      ? fitting.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")
+      : `<div class="rooms-empty-fit">
+          <p><b>No rooms fit a party of ${partyTotal} at this resort.</b></p>
+          ${currentModalResortConnecting.familySuite || currentModalResortConnecting.connecting
+            ? `<p>This resort does offer ${currentModalResortConnecting.familySuite ? "family suites" : ""}${currentModalResortConnecting.familySuite && currentModalResortConnecting.connecting ? " and " : ""}${currentModalResortConnecting.connecting ? "connecting rooms" : ""} — see the smaller rooms below to pair, or try a different resort.</p>`
+            : `<p>Try filtering the search for connecting rooms or family suites.</p>`}
+        </div>`;
+
+    const undersizedHtml = (() => {
+      if (undersized.length === 0) return "";
+      const open = currentModalUndersizedRevealed;
+      const toggleLabel = open
+        ? `Hide smaller rooms`
+        : `Show ${undersized.length} smaller room${undersized.length === 1 ? "" : "s"}`;
+      const rows = open
+        ? undersized.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")
+        : "";
+      return `
+        <button type="button" class="rooms-undersized-toggle" aria-expanded="${open ? "true" : "false"}" onclick="toggleUndersizedRooms()">
+          <span>${toggleLabel}</span>
+          <svg class="rooms-undersized-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        ${rows}`;
+    })();
+
     grid.innerHTML = `
       <div class="rooms-table">
         <div class="rooms-table-head" role="row">
@@ -4734,9 +4788,16 @@
           <div>Price</div>
           <div></div>
         </div>
-        ${currentModalRooms.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("")}
+        ${fittingHtml}
+        ${undersizedHtml}
       </div>`;
   }
+
+  function toggleUndersizedRooms() {
+    currentModalUndersizedRevealed = !currentModalUndersizedRevealed;
+    rerenderRoomGrid();
+  }
+  window.toggleUndersizedRooms = toggleUndersizedRooms;
 
   // Holds the top-level hotel_photos array from the most recent
   // get_hotel_offers call. Used as the fallback rotation when an
@@ -5200,11 +5261,23 @@
     const partyTotal = adultsRoom + kidsRoom;
     const sleeps = Number(o.max_occupancy) || 0;
     const fitsParty = !sleeps || !partyTotal || sleeps >= partyTotal;
-    const fitNote = (sleeps > 0 && partyTotal > 0)
-      ? (fitsParty
-          ? `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`
-          : `<div class="rt-fit nope">⚠ Need 2 rooms for ${partyTotal}</div>`)
-      : "";
+    // For undersized rooms the messaging depends on whether the resort
+    // actually offers connecting rooms / family suites — "book 2 rooms"
+    // only helps if the resort guarantees they connect, otherwise it's
+    // a false out (two unconnected rooms is not a family solution).
+    const fitNote = (() => {
+      if (!(sleeps > 0 && partyTotal > 0)) return "";
+      if (fitsParty) return `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`;
+      const cap = currentModalResortConnecting;
+      const short = partyTotal - sleeps;
+      if (cap.connecting) {
+        return `<div class="rt-fit pair">Pair with a connecting room — this resort guarantees them</div>`;
+      }
+      if (cap.familySuite) {
+        return `<div class="rt-fit pair">${short === 1 ? "1 short" : `${short} short`} — see Family Suite below</div>`;
+      }
+      return `<div class="rt-fit nope">Too small — sleeps ${sleeps}, you're ${partyTotal}</div>`;
+    })();
 
     // Small photo thumb — Booking shows a tiny inline photo. Same
     // priority order as the old card layout: per-room → hotel gallery

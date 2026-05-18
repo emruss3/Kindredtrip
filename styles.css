@@ -6201,6 +6201,46 @@ body.trip-detail-open #status { display: none !important; }
 }
 .rt-fit.fits { color: var(--good); }
 .rt-fit.nope { color: #b15a3a; }
+.rt-fit.pair { color: #2A4FB0; }
+
+/* "Show N smaller rooms" toggle that hides undersized rooms by default */
+.rooms-undersized-toggle {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--bg-soft);
+  border: none;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-1);
+  cursor: pointer;
+  transition: background 0.12s;
+  letter-spacing: -0.005em;
+  width: 100%;
+}
+.rooms-undersized-toggle:hover { background: #F0EDE6; color: var(--ink); }
+.rooms-undersized-chev {
+  width: 14px; height: 14px;
+  transition: transform 0.18s ease;
+}
+.rooms-undersized-toggle[aria-expanded="true"] .rooms-undersized-chev { transform: rotate(180deg); }
+
+/* Empty state when no rooms at this resort fit the party */
+.rooms-empty-fit {
+  padding: 24px 20px;
+  text-align: center;
+  background: #FFF4E6;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-1);
+}
+.rooms-empty-fit p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.rooms-empty-fit p + p { margin-top: 6px; color: var(--ink-2); }
+.rooms-empty-fit b { color: var(--ink); }
 .rt-chip {
   display: inline-flex;
   align-items: center;
