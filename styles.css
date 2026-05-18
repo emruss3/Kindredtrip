@@ -7638,6 +7638,19 @@ body.trip-detail-open #status { display: none !important; }
   margin: 0;
   color: var(--ink-1);
 }
+.catalog-room-sleeps {
+  font-size: 14px;
+  color: var(--ink-1);
+}
+.catalog-room-sleeps b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.catalog-room-sleeps-sub {
+  color: var(--ink-3);
+  font-weight: 500;
+  font-size: 12.5px;
+}
 .catalog-room-meta {
   display: flex;
   flex-wrap: wrap;

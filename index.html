@@ -4987,22 +4987,36 @@
         : "";
       const size = Number(r.room_size_sqm);
       const sizeStr = Number.isFinite(size) && size > 0 ? `${Math.round(size)} m²` : "";
-      const cap = [
-        Number.isFinite(Number(r.max_adults))  ? `${r.max_adults} adult${r.max_adults === 1 ? "" : "s"}` : "",
-        Number.isFinite(Number(r.max_children)) && Number(r.max_children) > 0 ? `${r.max_children} child${r.max_children === 1 ? "" : "ren"}` : "",
-      ].filter(Boolean).join(", ");
+      const adults = Number(r.max_adults);
+      const kids = Number(r.max_children);
+      const total = Number(r.max_occupancy);
+      // Lead with the room's actual headline capacity ("Sleeps 6"). The
+      // adult/child split is the secondary detail so it's clear this is
+      // the room's max, not the party we searched with.
+      let sleepsHead = "";
+      let sleepsBreakdown = "";
+      if (Number.isFinite(total) && total > 0) {
+        sleepsHead = `Sleeps ${total}`;
+      } else if (Number.isFinite(adults) && adults > 0) {
+        sleepsHead = `Sleeps ${adults + (Number.isFinite(kids) && kids > 0 ? kids : 0)}`;
+      }
+      if (Number.isFinite(adults) && adults > 0) {
+        const parts = [`${adults} adult${adults === 1 ? "" : "s"}`];
+        if (Number.isFinite(kids) && kids > 0) parts.push(`${kids} child${kids === 1 ? "" : "ren"}`);
+        sleepsBreakdown = parts.join(" + ");
+      }
       const views = (Array.isArray(r.views) ? r.views : []).map(v => String(v?.view || "").trim()).filter(Boolean).slice(0, 2);
       const fitTag = fits(r)
-        ? `<span class="catalog-room-fit fits">Fits your ${party}-person party</span>`
-        : `<span class="catalog-room-fit nofit">Too small for ${party}</span>`;
+        ? `<span class="catalog-room-fit fits">✓ Fits your family</span>`
+        : `<span class="catalog-room-fit nofit">Too small for your family</span>`;
       return `
         <article class="catalog-room-card">
           ${photo ? `<img class="catalog-room-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(r.room_name || "Room")}" loading="lazy" />` : ""}
           <div class="catalog-room-body">
             <h4 class="catalog-room-name">${escapeHtml(r.room_name || "Room")}</h4>
+            ${sleepsHead ? `<div class="catalog-room-sleeps"><b>${sleepsHead}</b>${sleepsBreakdown ? ` <span class="catalog-room-sleeps-sub">(${escapeHtml(sleepsBreakdown)})</span>` : ""}</div>` : ""}
             <div class="catalog-room-meta">
               ${sizeStr ? `<span>${sizeStr}</span>` : ""}
-              ${cap ? `<span>Sleeps ${cap}</span>` : ""}
               ${views.length ? `<span>${escapeHtml(views.join(", "))}</span>` : ""}
             </div>
             ${bedLine(r) ? `<div class="catalog-room-beds">${escapeHtml(bedLine(r))}</div>` : ""}
@@ -5647,8 +5661,11 @@
     // Rooms that don't fit the party are filtered out upstream in
     // rerenderRoomGrid, so every card we render here is a real fit.
     const fitsParty = true;
+    // Just a small ✓ Fits — the room's actual max is the headline
+    // ("Sleeps N"), and showing "Fits your family of 5" right next to it
+    // was getting read as the room's capacity.
     const fitNote = partyTotal > 0
-      ? `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`
+      ? `<div class="rt-fit fits">✓ Fits your family</div>`
       : "";
 
     // Small photo thumb — Booking shows a tiny inline photo. Same
