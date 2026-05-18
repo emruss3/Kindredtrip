@@ -2764,15 +2764,18 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
 .modal-overlay.page-mode .modal {
   background: var(--bg);
   border-radius: 0;
-  max-width: 1080px;
+  /* No max-width: trip-detail page goes edge-to-edge. The inner
+   * sections (.trip-hero, .trip-layout-v3, .trip-alts) handle their
+   * own responsive side padding via clamp(20px, 4vw, 72px). */
+  max-width: none;
   max-height: none;
-  margin: 0 auto;
+  margin: 0;
   box-shadow: none;
   transform: none;
-  padding: 0 var(--s-6) var(--s-24);
+  padding: 0 0 var(--s-24);
 }
 @media (max-width: 720px) {
-  .modal-overlay.page-mode .modal { padding: 0 var(--s-4) var(--s-12); }
+  .modal-overlay.page-mode .modal { padding: 0 0 var(--s-12); }
 }
 
 /* Hero photo: bigger, edge-to-edge inside the page container so the
@@ -3089,8 +3092,8 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
   background: rgba(250, 250, 247, 0.94);
   backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
-  margin: 0 calc(-1 * var(--s-6));
-  padding: 12px var(--s-6);
+  margin: 0;
+  padding: 12px clamp(20px, 4vw, 72px);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
