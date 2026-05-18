@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-full-width" />
-<meta name="kt-build" content="20260515-full-width" />
+<link rel="stylesheet" href="/styles.css?v=20260515-reorder" />
+<meta name="kt-build" content="20260515-reorder" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4003,28 +4003,13 @@
           </div>
 
           <nav class="trip-tabs" role="tablist">
-            <a href="#trip-rooms" class="trip-tab active" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
-            <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
-            <a href="#trip-reviews" class="trip-tab" onclick="scrollToTripSection(event, 'trip-reviews')">Reviews</a>
-            <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
+            <a href="#trip-overview" class="trip-tab active" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
             <a href="#trip-fit" class="trip-tab" onclick="scrollToTripSection(event, 'trip-fit')">Family fit</a>
             <a href="#trip-location" class="trip-tab" onclick="scrollToTripSection(event, 'trip-location')">Location</a>
+            <a href="#trip-reviews" class="trip-tab" onclick="scrollToTripSection(event, 'trip-reviews')">Reviews</a>
+            <a href="#trip-rooms" class="trip-tab" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
+            <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
           </nav>
-
-          <section id="trip-rooms" class="trip-section trip-section-primary">
-            ${roomOptionsSection}
-          </section>
-
-          <section id="trip-flight" class="trip-section trip-section-primary">
-            ${flightOptions}
-          </section>
-
-          <section id="trip-reviews" class="trip-section">
-            <h2>Reviews</h2>
-            <div id="trip-reviews-body" class="trip-reviews-body">
-              <div class="trip-reviews-loading">Loading family reviews…</div>
-            </div>
-          </section>
 
           <section id="trip-overview" class="trip-section">
             <h2>Overview</h2>
@@ -4052,6 +4037,21 @@
           <section id="trip-location" class="trip-section">
             <h2>Getting there &amp; around</h2>
             ${locFacts.length ? `<ul class="trip-loc-facts">${locFacts.map(f => `<li>${f}</li>`).join("")}</ul>` : `<p class="trip-loc-empty">Location details coming soon.</p>`}
+          </section>
+
+          <section id="trip-reviews" class="trip-section">
+            <h2>Reviews</h2>
+            <div id="trip-reviews-body" class="trip-reviews-body">
+              <div class="trip-reviews-loading">Loading family reviews…</div>
+            </div>
+          </section>
+
+          <section id="trip-rooms" class="trip-section trip-section-primary">
+            ${roomOptionsSection}
+          </section>
+
+          <section id="trip-flight" class="trip-section trip-section-primary">
+            ${flightOptions}
           </section>
         </main>
 
@@ -4657,7 +4657,7 @@
   let _tripTabsObserver = null;
   function bindTripTabsObserver() {
     if (_tripTabsObserver) { _tripTabsObserver.disconnect(); _tripTabsObserver = null; }
-    const ids = ["trip-rooms", "trip-flight", "trip-reviews", "trip-overview", "trip-fit", "trip-location"];
+    const ids = ["trip-overview", "trip-fit", "trip-location", "trip-reviews", "trip-rooms", "trip-flight"];
     const sections = ids.map((id) => document.getElementById(id)).filter(Boolean);
     if (sections.length === 0 || typeof IntersectionObserver === "undefined") return;
     _tripTabsObserver = new IntersectionObserver((entries) => {
