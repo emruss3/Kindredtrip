@@ -5584,7 +5584,7 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Hero mosaic — 1 big photo + 2x2 grid of 4 thumbs */
 .trip-hero {
-  max-width: 1500px;
+  max-width: 1800px;
   margin: 0 auto;
   padding: 0 var(--s-6);
 }
@@ -5712,7 +5712,7 @@ body.trip-detail-open #status { display: none !important; }
 
 /* 2-col layout */
 .trip-layout-v3 {
-  max-width: 1500px;
+  max-width: 1800px;
   margin: var(--s-6) auto 0;
   padding: 0 var(--s-6);
   display: grid;
@@ -6033,7 +6033,7 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Alternatives section below the 2-col body */
 .trip-alts {
-  max-width: 1500px;
+  max-width: 1800px;
   margin: var(--s-8) auto 0;
   padding: var(--s-6);
   border-top: 1px solid var(--line);
