@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-reviews-collapsed" />
-<meta name="kt-build" content="20260515-reviews-collapsed" />
+<link rel="stylesheet" href="/styles.css?v=20260515-sleeps-icons" />
+<meta name="kt-build" content="20260515-sleeps-icons" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -5074,6 +5074,27 @@
   // column headings and grid template; each row inherits the same
   // grid-template-columns so cells line up. Includes a party-fit
   // indicator (✓ or ⚠) computed from the active search's family size.
+  // Booking-style sleeps indicator: one person icon per occupant the
+  // room allows, capped at 6 to avoid visual noise on big suites
+  // (a "Sleeps 8" suite renders as 6 icons + "+2"). The "Sleeps N"
+  // label sits below the icons so the count is also explicit.
+  const SLEEPS_ICON_CAP = 6;
+  function renderSleepsIcons(sleeps) {
+    const n = Math.max(0, Number(sleeps) || 0);
+    if (n === 0) {
+      return `<div class="rt-sleeps-bar rt-sleeps-bar-empty"><span class="rt-sleeps-label">Sleeps —</span></div>`;
+    }
+    const shown = Math.min(n, SLEEPS_ICON_CAP);
+    const overflow = n - shown;
+    const personIcon = `<svg class="rt-sleeps-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M2 21v-2a8 8 0 0 1 16 0v2H2z"/></svg>`;
+    const icons = personIcon.repeat(shown) + (overflow > 0 ? `<span class="rt-sleeps-overflow">+${overflow}</span>` : "");
+    return `
+      <div class="rt-sleeps-bar" aria-label="Sleeps ${n}">
+        <span class="rt-sleeps-icons">${icons}</span>
+      </div>
+      <span class="rt-sleeps-label">Sleeps <b>${n}</b></span>`;
+  }
+
   function renderRoomOptionCard(o, index = 0, selectedId = null) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
@@ -5188,11 +5209,7 @@
             </div>
           </div>
           <div class="rt-sleeps">
-            <div class="rt-sleeps-bar">
-              <svg class="rt-sleeps-ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M2 21v-2a8 8 0 0 1 16 0v2H2z"/></svg>
-              <span class="rt-sleeps-label">Sleeps</span>
-              <span class="rt-sleeps-num">${sleeps || "—"}</span>
-            </div>
+            ${renderSleepsIcons(sleeps)}
             ${fitNote}
           </div>
           <div class="rt-price">
