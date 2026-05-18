@@ -5057,11 +5057,22 @@
   // lowercase, collapse whitespace.
   function normalizeRoomName(name) {
     if (!name) return "";
-    return String(name)
-      .replace(/\s*[-–]\s*[A-Z0-9 ]{2,}\s*$/, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
+    let s = String(name);
+    // Run a few cleanups repeatedly: a name like
+    // "Suite Ocean Front (FMDPO) - DXDGV , 1 King Bed" can have a code
+    // in parens, a dash code, AND a trailing bed-config — strip in any
+    // order until the tail stops shrinking.
+    for (let i = 0; i < 3; i++) {
+      const before = s;
+      // Trailing parens content: "(FMDPO)", "(2 Double Beds and 1 King Bed)"
+      s = s.replace(/\s*\([^()]*\)\s*$/, "");
+      // Trailing supplier code after dash: " - DXDGV"
+      s = s.replace(/\s*[-–]\s*[A-Z0-9 ]{2,}\s*$/, "");
+      // Trailing comma + descriptor: ", 1 King Bed", ", Oceanfront, Balcony"
+      s = s.replace(/\s*,[^,]*$/, "");
+      if (s === before) break;
+    }
+    return s.replace(/\s+/g, " ").trim().toLowerCase();
   }
 
   // "1× King + 2× Twins" style bed-config line from a catalog row.
@@ -5339,22 +5350,35 @@
   function renderRoomGroupCard(g, partyTotal) {
     const cat = g.catalog;
 
-    // Photo: catalog first (real interior shots), then the first rate
-    // offer's photos, then the hotel gallery.
+    // Photo chain. Synthetic groups (no catalog match) end up here a
+    // lot — we'd rather show a real resort-room photo from any catalog
+    // entry than a blank card. Order: this room's catalog photo →
+    // offer's own photos → any catalog photo on the resort → modal
+    // hero refs → blank.
     let photo = catalogPhotoUrl(cat);
     if (!photo) {
       const offerPhotos = (g.rates[0] && Array.isArray(g.rates[0].photos)) ? g.rates[0].photos : [];
       const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
       photo = (main && (main.hd_url || main.url)) || null;
     }
-    if (!photo && Array.isArray(currentModalHotelPhotos) && currentModalHotelPhotos.length > 0) {
-      const hp = currentModalHotelPhotos[0];
-      photo = (hp && (hp.hd_url || hp.url)) || null;
+    if (!photo) {
+      // Pick from any catalog room on this resort — same building,
+      // similar look — so synthetic cards aren't visually empty.
+      for (const r of currentModalCatalogRooms) {
+        const url = catalogPhotoUrl(r);
+        if (url) { photo = url; break; }
+      }
+    }
+    if (!photo && Array.isArray(currentModalPhotoRefs) && currentModalPhotoRefs.length > 0) {
+      const ref = currentModalPhotoRefs[0];
+      if (typeof ref === "string") {
+        photo = /^https?:/.test(ref) ? ref : modalPhotoUrl(ref, 600);
+      }
     }
 
-    // Sleeps headline + adult/child split from the catalog. Falls back
-    // to the rate offer's max_occupancy when it's clearly bigger than
-    // the party (i.e. the rate priced for more than we searched for).
+    // Sleeps headline + adult/child split. Prefer catalog max — that's
+    // the room's true capacity. Otherwise fall back to the rate's
+    // priced occupancy so synthetic cards still show "Sleeps N".
     let sleepsHead = "";
     let sleepsSub = "";
     if (cat) {
@@ -5368,7 +5392,7 @@
           sleepsSub = parts.join(" + ");
         }
       }
-    } else if (Number(g.rates[0]?.max_occupancy) > partyTotal) {
+    } else if (Number(g.rates[0]?.max_occupancy) > 0) {
       sleepsHead = `Sleeps ${Number(g.rates[0].max_occupancy)}`;
     }
 
