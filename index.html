@@ -5055,6 +5055,46 @@
   // often appends a trailing supplier code like " - DXDGV" or repeats
   // the bed-config in parens; the catalog name is cleaner. Strip both,
   // lowercase, collapse whitespace.
+  // Token set for fuzzy name matching. Drops short tokens, stopwords, and
+  // pure-number bits like "6" / "1 King Bed" descriptors so they don't
+  // dominate the comparison.
+  const ROOM_NAME_STOPWORDS = new Set([
+    "with", "and", "the", "of", "a", "an", "for", "or",
+    "guests", "guest", "bed", "beds", "size", "type", "no",
+  ]);
+  function tokenizeRoomName(name) {
+    return new Set(
+      String(name || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, " ")
+        .split(/\s+/)
+        .filter(w => w.length > 1 && !/^\d+$/.test(w) && !ROOM_NAME_STOPWORDS.has(w))
+    );
+  }
+  function roomNameSimilarity(a, b) {
+    const A = tokenizeRoomName(a);
+    const B = tokenizeRoomName(b);
+    if (A.size === 0 || B.size === 0) return 0;
+    let inter = 0;
+    for (const x of A) if (B.has(x)) inter++;
+    return inter / (A.size + B.size - inter);
+  }
+
+  // Best fuzzy match from a list of catalog rooms. Threshold tuned on
+  // real LiteAPI room names — 0.5 catches "Preferred Club family ocean
+  // front" ↔ "Preferred Club Family Room Ocean Front" without crossing
+  // "Family Room Ocean Front" ↔ "Family Room Ocean View".
+  const FUZZY_MATCH_THRESHOLD = 0.5;
+  function fuzzyCatalogMatch(rateName, catalogRooms) {
+    if (!rateName || !Array.isArray(catalogRooms) || catalogRooms.length === 0) return null;
+    let best = null, bestScore = 0;
+    for (const c of catalogRooms) {
+      const s = roomNameSimilarity(rateName, c.room_name);
+      if (s > bestScore) { bestScore = s; best = c; }
+    }
+    return bestScore >= FUZZY_MATCH_THRESHOLD ? best : null;
+  }
+
   function normalizeRoomName(name) {
     if (!name) return "";
     let s = String(name);
@@ -5163,25 +5203,34 @@
       // each room as bookable variants.
       const catalogEl = document.getElementById("trip-catalog-rooms");
       if (catalogEl) { catalogEl.hidden = true; catalogEl.innerHTML = ""; }
-      // Build normalized-name → catalog room map once, then attach the
-      // full catalog row (capacity + size + views + beds + photos + desc
-      // + amenities) to each offer where a confident match exists.
+      // Attach the catalog row (capacity + size + views + beds + photos
+      // + desc + amenities) to each offer. Try exact normalized-name
+      // first; fall back to fuzzy token-overlap matching so rates with
+      // slightly different word order / filler words still claim a real
+      // catalog room. _catalogKey is the stable group identity — same
+      // catalog room gets the same key whether matched exactly or
+      // fuzzily, so rates collapse into one card.
       const catalogByName = new Map();
       for (const r of catalogRooms) {
         const k = normalizeRoomName(r.room_name);
         if (k && !catalogByName.has(k)) catalogByName.set(k, r);
       }
       for (const o of offers) {
-        const room = catalogByName.get(normalizeRoomName(o.room_name)) || null;
-        if (!room) continue;
-        o._catalogRoom = room;
-        const max = Number(room.max_occupancy);
-        if (Number.isFinite(max) && max > 0) {
-          o._catalogCapacity = {
-            max,
-            adults: Number.isFinite(Number(room.max_adults)) ? Number(room.max_adults) : null,
-            children: Number.isFinite(Number(room.max_children)) ? Number(room.max_children) : null,
-          };
+        let room = catalogByName.get(normalizeRoomName(o.room_name)) || null;
+        if (!room) room = fuzzyCatalogMatch(o.room_name, catalogRooms);
+        if (room) {
+          o._catalogRoom = room;
+          o._catalogKey = `cat:${room.room_id}`;
+          const max = Number(room.max_occupancy);
+          if (Number.isFinite(max) && max > 0) {
+            o._catalogCapacity = {
+              max,
+              adults: Number.isFinite(Number(room.max_adults)) ? Number(room.max_adults) : null,
+              children: Number.isFinite(Number(room.max_children)) ? Number(room.max_children) : null,
+            };
+          }
+        } else {
+          o._catalogKey = `synth:${normalizeRoomName(o.room_name)}`;
         }
       }
       if (offers.length === 0) {
@@ -5271,20 +5320,21 @@
     const kidsRoom = (lastSearchSummary?.child_ages || []).length;
     const partyTotal = adultsRoom + kidsRoom;
 
-    // Group: catalog rooms first (seeded with empty rates lists), then
-    // attach each rate to its catalog match, otherwise create a
-    // synthetic group keyed by the rate's own room_name.
+    // Group: catalog rooms first (seeded with empty rates lists, keyed
+    // by their stable room_id), then attach each rate to its catalog
+    // match via _catalogKey (set upstream in loadRoomOptions — exact
+    // normalize first, then fuzzy token overlap). Rates that didn't
+    // match any catalog row land in a "synth:" group.
     const groups = new Map();
     for (const c of currentModalCatalogRooms) {
-      const k = normalizeRoomName(c.room_name);
-      if (!k || groups.has(k)) continue;
-      groups.set(k, { key: k, catalog: c, name: c.room_name, rates: [] });
+      const key = `cat:${c.room_id}`;
+      if (groups.has(key)) continue;
+      groups.set(key, { key, catalog: c, name: c.room_name, rates: [] });
     }
     for (const o of currentModalRooms) {
-      const k = normalizeRoomName(o.room_name);
-      if (!k) continue;
-      if (!groups.has(k)) groups.set(k, { key: k, catalog: null, name: o.room_name, rates: [] });
-      groups.get(k).rates.push(o);
+      const key = o._catalogKey || `synth:${normalizeRoomName(o.room_name)}`;
+      if (!groups.has(key)) groups.set(key, { key, catalog: null, name: o.room_name, rates: [] });
+      groups.get(key).rates.push(o);
     }
 
     const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
