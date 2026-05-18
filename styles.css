@@ -4111,13 +4111,14 @@ body.trip-detail-open #status { display: none !important; }
 .ink-over { color: #b15a3a; font-weight: 600; }
 
 /* ---------- Modal: Room options (live rate variants) ---------- */
+/* Wrapper for the Booking-style rooms-table. The table fills the full
+ * width of the trip-main-col on its own — we just want a block-level
+ * container, NOT the legacy 2-column grid that was used by the old
+ * room-card layout (which squished the table to 50% width). */
 .room-options-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--s-3);
+  display: block;
   margin-top: var(--s-2);
 }
-@media (max-width: 640px) { .room-options-grid { grid-template-columns: 1fr; } }
 .room-options-loading {
   grid-column: 1 / -1;
   font-size: 13px;
