@@ -4131,7 +4131,6 @@
     currentModalRoomPhotos = {};
     currentModalRoomDetails = {};
     currentModalExpandedRooms = new Set();
-    currentModalUndersizedRevealed = false;
     currentModalResortConnecting = (() => {
       const rooms = tags.rooms || [];
       const connecting = rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms === true;
@@ -4641,14 +4640,10 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
-  // Whether the user has clicked "Show smaller rooms" — rooms that
-  // don't fit the family are collapsed by default. Suggesting "book
-  // two rooms" only makes sense when the resort actually offers
-  // guaranteed connecting rooms; otherwise it's a false out.
-  let currentModalUndersizedRevealed = false;
-  // Resort-level fallback flags computed once per modal so the room
-  // fit note can speak honestly. Filled in by loadRoomOptions from
-  // currentModalPackage.resorts and its _tags.
+  // Resort-level fallback flags computed once per modal. Used to
+  // shape the empty-state copy when zero rooms fit the searched
+  // family — pointing the user at connecting rooms or family suites
+  // only if the resort actually offers them.
   let currentModalResortConnecting = { connecting: false, familySuite: false };
   // Maps from get_room_photos: per-room photo arrays + descriptive
   // metadata (description, beds, amenities, size, occupancy split,
@@ -4680,14 +4675,20 @@
         section.style.display = "none";
         return;
       }
-      if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
       // Sort: rooms that fit the family first (cheapest fit on top),
       // then undersized rooms after. Within each bucket: cheapest first.
+      // (Undersized rooms are filtered out before render — the sort
+      // just keeps the order stable in case downstream code surfaces
+      // them again.)
       const adultsRoom = Number(lastSearchSummary?.adults) || 2;
       const kidsRoom = (lastSearchSummary?.child_ages || []).length;
       const partyTotal = adultsRoom + kidsRoom;
       const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
       const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
+      const fittingCount = offers.filter(fits).length;
+      if (countEl) countEl.textContent = fittingCount === 0
+        ? "No rooms fit your family"
+        : (fittingCount === 1 ? "1 option" : `${fittingCount} options`);
       const sortedOffers = [...offers].sort((a, b) => {
         const aFits = fits(a), bFits = fits(b);
         if (aFits !== bFits) return aFits ? -1 : 1;
@@ -4739,11 +4740,12 @@
   // has expanded. Called when photos/details land after the initial
   // paint, or after a select changes the active room.
   //
-  // Rooms that DON'T fit the family are hidden behind a "Show smaller
-  // rooms" toggle. Family of 6 in a "sleeps 5" room is a false out —
-  // a second room only helps when the resort offers guaranteed
-  // connecting rooms, which is a separate signal we surface in the
-  // toggle copy.
+  // Rooms that don't fit the searched party are filtered out entirely
+  // — we don't suggest "book two rooms" unless the resort guarantees
+  // they connect, and we can't confirm that on a per-offer basis.
+  // When zero rooms fit, the section surfaces an empty-state callout
+  // (connecting-room note if guaranteed, otherwise advice to try a
+  // different resort).
   function rerenderRoomGrid() {
     const grid = document.getElementById("room-options-grid");
     if (!grid || currentModalRooms.length === 0) return;
@@ -4752,33 +4754,29 @@
     const partyTotal = adultsRoom + kidsRoom;
     const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
     const fitting = currentModalRooms.filter(fits);
-    const undersized = currentModalRooms.filter(o => !fits(o));
 
-    const fittingHtml = fitting.length
-      ? fitting.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")
-      : `<div class="rooms-empty-fit">
-          <p><b>No rooms fit a party of ${partyTotal} at this resort.</b></p>
-          ${currentModalResortConnecting.familySuite || currentModalResortConnecting.connecting
-            ? `<p>This resort does offer ${currentModalResortConnecting.familySuite ? "family suites" : ""}${currentModalResortConnecting.familySuite && currentModalResortConnecting.connecting ? " and " : ""}${currentModalResortConnecting.connecting ? "connecting rooms" : ""} — see the smaller rooms below to pair, or try a different resort.</p>`
-            : `<p>Try filtering the search for connecting rooms or family suites.</p>`}
-        </div>`;
-
-    const undersizedHtml = (() => {
-      if (undersized.length === 0) return "";
-      const open = currentModalUndersizedRevealed;
-      const toggleLabel = open
-        ? `Hide smaller rooms`
-        : `Show ${undersized.length} smaller room${undersized.length === 1 ? "" : "s"}`;
-      const rows = open
-        ? undersized.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")
-        : "";
-      return `
-        <button type="button" class="rooms-undersized-toggle" aria-expanded="${open ? "true" : "false"}" onclick="toggleUndersizedRooms()">
-          <span>${toggleLabel}</span>
-          <svg class="rooms-undersized-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        ${rows}`;
-    })();
+    if (fitting.length === 0) {
+      const cap = currentModalResortConnecting;
+      // No single room at this resort sleeps the party. We don't show
+      // smaller rooms because "book 2" without a connecting guarantee
+      // is a false out. Surface the resort's actual capabilities.
+      let body;
+      if (cap.connecting) {
+        body = `
+          <p><b>No single room here sleeps ${partyTotal}, but this resort guarantees connecting rooms.</b></p>
+          <p>Booking two connecting rooms is the family-friendly path — we can't price that combo automatically yet, so contact the resort or use the partner site to confirm availability for your dates.</p>`;
+      } else if (cap.familySuite) {
+        body = `
+          <p><b>No standard room sleeps ${partyTotal}, but this resort offers family suites.</b></p>
+          <p>Try filtering search results for "Family Suite" or "2 Bedroom Suites" — those room types fit your party.</p>`;
+      } else {
+        body = `
+          <p><b>No room at this resort sleeps a family of ${partyTotal}.</b></p>
+          <p>This resort doesn't offer connecting rooms or family suites in our data. Try a different resort, or filter the search for "Connecting rooms" or "Family Suite".</p>`;
+      }
+      grid.innerHTML = `<div class="rooms-empty-fit">${body}</div>`;
+      return;
+    }
 
     grid.innerHTML = `
       <div class="rooms-table">
@@ -4788,16 +4786,9 @@
           <div>Price</div>
           <div></div>
         </div>
-        ${fittingHtml}
-        ${undersizedHtml}
+        ${fitting.map((o) => renderRoomOptionCard(o, currentModalRooms.indexOf(o), currentModalSelectedRoomId)).join("")}
       </div>`;
   }
-
-  function toggleUndersizedRooms() {
-    currentModalUndersizedRevealed = !currentModalUndersizedRevealed;
-    rerenderRoomGrid();
-  }
-  window.toggleUndersizedRooms = toggleUndersizedRooms;
 
   // Holds the top-level hotel_photos array from the most recent
   // get_hotel_offers call. Used as the fallback rotation when an
@@ -5260,24 +5251,12 @@
     const kidsRoom = (lastSearchSummary?.child_ages || []).length;
     const partyTotal = adultsRoom + kidsRoom;
     const sleeps = Number(o.max_occupancy) || 0;
-    const fitsParty = !sleeps || !partyTotal || sleeps >= partyTotal;
-    // For undersized rooms the messaging depends on whether the resort
-    // actually offers connecting rooms / family suites — "book 2 rooms"
-    // only helps if the resort guarantees they connect, otherwise it's
-    // a false out (two unconnected rooms is not a family solution).
-    const fitNote = (() => {
-      if (!(sleeps > 0 && partyTotal > 0)) return "";
-      if (fitsParty) return `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`;
-      const cap = currentModalResortConnecting;
-      const short = partyTotal - sleeps;
-      if (cap.connecting) {
-        return `<div class="rt-fit pair">Pair with a connecting room — this resort guarantees them</div>`;
-      }
-      if (cap.familySuite) {
-        return `<div class="rt-fit pair">${short === 1 ? "1 short" : `${short} short`} — see Family Suite below</div>`;
-      }
-      return `<div class="rt-fit nope">Too small — sleeps ${sleeps}, you're ${partyTotal}</div>`;
-    })();
+    // Rooms that don't fit the party are filtered out upstream in
+    // rerenderRoomGrid, so every card we render here is a real fit.
+    const fitsParty = true;
+    const fitNote = partyTotal > 0
+      ? `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`
+      : "";
 
     // Small photo thumb — Booking shows a tiny inline photo. Same
     // priority order as the old card layout: per-room → hotel gallery
