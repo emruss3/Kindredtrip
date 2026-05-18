@@ -6305,6 +6305,255 @@ body.trip-detail-open #status { display: none !important; }
   border-bottom: none;
 }
 
+/* ---------- Reviews section (trip detail) ---------- */
+.trip-reviews-loading,
+.trip-reviews-empty {
+  background: var(--bg-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 18px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-align: center;
+}
+.trip-reviews-empty b { color: var(--ink); }
+.trip-reviews-empty-sub { color: var(--ink-3); font-size: 13px; }
+
+.trip-reviews-summary {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-bottom: var(--s-5);
+}
+.trip-reviews-summary-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: var(--s-5);
+  align-items: stretch;
+}
+@media (max-width: 720px) {
+  .trip-reviews-summary-head { grid-template-columns: 1fr; gap: var(--s-3); }
+}
+.trip-review-score-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding-right: var(--s-5);
+  border-right: 1px solid var(--line-soft);
+}
+@media (max-width: 720px) {
+  .trip-review-score-block { padding-right: 0; padding-bottom: var(--s-3); border-right: none; border-bottom: 1px solid var(--line-soft); }
+}
+.trip-review-score-num {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 40px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.trip-review-score-suffix {
+  font-size: 16px;
+  color: var(--ink-3);
+  font-weight: 500;
+  margin-left: 4px;
+  font-family: var(--font-sans, inherit);
+}
+.trip-review-score-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.trip-review-score-meta { font-size: 12px; color: var(--ink-3); }
+
+.trip-review-family-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trip-review-family-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.trip-review-family-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.trip-review-confidence {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.trip-review-confidence-high { background: var(--good-soft); color: var(--good); }
+.trip-review-confidence-medium { background: #FFF4E6; color: #9A6420; }
+.trip-review-confidence-low { background: #F4ECE6; color: #9C4A26; }
+.trip-review-family-num {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.trip-review-family-tag {
+  font-family: var(--font-sans, inherit);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--good);
+  background: var(--good-soft);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  letter-spacing: -0.005em;
+}
+.trip-review-family-delta {
+  font-size: 13px;
+  color: var(--ink-1);
+  line-height: 1.4;
+}
+.trip-review-family-delta b { font-weight: 700; }
+
+.trip-review-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line-soft);
+}
+.trip-review-topic {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.trip-review-topic-label { color: var(--ink); }
+.trip-review-topic-verdict {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.trip-review-topic-count {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.trip-review-topic.topic-pos { background: var(--good-soft); border-color: #c5e0cd; }
+.trip-review-topic.topic-pos .trip-review-topic-verdict { color: var(--good); }
+.trip-review-topic.topic-mid { background: #FFF4E6; border-color: #F2D9B4; }
+.trip-review-topic.topic-mid .trip-review-topic-verdict { color: #9A6420; }
+.trip-review-topic.topic-neg { background: #FBEDE6; border-color: #F2C7B4; }
+.trip-review-topic.topic-neg .trip-review-topic-verdict { color: #9C4A26; }
+
+.trip-review-procon {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line-soft);
+}
+@media (max-width: 720px) { .trip-review-procon { grid-template-columns: 1fr; } }
+.trip-review-pros h4,
+.trip-review-cons h4 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+}
+.trip-review-pros h4 { color: var(--good); }
+.trip-review-cons h4 { color: #9c4a26; }
+.trip-review-pros ul,
+.trip-review-cons ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.trip-review-pros li,
+.trip-review-cons li {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  line-height: 1.4;
+}
+
+/* Review list */
+.trip-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.trip-review-row {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trip-review-row.is-family { border-color: var(--good); box-shadow: 0 0 0 1px var(--good-soft) inset; }
+.trip-review-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.trip-review-row-score {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg-soft);
+  padding: 4px 12px;
+  border-radius: var(--r-xs);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.015em;
+}
+.trip-review-row-meta { display: flex; flex-direction: column; gap: 1px; }
+.trip-review-row-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.trip-review-row-traveler { font-size: 11.5px; color: var(--ink-3); }
+.trip-review-row-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.005em;
+}
+.trip-review-row-pros,
+.trip-review-row-cons {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  margin: 0;
+  line-height: 1.5;
+}
+.trip-review-row-pros b { color: var(--good); font-weight: 700; margin-right: 6px; }
+.trip-review-row-cons b { color: #9c4a26; font-weight: 700; margin-right: 6px; }
+
 /* ---------- Booking.com-style flight layout (trip detail) ---------- */
 .bk-flights { padding-top: 8px; }
 .bk-flight-tabs {

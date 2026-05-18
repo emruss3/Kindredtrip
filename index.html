@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-fluid" />
-<meta name="kt-build" content="20260515-fluid" />
+<link rel="stylesheet" href="/styles.css?v=20260515-reviews" />
+<meta name="kt-build" content="20260515-reviews" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4005,6 +4005,7 @@
           <nav class="trip-tabs" role="tablist">
             <a href="#trip-rooms" class="trip-tab active" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
             <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
+            <a href="#trip-reviews" class="trip-tab" onclick="scrollToTripSection(event, 'trip-reviews')">Reviews</a>
             <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
             <a href="#trip-fit" class="trip-tab" onclick="scrollToTripSection(event, 'trip-fit')">Family fit</a>
             <a href="#trip-location" class="trip-tab" onclick="scrollToTripSection(event, 'trip-location')">Location</a>
@@ -4016,6 +4017,13 @@
 
           <section id="trip-flight" class="trip-section trip-section-primary">
             ${flightOptions}
+          </section>
+
+          <section id="trip-reviews" class="trip-section">
+            <h2>Reviews</h2>
+            <div id="trip-reviews-body" class="trip-reviews-body">
+              <div class="trip-reviews-loading">Loading family reviews…</div>
+            </div>
           </section>
 
           <section id="trip-overview" class="trip-section">
@@ -4087,6 +4095,7 @@
     currentModalHotelPhotos = [];
     if (liveHotel) loadRoomOptions(pkg.package_id);
     if (liveFlight) loadFlightOptions(pkg.package_id);
+    loadResortReviews(pkg.package_id);
     // Activate the scroll-spy that drives the .trip-tab .active state
     bindTripTabsObserver();
   }
@@ -4648,7 +4657,7 @@
   let _tripTabsObserver = null;
   function bindTripTabsObserver() {
     if (_tripTabsObserver) { _tripTabsObserver.disconnect(); _tripTabsObserver = null; }
-    const ids = ["trip-rooms", "trip-flight", "trip-overview", "trip-fit", "trip-location"];
+    const ids = ["trip-rooms", "trip-flight", "trip-reviews", "trip-overview", "trip-fit", "trip-location"];
     const sections = ids.map((id) => document.getElementById(id)).filter(Boolean);
     if (sections.length === 0 || typeof IntersectionObserver === "undefined") return;
     _tripTabsObserver = new IntersectionObserver((entries) => {
@@ -4663,6 +4672,176 @@
       });
     }, { rootMargin: "-25% 0px -65% 0px", threshold: 0 });
     sections.forEach((s) => _tripTabsObserver.observe(s));
+  }
+
+  // -------- Resort reviews: async fetch + render --------
+  // Hits get_resort_reviews(package_id), then paints a summary block
+  // (family signals, top pros/cons, mention-weighted topic chips) plus
+  // a list of recent reviews. The endpoint returns signals=null /
+  // reviews=[] for resorts not yet pulled — we render an empty state
+  // and remove the Reviews tab in that case.
+  async function loadResortReviews(packageId) {
+    const body = document.getElementById("trip-reviews-body");
+    if (!body) return;
+    try {
+      const data = await callFn(`get_resort_reviews?package_id=${encodeURIComponent(packageId)}&limit=20`, { method: "GET" });
+      const signals = data?.signals || null;
+      const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
+      if (!signals && reviews.length === 0) {
+        body.innerHTML = `<div class="trip-reviews-empty"><p><b>Reviews coming soon.</b> We're still gathering guest reviews for this resort.</p></div>`;
+        return;
+      }
+      body.innerHTML = renderReviewsBlock(signals, reviews);
+    } catch (e) {
+      console.warn("Reviews failed:", e?.message || e);
+      body.innerHTML = `<div class="trip-reviews-empty"><p>Couldn't load reviews.</p></div>`;
+    }
+  }
+
+  // Normalise LiteAPI score (0-10) → 0-5 stars for parity with how the
+  // rest of the UI shows ratings. Returns null when score is missing
+  // or out of range.
+  function reviewScoreTo5(s) {
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n > 5 ? n / 2 : n;
+  }
+
+  function reviewScoreLabel(s) {
+    const n = Number(s);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 9.0) return "Exceptional";
+    if (n >= 8.0) return "Very good";
+    if (n >= 7.0) return "Good";
+    if (n >= 6.0) return "Pleasant";
+    return "Review score";
+  }
+
+  function renderReviewsBlock(signals, reviews) {
+    // ---- Summary ----
+    const summary = signals ? renderReviewSummary(signals) : "";
+
+    // ---- Reviews list ----
+    const list = reviews.length
+      ? `<div class="trip-reviews-list">${reviews.map(renderReviewRow).join("")}</div>`
+      : `<p class="trip-reviews-empty-sub">No individual reviews to display.</p>`;
+
+    return summary + list;
+  }
+
+  function renderReviewSummary(s) {
+    const family5 = reviewScoreTo5(s.family_avg_score);
+    const overall5 = (() => {
+      // Reverse-derive overall by weighting family + non-family by count.
+      // If we only have one side, use it.
+      const fc = Number(s.family_review_count) || 0;
+      const tc = Number(s.total_reviews) || 0;
+      const fas = Number(s.family_avg_score);
+      const nfs = Number(s.non_family_avg_score);
+      if (tc <= 0) return null;
+      if (fc > 0 && (tc - fc) > 0 && Number.isFinite(fas) && Number.isFinite(nfs)) {
+        return ((fas * fc) + (nfs * (tc - fc))) / tc;
+      }
+      return Number.isFinite(fas) ? fas : (Number.isFinite(nfs) ? nfs : null);
+    })();
+    const overall5n = reviewScoreTo5(overall5);
+
+    const familyLabel = reviewScoreLabel(s.family_avg_score);
+    const delta = Number(s.family_score_delta);
+    const deltaStr = Number.isFinite(delta)
+      ? (delta > 0
+          ? `Families rate this <b>${delta.toFixed(1)} pts higher</b> than other travelers`
+          : delta < 0
+            ? `Families rate this <b>${Math.abs(delta).toFixed(1)} pts lower</b> than other travelers`
+            : `Families rate this the same as other travelers`)
+      : "";
+
+    // Topic chips — surface signals with at least a couple mentions.
+    const TOPICS = [
+      { key: "kids_club",       label: "Kids club" },
+      { key: "pool",            label: "Pool" },
+      { key: "beach_toddler",   label: "Beach for toddlers" },
+      { key: "connecting_room", label: "Connecting rooms" },
+      { key: "food_picky",      label: "Picky-eater food" },
+      { key: "noise",           label: "Quietness", invert: true },
+    ];
+    const topicChips = TOPICS.map((t) => {
+      const sig = Number(s[`${t.key}_signal`]);
+      const mentions = Number(s[`${t.key}_mentions`]) || 0;
+      if (!Number.isFinite(sig) || mentions < 2) return "";
+      // Signal is 0-1: 1 = positive, 0 = negative. Noise inverts (high = noisy = bad).
+      const effective = t.invert ? 1 - sig : sig;
+      let cls;
+      if (effective >= 0.65) cls = "topic-pos";
+      else if (effective >= 0.4) cls = "topic-mid";
+      else cls = "topic-neg";
+      const verdict = effective >= 0.65 ? "Praised" : effective >= 0.4 ? "Mixed" : "Watch-out";
+      return `<span class="trip-review-topic ${cls}" title="${verdict} · ${mentions} mention${mentions === 1 ? "" : "s"}">
+        <span class="trip-review-topic-label">${escapeHtml(t.label)}</span>
+        <span class="trip-review-topic-verdict">${verdict}</span>
+        <span class="trip-review-topic-count">${mentions}</span>
+      </span>`;
+    }).filter(Boolean).join("");
+
+    const pros = Array.isArray(s.top_family_pros) ? s.top_family_pros.slice(0, 4) : [];
+    const cons = Array.isArray(s.top_family_cons) ? s.top_family_cons.slice(0, 4) : [];
+
+    const confidenceNote = s.signal_confidence
+      ? `<span class="trip-review-confidence trip-review-confidence-${escapeHtml(String(s.signal_confidence))}">${escapeHtml(String(s.signal_confidence))} confidence</span>`
+      : "";
+
+    return `
+      <div class="trip-reviews-summary">
+        <div class="trip-reviews-summary-head">
+          <div class="trip-review-score-block">
+            <div class="trip-review-score-num">${overall5n != null ? overall5n.toFixed(1) : "—"}<span class="trip-review-score-suffix">/ 5</span></div>
+            <div class="trip-review-score-label">${escapeHtml(reviewScoreLabel(overall5))}</div>
+            <div class="trip-review-score-meta">${Number(s.total_reviews) || 0} reviews${s.family_review_count ? ` · ${s.family_review_count} from families` : ""}</div>
+          </div>
+          <div class="trip-review-family-block">
+            <div class="trip-review-family-head">
+              <span class="trip-review-family-label">Family score</span>
+              ${confidenceNote}
+            </div>
+            <div class="trip-review-family-num">${family5 != null ? family5.toFixed(1) : "—"}<span class="trip-review-score-suffix">/ 5</span>
+              <span class="trip-review-family-tag">${escapeHtml(familyLabel)}</span>
+            </div>
+            ${deltaStr ? `<div class="trip-review-family-delta">${deltaStr}</div>` : ""}
+          </div>
+        </div>
+        ${topicChips ? `<div class="trip-review-topics">${topicChips}</div>` : ""}
+        ${(pros.length || cons.length) ? `
+        <div class="trip-review-procon">
+          ${pros.length ? `<div class="trip-review-pros"><h4>What families loved</h4><ul>${pros.map(p => `<li>${escapeHtml(String(p))}</li>`).join("")}</ul></div>` : ""}
+          ${cons.length ? `<div class="trip-review-cons"><h4>What to watch out for</h4><ul>${cons.map(c => `<li>${escapeHtml(String(c))}</li>`).join("")}</ul></div>` : ""}
+        </div>` : ""}
+      </div>`;
+  }
+
+  function renderReviewRow(r) {
+    const score5 = reviewScoreTo5(r.average_score);
+    const dateStr = (() => {
+      if (!r.review_date) return "";
+      try {
+        const d = new Date(r.review_date);
+        return d.toLocaleDateString([], { month: "short", year: "numeric" });
+      } catch { return ""; }
+    })();
+    const traveler = r.traveler_type_norm || r.traveler_type || "";
+    const isFamily = /family|familie|familia|families/i.test(String(traveler));
+    return `
+      <article class="trip-review-row${isFamily ? " is-family" : ""}">
+        <div class="trip-review-row-head">
+          <div class="trip-review-row-score">${score5 != null ? score5.toFixed(1) : "—"}</div>
+          <div class="trip-review-row-meta">
+            <div class="trip-review-row-name">${escapeHtml(r.reviewer_name || "Guest")}${r.reviewer_country ? ` · ${escapeHtml(r.reviewer_country)}` : ""}</div>
+            <div class="trip-review-row-traveler">${escapeHtml(traveler || "Reviewer")}${dateStr ? ` · ${escapeHtml(dateStr)}` : ""}</div>
+          </div>
+        </div>
+        ${r.headline ? `<h4 class="trip-review-row-title">${escapeHtml(r.headline)}</h4>` : ""}
+        ${r.pros ? `<p class="trip-review-row-pros"><b>Liked</b> ${escapeHtml(r.pros)}</p>` : ""}
+        ${r.cons ? `<p class="trip-review-row-cons"><b>Disliked</b> ${escapeHtml(r.cons)}</p>` : ""}
+      </article>`;
   }
 
   // Swap the modal hero + thumbnail strip to the LiteAPI hotel
