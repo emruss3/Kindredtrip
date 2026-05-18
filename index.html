@@ -3787,13 +3787,12 @@
       </div>`;
 
     // ---- Budget tradeoff ----
-    const directRate = (() => {
-      const d = Number(r.direct_usd_2026);
-      if (!d || isNaN(d) || d <= 0) return "";
-      const adults = lastSearchSummary?.adults || 2;
-      const kids = lastSearchSummary?.child_ages?.length || 0;
-      return `<p class="direct-rate-note">2026 direct rate: <b>${fmtMoney(d)}</b>/night posted by the resort. We estimate <b>${fmtMoney(pkg.hotel_price)}</b> hotel total for your family (${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}).</p>`;
-    })();
+    // (The "2026 direct rate" line that used to live here was removed
+    // — direct_usd_2026 is a generic annual reference, not a
+    // per-night or per-family quote, and showing it next to our
+    // family-specific hotel total was muddled. The Overview section
+    // shows the family-specific trip total clearly; that's enough.)
+    const directRate = "";
     const budgetSection = `
       <div class="modal-section budget-tradeoff">
         <h4>How this fits your budget</h4>
