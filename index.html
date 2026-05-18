@@ -5203,34 +5203,40 @@
       // each room as bookable variants.
       const catalogEl = document.getElementById("trip-catalog-rooms");
       if (catalogEl) { catalogEl.hidden = true; catalogEl.innerHTML = ""; }
-      // Attach the catalog row (capacity + size + views + beds + photos
-      // + desc + amenities) to each offer. Try exact normalized-name
-      // first; fall back to fuzzy token-overlap matching so rates with
-      // slightly different word order / filler words still claim a real
-      // catalog room. _catalogKey is the stable group identity — same
-      // catalog room gets the same key whether matched exactly or
-      // fuzzily, so rates collapse into one card.
-      const catalogByName = new Map();
-      for (const r of catalogRooms) {
-        const k = normalizeRoomName(r.room_name);
-        if (k && !catalogByName.has(k)) catalogByName.set(k, r);
+
+      // Rate→catalog join is computed by get_hotel_offers v3 server-side
+      // and surfaced as { group_key, match_path, matched_room_id } on each
+      // offer. We must NOT re-derive grouping from room names client-side
+      // (the brief explicitly forbids it — a second client-side pass would
+      // fight the id-based grouping). We just resolve the catalog row by
+      // matched_room_id for rich card rendering, and trust group_key for
+      // collapsing variants. Older backends without these fields fall
+      // back to per-offer synthetic groups (one card per rate) so we
+      // never accidentally merge cards the backend didn't intend.
+      const catalogById = new Map();
+      for (const c of catalogRooms) {
+        if (c && c.room_id != null) catalogById.set(String(c.room_id), c);
       }
       for (const o of offers) {
-        let room = catalogByName.get(normalizeRoomName(o.room_name)) || null;
-        if (!room) room = fuzzyCatalogMatch(o.room_name, catalogRooms);
-        if (room) {
-          o._catalogRoom = room;
-          o._catalogKey = `cat:${room.room_id}`;
-          const max = Number(room.max_occupancy);
-          if (Number.isFinite(max) && max > 0) {
-            o._catalogCapacity = {
-              max,
-              adults: Number.isFinite(Number(room.max_adults)) ? Number(room.max_adults) : null,
-              children: Number.isFinite(Number(room.max_children)) ? Number(room.max_children) : null,
-            };
+        if (o.matched_room_id != null) {
+          const room = catalogById.get(String(o.matched_room_id));
+          if (room) {
+            o._catalogRoom = room;
+            const max = Number(room.max_occupancy);
+            if (Number.isFinite(max) && max > 0) {
+              o._catalogCapacity = {
+                max,
+                adults: Number.isFinite(Number(room.max_adults)) ? Number(room.max_adults) : null,
+                children: Number.isFinite(Number(room.max_children)) ? Number(room.max_children) : null,
+              };
+            }
           }
-        } else {
-          o._catalogKey = `synth:${normalizeRoomName(o.room_name)}`;
+        }
+        if (!o.group_key) {
+          // Old backend without v3 grouping — make every rate its own
+          // group so we don't merge them by accident.
+          o.group_key = `synth:offer:${o.offer_id}`;
+          o.match_path = o.match_path || "synthetic";
         }
       }
       if (offers.length === 0) {
@@ -5320,21 +5326,29 @@
     const kidsRoom = (lastSearchSummary?.child_ages || []).length;
     const partyTotal = adultsRoom + kidsRoom;
 
-    // Group: catalog rooms first (seeded with empty rates lists, keyed
-    // by their stable room_id), then attach each rate to its catalog
-    // match via _catalogKey (set upstream in loadRoomOptions — exact
-    // normalize first, then fuzzy token overlap). Rates that didn't
-    // match any catalog row land in a "synth:" group.
+    // Group strictly on the backend-supplied group_key (cat:<room_id>
+    // for mapped_id or fuzzy_name matches, synth:<...> otherwise). We
+    // ALSO seed catalog rooms with empty rates lists so we render the
+    // greyed-out "Not available for these dates" cards for catalog
+    // rooms that didn't match any rate. The seed key is the same shape
+    // the backend uses (cat:<room_id>) so catalog and matching rates
+    // collapse into one group.
     const groups = new Map();
     for (const c of currentModalCatalogRooms) {
       const key = `cat:${c.room_id}`;
       if (groups.has(key)) continue;
-      groups.set(key, { key, catalog: c, name: c.room_name, rates: [] });
+      groups.set(key, { key, catalog: c, name: c.room_name, rates: [], match_path: null });
     }
     for (const o of currentModalRooms) {
-      const key = o._catalogKey || `synth:${normalizeRoomName(o.room_name)}`;
-      if (!groups.has(key)) groups.set(key, { key, catalog: null, name: o.room_name, rates: [] });
-      groups.get(key).rates.push(o);
+      const key = o.group_key;
+      if (!groups.has(key)) {
+        groups.set(key, { key, catalog: o._catalogRoom || null, name: o.room_name, rates: [], match_path: o.match_path || null });
+      }
+      const g = groups.get(key);
+      if (!g.catalog && o._catalogRoom) g.catalog = o._catalogRoom;
+      // First rate's match_path wins — they're all the same room.
+      if (!g.match_path && o.match_path) g.match_path = o.match_path;
+      g.rates.push(o);
     }
 
     const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
@@ -5487,8 +5501,15 @@
         </div>`;
     }
 
+    // match_path stamps how the rate↔catalog join happened for this
+    // card — surfaced as a data attribute for QA / coverage logging, not
+    // shown to end users. "mapped_id" = trustworthy LiteAPI id join;
+    // "fuzzy_name" = token-overlap, may misattribute; "synthetic" = no
+    // catalog data attached. Defaults to "synthetic" when backend hasn't
+    // emitted it (older versions of get_hotel_offers).
+    const matchPath = g.match_path || (g.catalog ? "fuzzy_name" : "synthetic");
     return `
-      <article class="room-v2-card${isBookable ? "" : " room-v2-unavailable"}">
+      <article class="room-v2-card${isBookable ? "" : " room-v2-unavailable"}" data-match-path="${escapeHtml(matchPath)}" data-group-key="${escapeHtml(g.key)}">
         <div class="room-v2-photo">
           ${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(g.name || "Room")}" loading="lazy" />` : `<div class="room-v2-photo-empty"></div>`}
         </div>
@@ -6659,10 +6680,23 @@
 
   async function bookHotel(packageId) {
     try {
+      // Pass the user's currently-selected offer + its match path through
+      // to the backend. The booking flow then re-fetches /hotels/rates
+      // fresh (with roomMapping:true) for this hotel so the bookable
+      // offer has a current mappedRoomId — never falls back to the
+      // cached search-time offer. selected_offer_id is null when the
+      // user didn't explicitly pick a room (backend uses the package's
+      // default chosen offer in that case).
+      const selectedOffer = currentModalSelectedRoomId
+        ? currentModalRooms.find(o => o.offer_id === currentModalSelectedRoomId)
+        : null;
       const data = await callFn("generate_booking_redirect", {
         method: "POST",
         body: JSON.stringify({
           package_id: packageId,
+          selected_offer_id: currentModalSelectedRoomId || null,
+          selected_match_path: selectedOffer?.match_path || null,
+          selected_matched_room_id: selectedOffer?.matched_room_id || null,
           click_type: "hotel",
           session_id: SESSION_ID,
           referer: location.href,
