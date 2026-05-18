@@ -5584,9 +5584,12 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Hero mosaic — 1 big photo + 2x2 grid of 4 thumbs */
 .trip-hero {
-  max-width: 1800px;
-  margin: 0 auto;
-  padding: 0 var(--s-6);
+  /* Fluid full-width with responsive side padding — gutters scale
+   * with viewport (20-80px) instead of growing as a 380px+ empty band
+   * past a fixed cap. */
+  max-width: none;
+  margin: 0;
+  padding: 0 clamp(20px, 4vw, 72px);
 }
 @media (max-width: 720px) { .trip-hero { padding: 0 var(--s-4); } }
 .trip-hero-mosaic {
@@ -5712,13 +5715,15 @@ body.trip-detail-open #status { display: none !important; }
 
 /* 2-col layout */
 .trip-layout-v3 {
-  max-width: 1800px;
-  margin: var(--s-6) auto 0;
-  padding: 0 var(--s-6);
+  /* Fluid full-width with responsive side padding — matches .trip-hero
+   * and .trip-alts above/below for visual consistency. */
+  max-width: none;
+  margin: var(--s-6) 0 0;
+  padding: 0 clamp(20px, 4vw, 72px);
   display: grid;
-  /* Slimmer rail (320 vs old 360) + wider container give the main
-   * column ~1100px on a typical 1440 laptop, ~1180px on a 1600+
-   * screen. Was ~820px before. */
+  /* Rail stays fixed at 320px; main column grows fluidly with the
+   * viewport. On a 1920 screen, main column ≈ 1500px; on 2560 ≈
+   * 2080px. No artificial cap on the page. */
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: var(--s-8);
   align-items: start;
@@ -6033,9 +6038,9 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Alternatives section below the 2-col body */
 .trip-alts {
-  max-width: 1800px;
-  margin: var(--s-8) auto 0;
-  padding: var(--s-6);
+  max-width: none;
+  margin: var(--s-8) 0 0;
+  padding: var(--s-6) clamp(20px, 4vw, 72px);
   border-top: 1px solid var(--line);
 }
 
