@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-wider" />
-<meta name="kt-build" content="20260515-wider" />
+<link rel="stylesheet" href="/styles.css?v=20260515-bag-icons" />
+<meta name="kt-build" content="20260515-bag-icons" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4397,23 +4397,34 @@
     </span>`;
   }
 
-  // Bags markup: distinct icons for checked bag / carry-on only / no bag,
-  // honoring null/undefined by skipping (we don't know).
+  // Booking-style bag pair: carry-on + checked, always side-by-side.
+  // Each icon gets a small green ✓ badge when included or a coral ✕
+  // when excluded. Unknowns render dim with no badge so the bag area
+  // is visually stable across rows regardless of data depth.
   function bagsMarkup(o) {
-    const items = [];
-    if (o.checked_bag_included === true) {
-      items.push(`<span class="bag-icon" title="Checked bag included" aria-label="Checked bag included">${ICON_CHECKED_BAG}<span class="bag-label">Checked bag</span></span>`);
-    } else if (o.carry_on_included === true) {
-      items.push(`<span class="bag-icon" title="Carry-on only" aria-label="Carry-on bag included">${ICON_CARRY_ON}<span class="bag-label">Carry-on only</span></span>`);
-    } else if (o.carry_on_included === false && o.checked_bag_included === false) {
-      items.push(`<span class="bag-icon no-bag" title="No bags included" aria-label="No bags included">${ICON_NO_BAG}<span class="bag-label">No bags</span></span>`);
-    }
-    return items.join("");
+    const renderBag = (icon, included, label) => {
+      let stateCls = "bag-unknown";
+      let badge = "";
+      if (included === true) {
+        stateCls = "bag-included";
+        badge = `<span class="bag-badge ok" aria-hidden="true">✓</span>`;
+      } else if (included === false) {
+        stateCls = "bag-excluded";
+        badge = `<span class="bag-badge no" aria-hidden="true">✕</span>`;
+      }
+      const stateText = included === true ? "included" : included === false ? "not included" : "unknown";
+      return `<span class="bag-icon ${stateCls}" title="${label}: ${stateText}" aria-label="${label} ${stateText}">${icon}${badge}<span class="bag-label">${label}</span></span>`;
+    };
+    return [
+      renderBag(ICON_CARRY_ON, o.carry_on_included, "Carry-on"),
+      renderBag(ICON_CHECKED_BAG, o.checked_bag_included, "Checked bag"),
+    ].join("");
   }
 
-  const ICON_CHECKED_BAG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="13" rx="1.5"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M8 11h8M8 15h8"/></svg>`;
-  const ICON_CARRY_ON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/></svg>`;
-  const ICON_NO_BAG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/><path d="M5 5l14 14"/></svg>`;
+  const ICON_CHECKED_BAG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="13" rx="1.5"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M8 11h8M8 15h8"/></svg>`;
+  const ICON_CARRY_ON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/></svg>`;
+  // No longer used — kept for legacy callers that might reference it.
+  const ICON_NO_BAG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="1.5"/><path d="M10 8V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3"/><path d="M5 5l14 14"/></svg>`;
 
   function renderFlightAltInner(tag, o) {
     const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);

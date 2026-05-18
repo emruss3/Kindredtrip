@@ -6512,11 +6512,41 @@ body.trip-detail-open #status { display: none !important; }
 .bk-fare-bags {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 2px 0;
+  gap: 10px;
+  margin: 4px 0;
 }
-.bk-fare-bags .bag-icon { color: var(--good); }
+/* Booking-style bag icons: bare SVG + small check/X badge in the
+ * bottom-right corner. Override the pill background that .bag-icon
+ * has elsewhere so the icons read as plain symbols. */
+.bk-fare-bags .bag-icon {
+  position: relative;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  white-space: normal;
+}
 .bk-fare-bags .bag-icon .bag-label { display: none; }
+.bk-fare-bags .bag-icon.bag-included { color: var(--ink-1); }
+.bk-fare-bags .bag-icon.bag-excluded { color: var(--ink-4); }
+.bk-fare-bags .bag-icon.bag-unknown  { color: var(--ink-4); opacity: 0.55; }
+.bag-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  background: #fff;
+  border: 1.5px solid currentColor;
+}
+.bag-badge.ok { color: var(--good); }
+.bag-badge.no { color: #b15a3a; }
 .bk-fare-price {
   font-family: ui-serif, Georgia, serif;
   font-size: 24px;
