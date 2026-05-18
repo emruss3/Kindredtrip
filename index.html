@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-proof-photo" />
-<meta name="kt-build" content="20260515-proof-photo" />
+<link rel="stylesheet" href="/styles.css?v=20260515-reviews-collapsed" />
+<meta name="kt-build" content="20260515-reviews-collapsed" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4769,16 +4769,41 @@
   }
 
   function renderReviewsBlock(signals, reviews) {
-    // ---- Summary ----
+    // Summary stays visible (parity with Booking/Kayak's always-on
+    // score header). The individual review list is collapsed behind
+    // a "Read all reviews" toggle so the trip page doesn't dump
+    // 20 reviews into the user's lap by default.
     const summary = signals ? renderReviewSummary(signals) : "";
-
-    // ---- Reviews list ----
-    const list = reviews.length
-      ? `<div class="trip-reviews-list">${reviews.map(renderReviewRow).join("")}</div>`
-      : `<p class="trip-reviews-empty-sub">No individual reviews to display.</p>`;
-
-    return summary + list;
+    if (reviews.length === 0) {
+      return summary + `<p class="trip-reviews-empty-sub">No individual reviews to display.</p>`;
+    }
+    const toggleLabel = `Read ${reviews.length === 1 ? "the 1 review" : `all ${reviews.length} reviews`}`;
+    return `
+      ${summary}
+      <button type="button" class="trip-reviews-toggle" aria-expanded="false" onclick="toggleReviewsList(this)">
+        <span class="trip-reviews-toggle-label">${toggleLabel}</span>
+        <svg class="trip-reviews-toggle-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="trip-reviews-list" hidden>${reviews.map(renderReviewRow).join("")}</div>`;
   }
+
+  // Toggle the individual-review list under the Reviews summary.
+  // We swap aria-expanded + the chevron rotation; the .trip-reviews-list
+  // sibling shows/hides via [hidden].
+  function toggleReviewsList(btn) {
+    const open = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", open ? "false" : "true");
+    const labelEl = btn.querySelector(".trip-reviews-toggle-label");
+    const list = btn.parentElement?.querySelector(".trip-reviews-list");
+    if (list) list.hidden = open;
+    if (labelEl) {
+      // Strip leading "Read " / "Hide " so we don't have to track the
+      // count; the label after the verb is stable.
+      const tail = labelEl.textContent.replace(/^(Read|Hide)\s+/, "");
+      labelEl.textContent = (open ? "Read " : "Hide ") + tail;
+    }
+  }
+  window.toggleReviewsList = toggleReviewsList;
 
   function renderReviewSummary(s) {
     const family5 = reviewScoreTo5(s.family_avg_score);

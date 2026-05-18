@@ -6804,6 +6804,32 @@ body.trip-detail-open #status { display: none !important; }
 }
 
 /* Review list */
+/* Toggle button that reveals the individual-review list. Sits between
+ * the summary card and the (initially hidden) list. */
+.trip-reviews-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: var(--s-3) 0 var(--s-3);
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  letter-spacing: -0.005em;
+}
+.trip-reviews-toggle:hover { background: var(--bg-soft); border-color: var(--ink-3); }
+.trip-reviews-toggle-chev {
+  width: 14px; height: 14px;
+  transition: transform 0.18s ease;
+}
+.trip-reviews-toggle[aria-expanded="true"] .trip-reviews-toggle-chev { transform: rotate(180deg); }
+
 .trip-reviews-list {
   display: flex;
   flex-direction: column;
