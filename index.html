@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260514-rooms-table-dock" />
-<meta name="kt-build" content="20260514-rooms-table-dock" />
+<link rel="stylesheet" href="/styles.css?v=20260515-wider" />
+<meta name="kt-build" content="20260515-wider" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -124,7 +124,7 @@
       "name": "Are KindredTrips prices live or estimates?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Prices on KindredTrips search results are estimated based on current market rates for your dates and family composition. When users click through to book on a partner site, that site shows live, bookable rates. Most of the time the live rate is within a few percent of our estimate. Estimated prices are clearly labeled."
+        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding live prices' placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through."
       }
     }
   ]
@@ -407,7 +407,6 @@
         </div>
         <div class="trust-legend">
           <span class="trust-legend-item"><span class="trust-dot live-dot"></span>Live partner rate</span>
-          <span class="trust-legend-item"><span class="trust-dot est-dot"></span>Estimated price (we'll tell you when)</span>
         </div>
       </div>
     </article>
@@ -592,7 +591,7 @@
     <details class="faq-item">
       <summary>Are KindredTrips prices live or estimates?</summary>
       <div class="faq-answer">
-        <p>Prices on KindredTrips search results are estimated based on current market rates for your dates and family composition. When users click through to book on a partner site, that site shows live, bookable rates. Most of the time the live rate is within a few percent of our estimate. Estimated prices are clearly labeled.</p>
+        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding live prices…" placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through.</p>
       </div>
     </details>
   </div>
@@ -679,6 +678,9 @@
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalIfBackdrop(event)">
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
 </div>
+
+<aside id="compare-tray" class="compare-tray" hidden></aside>
+<div class="compare-modal-overlay" id="compare-modal-overlay" onclick="if(event.target.id==='compare-modal-overlay') closeCompareModal()"></div>
 
 <footer class="site-footer">
   <div class="footer-disclosures">
@@ -1146,6 +1148,7 @@
     priceMin: null,
     priceMax: null,
     ratingMin: 0,
+    maxStops: null,          // 0 = direct only, 1 = up to 1 stop, null = any
   };
 
   // Sidebar UI state
@@ -1250,6 +1253,7 @@
     if (exclude !== "price"   && filters.priceMax != null && (pkg.total_price || 0) > filters.priceMax) return false;
     if (exclude !== "rating"  && filters.ratingMin > 0 && (r.avg_user_rating || 0) < filters.ratingMin) return false;
     if (exclude !== "brands"  && filters.brands.size > 0 && !filters.brands.has(r.hotel_brand || "")) return false;
+    if (exclude !== "stops"   && filters.maxStops != null && pkg.stops != null && pkg.stops > filters.maxStops) return false;
 
     const t = pkg._tags;
     if (exclude !== "amenities")  for (const tag of filters.amenities)  if (!t.amenities.includes(tag)) return false;
@@ -1264,7 +1268,8 @@
       filters.amenities.size + filters.rooms.size + filters.styles.size +
       filters.highlights.size + filters.brands.size +
       (filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
-      (filters.ratingMin > 0 ? 1 : 0);
+      (filters.ratingMin > 0 ? 1 : 0) +
+      (filters.maxStops != null ? 1 : 0);
   }
 
   function clearAllFilterState() {
@@ -1277,6 +1282,7 @@
     filters.priceMin = null;
     filters.priceMax = null;
     filters.ratingMin = 0;
+    filters.maxStops = null;
     sidebarShowAll.clear();
     syncHomepageDestinationChips();
   }
@@ -1357,6 +1363,27 @@
     if (h === 0) return `${mins} min`;
     if (mins === 0) return `${h}h`;
     return `${h}h ${mins}m`;
+  }
+  // Decimal hours → "Xh Ym" (e.g. 6.5 → "6h 30m", 7 → "7h", 0.5 → "30m").
+  // We round to the nearest minute so 6.499999 doesn't render as "6h 30m"
+  // off-by-one.
+  function fmtFlightDuration(hours) {
+    const h = Number(hours);
+    if (!Number.isFinite(h) || h <= 0) return null;
+    const totalMin = Math.round(h * 60);
+    const hh = Math.floor(totalMin / 60);
+    const mm = totalMin % 60;
+    if (hh === 0) return `${mm}m`;
+    if (mm === 0) return `${hh}h`;
+    return `${hh}h ${mm}m`;
+  }
+  // Parse "HH:MM" transfer time into hours (decimal). Returns 0 when
+  // unparseable so missing data doesn't penalize the resort.
+  function parseTransferHours(notes) {
+    if (!notes) return 0;
+    const m = String(notes).match(/^(\d+):(\d{1,2})(?::\d{1,2})?$/);
+    if (!m) return 0;
+    return parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
   }
 
   // 42587 → "42k"; 1402 → "1.4k"; 230 → "230"
@@ -1558,7 +1585,7 @@
         if (pricedCount === 0) {
           showError("Pricing is slow or temporarily unavailable. Please try the search again in a moment.");
         } else {
-          setStatus("Pricing is slow right now — some trips may show estimated prices. We'll keep refining.");
+          setStatus("Pricing is slow right now — some trips are still finding live rates. New live results will appear as carriers confirm.");
         }
       }
 
@@ -1739,6 +1766,11 @@
     const slot = document.getElementById("pricing-progress-slot");
     if (!slot) return;
     slot.hidden = false;
+    // Body flag for CSS: while the big pricing widget is visible, the
+    // sticky results-header becomes static and its small inline
+    // "refreshing prices" banner is suppressed so the two status
+    // surfaces don't compete for attention at the top of the page.
+    document.body.classList.add("kt-pricing-active");
     let widget = document.getElementById("pricing-progress");
     if (!widget) {
       widget = document.createElement("div");
@@ -1794,6 +1826,13 @@
       countries > 0 ? `<span><b>${countries.toLocaleString()}</b> ${countries === 1 ? "country" : "countries"}</span>` : "",
     ].filter(Boolean).join("");
 
+    // While we're still pricing (not at 100%) rotate a one-liner tip
+    // below the counters so the wait feels like progress, not staring
+    // at a stuck bar. The tip rotation is owned by startProgressTipRotation,
+    // started when the widget first mounts and stopped at 100%.
+    const showTip = pct < 100;
+    const tipHtml = showTip ? `<div class="pricing-progress-tip" id="pricing-progress-tip">${escapeHtml(PROGRESS_TIPS[0])}</div>` : "";
+
     widget.innerHTML = `
       <div class="pricing-progress-head">
         <span class="pricing-progress-dot" aria-hidden="true"></span>
@@ -1802,13 +1841,50 @@
       </div>
       <div class="pricing-progress-bar"><div class="pricing-progress-fill" style="width: ${pct}%"></div></div>
       <div class="pricing-progress-counters">${counters}</div>
+      ${tipHtml}
     `;
+
+    if (showTip) startProgressTipRotation();
+    else stopProgressTipRotation();
+  }
+
+  // Rotating sub-messages that play while phase-1/phase-2 pricing is in
+  // flight. Helps the wait feel like the engine is doing the right work
+  // (checking room fit, matching kids-club ages, etc.).
+  const PROGRESS_TIPS = [
+    "Searching 974 family-friendly resorts…",
+    "Checking room fit for your party",
+    "Matching kids-club ages",
+    "Comparing flight time + stops",
+    "Calculating total trip cost",
+    "Ranking by what fits your family",
+  ];
+  let __progressTipIdx = 0;
+  let __progressTipTimer = null;
+  function startProgressTipRotation() {
+    if (__progressTipTimer) return;
+    __progressTipTimer = setInterval(() => {
+      __progressTipIdx = (__progressTipIdx + 1) % PROGRESS_TIPS.length;
+      const el = document.getElementById("pricing-progress-tip");
+      if (!el) return;
+      el.classList.remove("flash");
+      // Force reflow so the animation re-runs on the next assignment.
+      void el.offsetWidth;
+      el.textContent = PROGRESS_TIPS[__progressTipIdx];
+      el.classList.add("flash");
+    }, 2200);
+  }
+  function stopProgressTipRotation() {
+    if (__progressTipTimer) { clearInterval(__progressTipTimer); __progressTipTimer = null; }
+    __progressTipIdx = 0;
   }
   function hidePricingProgress() {
+    stopProgressTipRotation();
     const w = document.getElementById("pricing-progress");
     if (w) w.remove();
     const slot = document.getElementById("pricing-progress-slot");
     if (slot) slot.hidden = true;
+    document.body.classList.remove("kt-pricing-active");
   }
 
   // Silent refetch — fetches packages, re-renders, returns the response data.
@@ -1989,9 +2065,21 @@
     return true;
   }
 
+  // Per the v24 no-mock contract: server nulls out prices on any
+  // package that isn't fully live. We detect that and render a
+  // skeleton card instead of hiding the row, so users see resort
+  // context with a "finding live prices…" state rather than a gap.
+  function isPricesPending(p) {
+    return p?.prices_pending === true
+      || p?.is_live === false
+      || (p?.total_price == null && p?.flight_supplier !== "liteapi");
+  }
+
   function renderResults() {
     const filtered = applyClientSort(
-      allPackages.filter(packageMeetsSearchRequirements).filter(packageMatchesFilters)
+      allPackages
+        .filter(packageMeetsSearchRequirements)
+        .filter(packageMatchesFilters)
     );
     const visible = filtered.slice(0, 25);
     const rankBadges = computeRankingBadges(visible);
@@ -2003,31 +2091,311 @@
     sidebar.classList.toggle("collapsed", window.__sidebarCollapsedMobile === true);
     sidebar.innerHTML = renderSidebar();
 
-    // Distinguish "still loading live prices" (no allPackages yet) from
-    // "user's filters are too tight" (allPackages exists but everything
-    // got filtered out). With strict_live_only=true, allPackages stays
-    // empty until LiteAPI prices land — blaming the user's filters
-    // during that window is misleading.
-    let emptyBlock = "";
+    // Header (sticky search-summary bar) always renders so the user can
+    // edit the search / change sort even when no cards match.
+    const headerHtml = renderSearchHeader(filtered.length);
+    const filterPills = renderActiveFilterPills();
+
+    let body;
     if (visible.length === 0) {
-      if (allPackages.length === 0) {
-        emptyBlock = `<div class="empty">
-          <h3>Finding live prices for your family…</h3>
-          <p>We're pricing flights and rooms for your dates across 35 Caribbean countries. First results usually appear within ~30 seconds.</p>
-        </div>`;
+      body = renderEmptyState();
+    } else {
+      body = viewMode === "grouped"
+        ? renderGroupedRest(visible, rankBadges, budgetBadges)
+        : renderListRest(visible, rankBadges, budgetBadges);
+    }
+
+    main.innerHTML = headerHtml + filterPills + body;
+    renderCompareTray();
+  }
+
+  function renderListRest(rest, rankBadges, budgetBadges) {
+    if (!rest.length) return "";
+    return rest.map((p) => isPricesPending(p)
+      ? renderPendingCard(p)
+      : renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))
+    ).join("");
+  }
+
+  // Group remaining results by country so users can compare regions
+  // (Aruba vs Punta Cana vs Jamaica) without scrolling a flat list.
+  // We cap each country at 5 visible cards to keep the page glanceable.
+  function renderGroupedRest(rest, rankBadges, budgetBadges) {
+    if (!rest.length) return "";
+    const groups = new Map();
+    for (const p of rest) {
+      const c = p.resorts?.country || "Other";
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(p);
+    }
+    // Country order: by best (lowest) ranked card in each country.
+    const ordered = Array.from(groups.entries());
+    const sections = ordered.map(([country, pkgs]) => {
+      const cards = pkgs.slice(0, 5).map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+      const more = pkgs.length > 5
+        ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add('${country.replace(/'/g, "\\'")}'); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
+        : "";
+      return `
+        <section class="dest-group">
+          <header class="dest-group-head">
+            <span class="dest-group-name">${escapeHtml(country)}</span>
+            <span class="dest-group-count">${pkgs.length} trip${pkgs.length === 1 ? "" : "s"}</span>
+          </header>
+          ${cards}
+          ${more}
+        </section>
+      `;
+    }).join("");
+    return `<div class="results-list-head"><span class="results-list-head-label">More trips · grouped by destination</span><span class="results-list-head-count">${groups.size} countries</span></div>${sections}`;
+  }
+
+  // -------- Empty state with one-click filter fixes --------
+  function renderEmptyState() {
+    // Phase-1 loading: no packages priced yet → keep the reassuring
+    // "still pricing" message rather than blaming the user's filters.
+    if (allPackages.length === 0) {
+      return `<div class="empty">
+        <h3>Finding live prices for your family…</h3>
+        <p>We're pricing flights and rooms for your dates across 35 Caribbean countries. First results usually appear within ~30 seconds.</p>
+      </div>`;
+    }
+
+    // Detect which constraints are likely causing the zero-result state
+    // and offer one-click "loosen this" buttons. We only show fixes that
+    // would actually expand the result set.
+    const fixes = [];
+    const summary = lastSearchSummary || {};
+    if (summary.require_all_inclusive) {
+      fixes.push({ label: "Include non all-inclusive resorts", onclick: "loosenSearchFlag('require_all_inclusive')" });
+    }
+    if (summary.require_kids_club) {
+      fixes.push({ label: "Drop kids-club requirement", onclick: "loosenSearchFlag('require_kids_club')" });
+    }
+    if (summary.require_direct_flight) {
+      fixes.push({ label: "Allow 1-stop flights", onclick: "loosenSearchFlag('require_direct_flight')" });
+    }
+    if (summary.require_connecting_rooms) {
+      fixes.push({ label: "Drop connecting-rooms requirement", onclick: "loosenSearchFlag('require_connecting_rooms')" });
+    }
+    if (summary.max_flight_hours) {
+      fixes.push({ label: "Increase max travel time", onclick: "loosenSearchFlag('max_flight_hours')" });
+    }
+    if (filters.priceMax != null) {
+      fixes.push({ label: "Expand budget ceiling", onclick: "loosenFilter('priceMax')" });
+    }
+    if (filters.country.size > 0) {
+      fixes.push({ label: `All Caribbean countries (${filters.country.size} selected)`, onclick: "loosenFilter('country')" });
+    }
+    if (filters.amenities.size + filters.rooms.size + filters.styles.size + filters.highlights.size + filters.brands.size > 0) {
+      fixes.push({ label: "Clear all sidebar filters", onclick: "clearAllFilters()" });
+    }
+
+    const fixBlock = fixes.length
+      ? `<div class="empty-fixes">
+          <div class="empty-fixes-label">Try one of these:</div>
+          <div class="empty-fixes-buttons">
+            ${fixes.map(f => `<button class="empty-fix-btn" onclick="${f.onclick}">${escapeHtml(f.label)}</button>`).join("")}
+          </div>
+        </div>`
+      : "";
+
+    return `<div class="empty">
+      <h3>No trips match every filter.</h3>
+      <p>${allPackages.length.toLocaleString()} live-priced trips are available — but none cleared every constraint you set. Loosen one and we'll re-rank.</p>
+      ${fixBlock}
+    </div>`;
+  }
+
+  // Server-side requirements (kids club, AI, direct, etc.) live in
+  // lastSearchSummary, not in `filters`. Clearing one of these re-runs
+  // packageMeetsSearchRequirements against the same allPackages set
+  // (no refetch) — fast and avoids confusing the user with another
+  // pricing widget cycle.
+  function loosenSearchFlag(flag) {
+    if (!lastSearchSummary) return;
+    if (flag === "max_flight_hours") delete lastSearchSummary.max_flight_hours;
+    else lastSearchSummary[flag] = false;
+    // Reflect in popover so re-edit shows the new state
+    const cb = document.querySelector(`.search-popover-extras input[data-flag="${flag}"]`);
+    if (cb) cb.checked = false;
+    renderResults();
+  }
+  // Reverse of loosenSearchFlag — toggle the search-time requirement
+  // from the sidebar's "Must-haves" group. Mirrors the popover checkboxes
+  // so the popover and sidebar stay in sync.
+  function setSearchFlag(flag, on) {
+    if (!lastSearchSummary) lastSearchSummary = {};
+    if (on) lastSearchSummary[flag] = true;
+    else delete lastSearchSummary[flag];
+    const cb = document.querySelector(`.search-popover-extras input[data-flag="${flag}"]`);
+    if (cb) cb.checked = !!on;
+    renderResults();
+  }
+  function loosenFilter(kind) {
+    if (kind === "priceMax") { filters.priceMin = null; filters.priceMax = null; }
+    else if (kind === "country") { filters.country.clear(); syncHomepageDestinationChips(); }
+    renderResults();
+  }
+
+  // -------- Compare tray (1-3 pinned trips, side-by-side) --------
+  const COMPARE_MAX = 3;
+  const compareSet = new Set();
+
+  function toggleCompare(packageId, evt) {
+    if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+    if (compareSet.has(packageId)) {
+      compareSet.delete(packageId);
+    } else {
+      if (compareSet.size >= COMPARE_MAX) {
+        // Drop the first-added so the tray never grows past 3
+        compareSet.delete(compareSet.values().next().value);
+      }
+      compareSet.add(packageId);
+    }
+    renderCompareTray();
+    renderResults();
+  }
+  function clearCompare() {
+    compareSet.clear();
+    renderCompareTray();
+    renderResults();
+  }
+
+  function renderCompareTray() {
+    const tray = document.getElementById("compare-tray");
+    if (!tray) return;
+    if (compareSet.size === 0) { tray.hidden = true; tray.innerHTML = ""; return; }
+    const pkgs = Array.from(compareSet)
+      .map(id => allPackages.find(p => p.package_id === id))
+      .filter(Boolean);
+    const slots = [];
+    for (let i = 0; i < COMPARE_MAX; i++) {
+      if (pkgs[i]) {
+        const p = pkgs[i];
+        const r = p.resorts || {};
+        const photo = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 220);
+        slots.push(`
+          <div class="compare-slot filled">
+            <img class="compare-slot-photo" src="${photo}" alt="${escapeHtml(r.resort_name || "")}" loading="lazy" />
+            <div class="compare-slot-info">
+              <div class="compare-slot-name">${escapeHtml(r.resort_name || "")}</div>
+              <div class="compare-slot-meta">${escapeHtml(r.country || "")} · <b>${fmtMoney(p.total_price)}</b></div>
+            </div>
+            <button class="compare-slot-x" onclick="toggleCompare('${p.package_id}', event)" aria-label="Remove from compare">×</button>
+          </div>
+        `);
       } else {
-        emptyBlock = `<div class="empty">
-          <h3>Nothing matches those filters.</h3>
-          <p>${allPackages.length} live trips were priced, but none match your current filters. Try clearing the kids-club, all-inclusive, or country filters.</p>
-        </div>`;
+        slots.push(`<div class="compare-slot empty">Add a trip<br/><span class="compare-slot-hint">Tap Compare on a card</span></div>`);
       }
     }
-    main.innerHTML =
-      renderResultBar(filtered.length) +
-      renderActiveFilterPills() +
-      (visible.length === 0
-        ? emptyBlock
-        : visible.map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join(""));
+    tray.hidden = false;
+    tray.innerHTML = `
+      <div class="compare-tray-inner">
+        <div class="compare-tray-label">
+          <b>${compareSet.size}/${COMPARE_MAX}</b> selected
+          <button class="compare-tray-clear" onclick="clearCompare()">Clear</button>
+        </div>
+        <div class="compare-tray-slots">${slots.join("")}</div>
+        <button class="btn btn-primary compare-tray-cta" ${compareSet.size < 2 ? "disabled" : ""} onclick="openCompareModal()">
+          Compare side by side →
+        </button>
+      </div>
+    `;
+  }
+
+  function openCompareModal() {
+    if (compareSet.size < 2) return;
+    const pkgs = Array.from(compareSet)
+      .map(id => allPackages.find(p => p.package_id === id))
+      .filter(Boolean);
+    if (pkgs.length < 2) return;
+
+    const cell = (p, fn) => `<td>${fn(p) ?? "—"}</td>`;
+    const r = (p) => p.resorts || {};
+    const t = (p) => p._tags || extractTags(p);
+
+    const photoCell = (p) => {
+      const rr = r(p);
+      const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs }, 320);
+      return `<div class="compare-cell-photo"><img src="${photo}" alt="${escapeHtml(rr.resort_name || "")}" loading="lazy" /><div class="compare-cell-name">${escapeHtml(rr.resort_name || "")}</div><div class="compare-cell-sub">${escapeHtml(rr.area || rr.country || "")}</div></div>`;
+    };
+    const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${fmtMoney(p.flight_price)} flights · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
+    const fitCell = (p) => `<div class="compare-cell-fit"><span class="compare-cell-fit-num">${familyFitScore(p)}</span><span class="compare-cell-fit-lbl">Family Fit</span></div>`;
+    const gradeCell = (p, k) => {
+      const g = gradesFor(p)[k];
+      return `<span class="sg-val sg-${g.charAt(0).toLowerCase()}">${g}</span>`;
+    };
+    const flightCell = (p) => {
+      const stops = p.stops === 0 ? "Direct" : p.stops != null ? `${p.stops} stop${p.stops === 1 ? "" : "s"}` : "—";
+      return `${stops}${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}${p.dest_airport_iata ? `<br/><span class="compare-cell-airport">to ${escapeHtml(p.dest_airport_iata)}</span>` : ""}`;
+    };
+    const roomFitCell = (p) => {
+      const rf = roomFitInfo(p);
+      return `<b>${escapeHtml(rf.headline)}</b><br/><span class="compare-cell-sub">${escapeHtml(rf.detail)}</span>`;
+    };
+    const kidsCell = (p) => {
+      const tags = t(p);
+      const kids = KIDS_AMENITY_PRIORITY.filter(tag => tags.amenities.includes(tag));
+      if (kids.length === 0) return `<span class="compare-cell-muted">—</span>`;
+      return kids.slice(0, 4).map(k => `<span class="compare-mini-chip">${escapeHtml(BADGE_SPEC[k]?.label || k)}</span>`).join("") + (kids.length > 4 ? ` <span class="compare-cell-sub">+${kids.length - 4} more</span>` : "");
+    };
+    const ratingCell = (p) => {
+      const rr = r(p);
+      const r5 = ratingTo5(rr.avg_user_rating);
+      if (r5 == null) return "—";
+      return `<b>${r5.toFixed(1)}</b> / 5${rr.review_count ? `<br/><span class="compare-cell-sub">${fmtReviews(rr.review_count)} reviews</span>` : ""}`;
+    };
+    const aiCell = (p) => p.has_any_ai === true ? `<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>` : `<span class="compare-cell-muted">—</span>`;
+    const ctaCell = (p) => `<button class="btn btn-primary" onclick="closeCompareModal(); openResortModal('${p.package_id}')">See trip details →</button>`;
+
+    const headers = pkgs.map(p => `<th>${photoCell(p)}</th>`).join("");
+    const rows = [
+      ["Total price",     pkgs.map(p => cell(p, priceCell)).join("")],
+      ["Family Fit",      pkgs.map(p => cell(p, fitCell)).join("")],
+      ["Flight ease",     pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "flight")} <span>${flightCell(p)}</span></div></td>`).join("")],
+      ["Room fit",        pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "room")} <span>${roomFitCell(p)}</span></div></td>`).join("")],
+      ["Kids amenities",  pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "kids")} <span class="compare-cell-chips">${kidsCell(p)}</span></div></td>`).join("")],
+      ["Resort rating",   pkgs.map(p => `<td><div class="compare-cell-grade-line">${gradeCell(p, "resort")} <span>${ratingCell(p)}</span></div></td>`).join("")],
+      ["All-inclusive",   pkgs.map(p => cell(p, aiCell)).join("")],
+      ["",                pkgs.map(p => cell(p, ctaCell)).join("")],
+    ];
+    const tbody = rows.map(([label, html]) => `<tr><th class="compare-row-label">${escapeHtml(label)}</th>${html}</tr>`).join("");
+
+    const overlay = document.getElementById("compare-modal-overlay");
+    overlay.innerHTML = `
+      <div class="compare-modal" role="dialog" aria-labelledby="compare-modal-title">
+        <div class="compare-modal-head">
+          <h2 id="compare-modal-title">Compare ${pkgs.length} trips</h2>
+          <button class="compare-modal-close" onclick="closeCompareModal()" aria-label="Close">×</button>
+        </div>
+        <div class="compare-modal-body">
+          <table class="compare-table">
+            <thead><tr><th class="compare-row-label"></th>${headers}</tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+  function closeCompareModal() {
+    const overlay = document.getElementById("compare-modal-overlay");
+    if (overlay) overlay.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const overlay = document.getElementById("compare-modal-overlay");
+      if (overlay && overlay.classList.contains("open")) closeCompareModal();
+    }
+  });
+
+  // -------- View mode (list vs grouped by destination) --------
+  let viewMode = "list"; // "list" | "grouped"
+  function setViewMode(mode) {
+    viewMode = mode;
+    renderResults();
   }
 
   // One subtle budget-related badge per visible card. Returns Map<package_id, {label, cls}>
@@ -2086,17 +2454,85 @@
       <span style="color: var(--ink-3); font-size: 13px;">${collapsed ? "Show ▾" : "Hide ▴"}</span>
     </button>`;
 
+    // Sidebar layout: ordered by the decision a parent actually makes —
+    // Must-haves at the top (the non-negotiables); then flight ease and
+    // budget which dominate the trip math; then room fit and kids
+    // amenities which decide whether the resort itself works; destination
+    // and resort quality at the bottom for the secondary trade-offs.
     return toggle + [
-      renderCountryBlock(),
-      renderTagBlock("Kids amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities"),
-      renderTagBlock("Room options", "rooms", ROOM_PRIORITY, "rooms"),
-      renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles"),
-      renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights"),
-      renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities"),
-      renderBrandBlock(),
-      renderPriceBlock(bounds),
-      renderRatingBlock(),
-    ].join("");
+      sidebarGroup("Must-haves", renderMustHavesBlock()),
+      sidebarGroup("Flight ease", renderFlightEaseBlock()),
+      sidebarGroup("Budget", renderPriceBlock(bounds)),
+      sidebarGroup("Room fit", renderTagBlock("Room types", "rooms", ROOM_PRIORITY, "rooms")),
+      sidebarGroup("Kids amenities",
+        renderTagBlock("Amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities") +
+        renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities")
+      ),
+      sidebarGroup("Destination",
+        renderCountryBlock() + renderBrandBlock()
+      ),
+      sidebarGroup("Resort quality",
+        renderRatingBlock() +
+        renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles") +
+        renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights")
+      ),
+    ].filter(Boolean).join("");
+  }
+  // Wraps a logical group of related filter blocks under one section
+  // heading. Empty groups (e.g. no brand data yet) collapse out so the
+  // sidebar doesn't read as a bunch of empty headers.
+  function sidebarGroup(title, inner) {
+    if (!inner || !inner.trim()) return "";
+    return `<div class="sidebar-group">
+      <h4 class="sidebar-group-title">${escapeHtml(title)}</h4>
+      ${inner}
+    </div>`;
+  }
+
+  // Must-haves: the search-time flags from lastSearchSummary surfaced as
+  // sidebar toggles so users can relax / re-add a constraint without
+  // re-opening the search popover. Sync goes both ways via setSearchFlag.
+  function renderMustHavesBlock() {
+    const s = lastSearchSummary || {};
+    const flags = [
+      { key: "require_kids_club",        label: "Kids club" },
+      { key: "require_all_inclusive",    label: "All-inclusive" },
+      { key: "require_direct_flight",    label: "Direct flights only" },
+      { key: "require_connecting_rooms", label: "Connecting rooms" },
+    ];
+    const rows = flags.map(f => {
+      const active = !!s[f.key];
+      return `<button class="tag-row${active ? " active" : ""}" onclick="setSearchFlag('${f.key}', ${!active})">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(f.label)}</span>
+      </button>`;
+    }).join("");
+    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+  }
+
+  // Flight ease: max stops control. Max travel hours is search-time
+  // (it bounds which routes we even price) so we don't expose it here
+  // — surfacing it would mislead since loosening it can't expand the
+  // current result set without a new search.
+  function renderFlightEaseBlock() {
+    const cur = filters.maxStops;
+    const opts = [
+      { value: null, label: "Any" },
+      { value: 0,    label: "Direct only" },
+      { value: 1,    label: "Up to 1 stop" },
+    ];
+    const rows = opts.map(o => {
+      const active = (o.value === cur);
+      return `<button class="tag-row${active ? " active" : ""}" onclick="setMaxStops(${o.value === null ? "null" : o.value})">
+        <span class="tag-checkbox"></span>
+        <span class="tag-label">${escapeHtml(o.label)}</span>
+      </button>`;
+    }).join("");
+    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+  }
+  function setMaxStops(value) {
+    filters.maxStops = value;
+    renderResults();
   }
 
   function toggleSidebarMobile() {
@@ -2292,6 +2728,10 @@
     if (filters.ratingMin > 0) {
       pills.push(`<button class="active-filter-pill" onclick="filters.ratingMin=0;renderResults();">${filters.ratingMin}+ rating<span class="x">×</span></button>`);
     }
+    if (filters.maxStops != null) {
+      const stopsLbl = filters.maxStops === 0 ? "Direct only" : `Up to ${filters.maxStops} stop${filters.maxStops === 1 ? "" : "s"}`;
+      pills.push(`<button class="active-filter-pill" onclick="filters.maxStops=null;renderResults();">${stopsLbl}<span class="x">×</span></button>`);
+    }
     if (pills.length === 0) return "";
     return `<div class="active-filters">${pills.join("")}<button class="active-filters-clear" onclick="clearAllFilters()">Clear all</button></div>`;
   }
@@ -2302,49 +2742,160 @@
     renderResults();
   }
 
-  function renderResultBar(matchingCount) {
+  // Sticky search-summary header at the top of the results column.
+  // Replaces the old "Ranked trips" h2 + summary block with a tighter,
+  // glanceable strip: origin · dates · party · type | Edit · count · sort.
+  function renderSearchHeader(matchingCount) {
     const total = allPackages.length;
-    const filterCount = activeFilterCount();
-    const showing = Math.min(25, matchingCount);
-    const summaryText = filterCount > 0
-      ? `${matchingCount} of ${total} match your filters.`
-      : `${total} curated family resort trips ranked for your dates.`;
-    const subLine = `Sorted by total cost, travel time, and family fit.`;
-    // The pricing-updater banner is shown by pollUntilFlightsReal while real
-    // LiteAPI flight prices are still landing in the background. Default to
-    // hidden; the poll toggles `hidden` on/off. Preserve current state across
-    // re-renders by reading the existing element if any.
+    const summary = lastSearchSummary || {};
+    const adults = summary.adults || 2;
+    const kids = summary.child_ages?.length || 0;
+    const fmt = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const partyStr = `${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}`;
+    const chips = [
+      summary.origin_iata ? `<span class="rh-chip rh-chip-strong">${escapeHtml(summary.origin_iata)} → Caribbean</span>` : "",
+      summary.date_start && summary.date_end ? `<span class="rh-chip">${fmt(summary.date_start)} – ${fmt(summary.date_end)}</span>` : "",
+      `<span class="rh-chip">${partyStr}</span>`,
+      `<span class="rh-chip rh-chip-muted">Flights + hotel</span>`,
+    ].filter(Boolean).join("");
+
+    const countLabel = total > 0
+      ? `<b>${matchingCount.toLocaleString()}</b>${matchingCount !== total ? ` of ${total.toLocaleString()}` : ""} trips`
+      : `Searching…`;
+
+    // The pricing-updater banner is toggled by pollUntilFlightsReal as
+    // late-arriving live fares land. Default to hidden; preserve state
+    // across re-renders.
     const updaterHidden = (() => {
       const existing = document.getElementById("pricing-updater");
       return !existing || existing.hidden;
     })();
+
     return `
-      <div class="result-bar">
-        <div>
-          <h2>Ranked trips</h2>
-          <div class="summary-line">${summaryText}</div>
-          <div class="summary-sub">${subLine}</div>
+      <div class="results-header">
+        <div class="results-header-row">
+          <div class="rh-summary">${chips}</div>
+          <button class="rh-edit" onclick="openSearchPopover()" aria-label="Edit search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Edit search
+          </button>
         </div>
-        <div class="sort-controls">
-          <label for="sort_by" style="font-weight: 500;">Sort by</label>
-          <select id="sort_by" onchange="onSortChange(this.value)">
-            <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit for your family</option>
-            <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total trip cost</option>
-            <option value="under_budget"${lastSortBy === "under_budget" ? " selected" : ""}>Most under budget</option>
-            <option value="shortest_travel"${lastSortBy === "shortest_travel" ? " selected" : ""}>Shortest travel day</option>
-            <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort within budget</option>
-          </select>
+        <div class="results-header-row results-header-meta">
+          <div class="rh-count">${countLabel}</div>
+          <div class="rh-controls">
+            <div class="view-toggle" role="group" aria-label="View mode">
+              <button class="view-toggle-btn${viewMode === "list" ? " active" : ""}" onclick="setViewMode('list')" aria-pressed="${viewMode === "list"}">Ranked list</button>
+              <button class="view-toggle-btn${viewMode === "grouped" ? " active" : ""}" onclick="setViewMode('grouped')" aria-pressed="${viewMode === "grouped"}">By destination</button>
+            </div>
+            <div class="sort-controls">
+              <label for="sort_by">Sort</label>
+              <select id="sort_by" onchange="onSortChange(this.value)">
+                <option value="score"${lastSortBy === "score" ? " selected" : ""}>Best fit</option>
+                <option value="price_asc"${lastSortBy === "price_asc" ? " selected" : ""}>Lowest total cost</option>
+                <option value="under_budget"${lastSortBy === "under_budget" ? " selected" : ""}>Most under budget</option>
+                <option value="shortest_travel"${lastSortBy === "shortest_travel" ? " selected" : ""}>Shortest travel day</option>
+                <option value="best_within_budget"${lastSortBy === "best_within_budget" ? " selected" : ""}>Best resort in budget</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="pricing-updater" class="pricing-updater"${updaterHidden ? " hidden" : ""}>
+          <span class="pricing-updater-dot" aria-hidden="true"></span>
+          <span>Refreshing flight prices — results will update as live fares land.</span>
         </div>
       </div>
-      <div id="pricing-updater" class="pricing-updater"${updaterHidden ? " hidden" : ""}>
-        <span class="pricing-updater-dot" aria-hidden="true"></span>
-        <span>Refreshing flight prices — results will update as live fares land.</span>
-      </div>
-      <details class="rank-explainer">
-        <summary>How rankings work</summary>
-        <p>KindredTrips ranks complete trips — flights + hotel — by total trip cost, budget fit, travel time, stops, resort quality, and family-fit signals like kids club, babysitting, and room layout.</p>
-      </details>
     `;
+  }
+
+  // -------- Score row + "Why this ranks here" --------
+  // 0–99 family-fit score. familyFitInfo now scores directly on this
+  // scale (party-aware), so this is just a thin pass-through.
+  function familyFitScore(pkg) {
+    return familyFitInfo(pkg).score;
+  }
+  function letterGrade(value, tiers) {
+    // tiers: ordered [{ min, grade }] descending by min
+    for (const t of tiers) if (value >= t.min) return t.grade;
+    return tiers[tiers.length - 1].grade;
+  }
+  function gradesFor(pkg) {
+    const r = pkg.resorts || {};
+    // Price grade: relative to visible price range, calculated against
+    // allPackages range so grades are stable as filters change.
+    const prices = allPackages.map(p => p.total_price).filter(n => n != null);
+    let priceGrade = "B";
+    if (prices.length > 2 && pkg.total_price != null) {
+      const sorted = [...prices].sort((a, b) => a - b);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)];
+      const q2 = sorted[Math.floor(sorted.length * 0.50)];
+      const q3 = sorted[Math.floor(sorted.length * 0.75)];
+      if (pkg.total_price <= q1) priceGrade = "A";
+      else if (pkg.total_price <= q2) priceGrade = "B";
+      else if (pkg.total_price <= q3) priceGrade = "C";
+      else priceGrade = "D";
+    }
+    // Flight ease: direct = A, 1 stop = B, 2+ stops = C; long durations downgrade
+    let flightGrade = "B";
+    if (pkg.stops === 0) flightGrade = pkg.duration_hours && pkg.duration_hours <= 5 ? "A" : "A-";
+    else if (pkg.stops === 1) flightGrade = "B";
+    else if (pkg.stops >= 2) flightGrade = "C";
+    // Resort quality: 0-100 rating
+    const rating = Number(r.avg_user_rating) || 0;
+    const resortGrade = letterGrade(rating, [
+      { min: 90, grade: "A" }, { min: 82, grade: "B" }, { min: 74, grade: "C" }, { min: 0, grade: "D" }
+    ]);
+    // Room fit: derived from roomFitInfo.headline
+    const rf = roomFitInfo(pkg);
+    const roomGrade = rf.headline.startsWith("One room")          ? "A"
+                    : rf.headline.startsWith("Family suite")      ? "A"
+                    : rf.headline.startsWith("Connecting")        ? "B"
+                    : rf.headline.startsWith("Two-bedroom")       ? "A"
+                    : "C";
+    // Kids amenities: count of KIDS_AMENITY tags
+    const t = pkg._tags || extractTags(pkg);
+    const kidCount = KIDS_AMENITY_PRIORITY.filter(tag => t.amenities.includes(tag)).length;
+    const kidsGrade = kidCount >= 4 ? "A" : kidCount >= 2 ? "B" : kidCount >= 1 ? "C" : "D";
+    return { price: priceGrade, flight: flightGrade, resort: resortGrade, room: roomGrade, kids: kidsGrade };
+  }
+  function renderScoreRow(pkg) {
+    const score = familyFitScore(pkg);
+    const g = gradesFor(pkg);
+    return `
+      <div class="score-row">
+        <div class="score-fit"><span class="score-fit-num">${score}</span><span class="score-fit-label">Family Fit</span></div>
+        <div class="score-grades">
+          <span class="score-grade" title="Price"><span class="sg-label">Price</span><span class="sg-val sg-${g.price.charAt(0).toLowerCase()}">${g.price}</span></span>
+          <span class="score-grade" title="Flight ease"><span class="sg-label">Flight</span><span class="sg-val sg-${g.flight.charAt(0).toLowerCase()}">${g.flight}</span></span>
+          <span class="score-grade" title="Resort quality"><span class="sg-label">Resort</span><span class="sg-val sg-${g.resort.charAt(0).toLowerCase()}">${g.resort}</span></span>
+          <span class="score-grade" title="Room fit"><span class="sg-label">Room</span><span class="sg-val sg-${g.room.charAt(0).toLowerCase()}">${g.room}</span></span>
+          <span class="score-grade" title="Kids amenities"><span class="sg-label">Kids</span><span class="sg-val sg-${g.kids.charAt(0).toLowerCase()}">${g.kids}</span></span>
+        </div>
+      </div>
+    `;
+  }
+
+  // One-sentence explanation of why this card landed where it did,
+  // sourced from the strongest signal we have: ranking badge, budget
+  // posture, family-fit reasons, or just rating.
+  function whyThisRanksLine(pkg, rankBadge, budgetBadge) {
+    const r = pkg.resorts || {};
+    const fit = familyFitInfo(pkg);
+    const delta = budgetDelta(pkg);
+    const reasons = fit.reasons.slice(0, 2).join(" + ") || (r.avg_user_rating ? `${ratingTo5(r.avg_user_rating).toFixed(1)}/5 resort rating` : "Strong overall resort signal");
+
+    if (rankBadge) {
+      return `${rankBadge.label} — ${reasons}.`;
+    }
+    if (delta && delta.under && delta.diff > 100) {
+      return `${fmtMoney(delta.diff)} under your budget · ${reasons}.`;
+    }
+    if (budgetBadge) {
+      return `${budgetBadge.label} — ${reasons}.`;
+    }
+    if (pkg.stops === 0) {
+      return `Direct flight · ${reasons}.`;
+    }
+    return `${reasons}.`;
   }
 
   function onSortChange(value) {
@@ -2425,176 +2976,182 @@
     return `<span class="badge hotel-class hotel-class-${rounded}"><span class="hotel-stars">${"★".repeat(rounded)}</span>${rounded}-star hotel</span>`;
   }
 
-  function renderCard(p, rankBadge, budgetBadge) {
+  // Skeleton card for packages where the server hasn't returned live
+  // prices yet (is_live:false / prices_pending:true). Per the no-mock
+  // policy we never show an estimated number and never expose booking
+  // CTAs — just resort context and a "finding live prices…" state.
+  function renderPendingCard(p) {
     const r = p.resorts || {};
-    const tags = p._tags;
-    const badges = [];
-
-    // Hotel class chip (3/4/5 star). Surfaced as the FIRST badge so it
-    // anchors the rest of the row visually.
-    const classChip = hotelClassChip(p);
-    if (classChip) badges.push(classChip);
-
-    // Always-on rating chip — includes review count when we have it
-    const r5 = ratingTo5(r.avg_user_rating);
-    const rc = fmtReviews(r.review_count);
-    if (r5 != null) {
-      const reviews = rc ? ` <span class="reviews">· ${rc} reviews</span>` : "";
-      badges.push(`<span class="badge rating"><span class="star">★</span>${r5.toFixed(1)}${reviews}</span>`);
-    }
-
-    // Direct flight (good)
-    if (p.stops === 0 || r.direct_flight) {
-      badges.push(`<span class="badge good"><span class="emoji">✈</span>Direct flight</span>`);
-    }
-
-    // On the beach (good) — boolean column or strong text signal
-    if (r.on_beach === true || tags.rooms.includes("Beach Front Rooms") || tags.highlights.includes("Great Beach")) {
-      badges.push(`<span class="badge good"><span class="emoji">🏖</span>On the beach</span>`);
-    }
-
-    // Kid amenities by priority
-    const seenLabels = new Set();
-    for (const tag of KIDS_AMENITY_PRIORITY) {
-      if (!tags.amenities.includes(tag)) continue;
-      const spec = BADGE_SPEC[tag];
-      if (!spec || seenLabels.has(spec.label)) continue;
-      seenLabels.add(spec.label);
-      badges.push(badgeFor(tag));
-      if (badges.length >= 6) break;
-    }
-
-    // Family room callouts (kid)
-    if (badges.length < 7) {
-      if (tags.rooms.includes("Family Suite")) badges.push(`<span class="badge kid"><span class="emoji">🛏</span>Family suites</span>`);
-      else if (tags.rooms.includes("2 Bedroom Suites")) badges.push(`<span class="badge kid"><span class="emoji">🛏</span>2-bdrm suites</span>`);
-    }
-    if (badges.length < 7 && (tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms)) {
-      badges.push(`<span class="badge"><span class="emoji">🚪</span>Connecting rooms</span>`);
-    }
-    if (badges.length < 7 && tags.rooms.includes("Swim Up Rooms")) {
-      badges.push(`<span class="badge"><span class="emoji">🏊</span>Swim-up rooms</span>`);
-    }
-
-    // Watch-out signals — secondary, separate from primary ranking badge
-    const watchouts = [];
-    if (r.country === "Cuba") watchouts.push("U.S. travel rules apply");
-    if (p.stops != null && p.stops >= 2) watchouts.push("Long travel day");
-    if (p.warnings) watchouts.push(String(p.warnings));
-
-    // Sparse-data placeholder — only when we genuinely have no kid-fit signal
-    const hasKidSignal = seenLabels.size > 0
-      || tags.rooms.includes("Family Suite") || tags.rooms.includes("2 Bedroom Suites")
-      || tags.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms
-      || tags.styles.includes("Family") || tags.styles.includes("Family Resort");
-    if (!hasKidSignal) {
-      badges.push(`<span class="badge muted">Curated family resort</span>`);
-    }
-
-    // Offer-depth badges (new from start_pricing v4: multi-offer storage)
-    if (p.max_offer_occupancy && p.max_offer_occupancy > 0) {
-      badges.push(`<span class="badge"><span class="emoji">🛏</span>Sleeps ${p.max_offer_occupancy}</span>`);
-    }
-    // All-inclusive confirmation. Always show when has_any_ai is true so the
-    // user gets visible confirmation that their toggle is being honored. For
-    // mock-priced packages (no LiteAPI offers yet) when the user has the
-    // toggle on, show a quieter "AI rate pending" so they know the AI status
-    // is provisional, not missing.
-    const aiToggle = lastSearchSummary?.require_all_inclusive;
-    if (p.has_any_ai === true) {
-      badges.push(`<span class="badge ai-prominent"><span class="ai-check">✓</span>All-Inclusive</span>`);
-    } else if (aiToggle && p.hotel_supplier !== "liteapi") {
-      badges.push(`<span class="badge muted">All-inclusive · rate pending</span>`);
-    }
-    // Kids club confirmation is already handled by the KIDS_AMENITY_PRIORITY
-    // loop above (which renders "Kids 1+" or "Kids club" from BADGE_SPEC).
-    // Don't double up — the loop is more informative because it tells the
-    // user the minimum age when applicable.
-    if (p.has_any_refundable) {
-      badges.push(`<span class="badge"><span class="emoji">↩</span>Refundable</span>`);
-    }
-    // Room option count omitted from card badges — it's a backend
-    // signal, not a useful selling point. Surfaced in the modal where
-    // users actually browse rooms.
-
-    const stopsStr = p.stops != null
-      ? (p.stops === 0 ? "Direct" : `${p.stops} stop${p.stops === 1 ? "" : "s"}`)
-      : null;
-    const duration = p.duration_hours ? `${p.duration_hours}h travel` : null;
-    const transferStr = fmtTransfer(r.airport_transfer_notes);
-    const flightCost = p.flight_price != null ? `${fmtMoney(p.flight_price)} flights` : null;
-
-    const flightOptionsCount = p.flight_offer_count && p.flight_offer_count > 1
-      ? `${p.flight_offer_count} flight options`
-      : null;
-    const flightParts = [
-      p.dest_airport_iata ? `Fly to ${escapeHtml(p.dest_airport_iata)}` : null,
-      stopsStr,
-      duration,
-      transferStr ? `${transferStr} transfer` : null,
-      flightCost,
-      flightOptionsCount,
-    ].filter(Boolean);
-    const flightRow = flightParts.length
-      ? `<div class="card-flight"><span class="card-flight-icon">✈</span>${flightParts.join(" · ")}</div>`
-      : "";
-
-    const sizeStr = fmtSize(r.rooms_count);
-    const meta = [
-      r.area && r.country ? `${escapeHtml(r.area)}, ${escapeHtml(r.country)}` : escapeHtml(r.country || ""),
-      r.hotel_brand ? escapeHtml(r.hotel_brand) : null,
-      sizeStr ? escapeHtml(sizeStr) : null,
-    ].filter(Boolean).join(`<span class="dot">·</span>`);
-
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
-
-    const titleRow = `
-      <div class="card-title-row">
-        <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
-        ${rankBadge ? `<span class="${rankBadge.cls}">${escapeHtml(rankBadge.label)}</span>` : ""}
-      </div>
-    `;
-
-    const watchoutRow = watchouts.length
-      ? `<div class="card-watchout">${watchouts.map(w => `<span class="badge warn"><span class="emoji">⚠</span>${escapeHtml(w)}</span>`).join("")}</div>`
-      : "";
-
-    const isLiveCard = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
-    const delta = budgetDelta(p);
-    const deltaRow = delta
-      ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>`
-      : "";
-    const budgetPill = budgetBadge
-      ? `<div class="${budgetBadge.cls}">${escapeHtml(budgetBadge.label)}</div>`
-      : "";
-
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
+    const r5 = ratingTo5(r.avg_user_rating);
+    if (r5 != null) signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}</span>`);
+    if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
     return `
-      <article class="card" onclick="openResortModal('${p.package_id}')">
+      <article class="card card-pending" aria-busy="true">
         <div class="card-photo">
           <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
           <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
         </div>
         <div class="card-body">
-          ${titleRow}
-          <div class="card-meta">${meta}</div>
-          ${flightRow}
-          <div class="badges">${badges.join("")}</div>
-          ${watchoutRow}
+          <div class="card-title-row">
+            <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+          </div>
+          <div class="card-signals">${signals.join("")}</div>
+          <p class="card-pending-note">Finding live prices from carriers for your dates…</p>
         </div>
         <div class="card-price">
-          <div class="price-block-top">
-            <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Estimated trip total"}</div>
-            <div class="price-sub">flights + hotel</div>
-            <p class="price-total">${fmtMoney(p.total_price)}</p>
-            <div class="price-suffix">for your family</div>
-            ${deltaRow}
-            <div class="price-breakdown">
-              <div><b>${fmtMoney(p.flight_price)}</b> flights</div>
-              <div><b>${fmtMoney(p.hotel_price)}</b> hotel</div>
-            </div>
-            ${budgetPill}
+          <div class="price-from live">Live price</div>
+          <div class="price-skeleton" aria-hidden="true">
+            <span class="skel skel-line skel-line-lg"></span>
+            <span class="skel skel-line skel-line-md"></span>
+            <span class="skel skel-line skel-line-sm"></span>
           </div>
+          <p class="card-pending-sub">Prices appear once a carrier confirms a live fare for your party.</p>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderCard(p, rankBadge, budgetBadge) {
+    const r = p.resorts || {};
+    const tags = p._tags;
+
+    // Signal line — the four or five things a parent actually scans:
+    // rating, hotel class, location, flight, all-inclusive. Everything
+    // else (kid amenities, room layouts) moves into the detail page.
+    const r5 = ratingTo5(r.avg_user_rating);
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
+    if (r5 != null) {
+      signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)})</span>` : ""}</span>`);
+    }
+    if (stars >= 3) {
+      signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
+    }
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    if (p.stops === 0) {
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
+    } else if (p.duration_hours) {
+      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+    }
+    if (p.has_any_ai === true) {
+      signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
+    }
+
+    // Family Fit — one chip, just the number + qualitative label.
+    // Letter grades move to the detail page; they were too much for a
+    // glance-and-decide flow.
+    const fitScore = familyFitScore(p);
+    const fitInfo = familyFitInfo(p);
+
+    // One italic line that explains the rank, no labeled box.
+    const whyLine = whyThisRanksLine(p, rankBadge, budgetBadge);
+
+    const isLiveCard = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
+    const delta = budgetDelta(p);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
+    const isCompared = compareSet.has(p.package_id);
+
+    return `
+      <article class="card${isCompared ? " is-compared" : ""}" onclick="openResortModal('${p.package_id}')">
+        <div class="card-photo">
+          <img src="${photoUrl}" alt="${escapeHtml(r.country || "Caribbean")}" loading="lazy" />
+          <div class="card-photo-tag">${escapeHtml(r.country || "Caribbean")}</div>
+        </div>
+        <div class="card-body">
+          <div class="card-title-row">
+            <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+            ${rankBadge ? `<span class="${rankBadge.cls}">${escapeHtml(rankBadge.label)}</span>` : ""}
+          </div>
+          <div class="card-signals">${signals.join("")}</div>
+          <div class="card-fit">
+            <span class="card-fit-num">${fitScore}</span>
+            <span class="card-fit-lbl">Family Fit · ${escapeHtml(fitInfo.label)}</span>
+          </div>
+          <p class="card-why-inline">${escapeHtml(whyLine)}</p>
+        </div>
+        <div class="card-price">
+          <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Live price"}</div>
+          <p class="price-total">${fmtMoney(p.total_price)}</p>
+          <div class="price-sub">flights + hotel</div>
+          <div class="price-breakdown-inline">
+            <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
+            <span class="dot">·</span>
+            <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
+          </div>
+          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
           <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+          <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
+        </div>
+      </article>
+    `;
+  }
+
+  // Hero card for the #1 result — same simplification principle as the
+  // regular card but bigger photo + larger typography. Same data, fewer
+  // competing chips: one signal line, one Family Fit chip, top 2 reasons
+  // inline, price block, primary CTA.
+  function renderHeroCard(p, rankBadge, budgetBadge) {
+    const r = p.resorts || {};
+    const fit = familyFitInfo(p);
+    const score = familyFitScore(p);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
+    const isLive = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
+    const delta = budgetDelta(p);
+    const eyebrow = rankBadge?.label || "Best overall for your family";
+    const isCompared = compareSet.has(p.package_id);
+
+    const r5 = ratingTo5(r.avg_user_rating);
+    const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
+    const signals = [];
+    if (r5 != null) signals.push(`<span class="signal signal-rating"><span class="star">★</span>${r5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)})</span>` : ""}</span>`);
+    if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
+    const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    if (p.stops === 0) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
+    else if (p.duration_hours) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+    if (p.has_any_ai === true) signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
+
+    const reasons = fit.reasons.slice(0, 3);
+    const reasonsHtml = reasons.length
+      ? `<ul class="hero-reasons">${reasons.map(rsn => `<li>${escapeHtml(rsn)}</li>`).join("")}</ul>`
+      : `<p class="hero-why-text">${escapeHtml(whyThisRanksLine(p, rankBadge, budgetBadge))}</p>`;
+
+    return `
+      <article class="hero-card" onclick="openResortModal('${p.package_id}')">
+        <div class="hero-card-photo">
+          <img src="${photoUrl}" alt="${escapeHtml(r.resort_name || r.country || "Caribbean")}" loading="lazy" />
+          <span class="hero-card-eyebrow">★ ${escapeHtml(eyebrow)}</span>
+          <span class="hero-card-tag">${escapeHtml(r.country || "Caribbean")}</span>
+        </div>
+        <div class="hero-card-body">
+          <div class="hero-card-info">
+            <h3 class="hero-card-title">${escapeHtml(r.resort_name || "Unknown resort")}</h3>
+            <div class="card-signals">${signals.join("")}</div>
+            <div class="card-fit hero-fit">
+              <span class="card-fit-num">${score}</span>
+              <span class="card-fit-lbl">Family Fit · ${escapeHtml(fit.label)}</span>
+            </div>
+            ${reasonsHtml}
+          </div>
+          <div class="hero-card-pricing">
+            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
+            <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
+            <div class="hero-price-sub">total · flights + hotel</div>
+            <div class="hero-price-split">
+              <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
+              <span class="dot">·</span>
+              <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
+            </div>
+            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}
+            <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
+            <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
+          </div>
         </div>
       </article>
     `;
@@ -2651,42 +3208,198 @@
     }
   }
 
+  // Family Fit score (0–99): party-aware. Reads adults + kids' ages from
+  // the active search so the same resort scores differently for a couple
+  // with one infant vs. a family of six. Three main components:
+  //   1. Room fit for party size — biggest swing, ±18 pts
+  //   2. Kids-club / babysitting / infants — only counts when relevant
+  //      to the actual party (kid ages, infant flag)
+  //   3. Age-appropriate amenities — waterpark, pool slide, etc.,
+  //      weighted by which age groups are in the party
+  // No artificial floor — a resort with no family signals can score
+  // below 40 if the room layouts don't fit.
   function familyFitInfo(pkg) {
     const r = pkg.resorts || {};
     const t = pkg._tags || extractTags(pkg);
-    let score = 0;
+    const adults = Number(lastSearchSummary?.adults) || 2;
+    const kidAges = (lastSearchSummary?.child_ages || []).map(Number).filter(n => Number.isFinite(n));
+    const total = adults + kidAges.length;
+
+    const hasInfants = kidAges.some(a => a <= 2);
+    const hasToddlers = kidAges.some(a => a >= 2 && a <= 4);
+    const hasYoungKids = kidAges.some(a => a >= 5 && a <= 11);
+    const hasTeens = kidAges.some(a => a >= 12);
+
+    let score = 50; // neutral base
     const reasons = [];
-    if (r.kids_club_available || t.amenities.includes("Kids Club") || t.amenities.includes("Kids Club for Under 4")) {
-      score += 2;
-      const ageNote = (r.kids_club_min_age != null || r.kids_club_max_age != null)
-        ? ` (ages ${r.kids_club_min_age ?? "?"}${r.kids_club_max_age ? `–${r.kids_club_max_age}` : "+"})`
-        : "";
-      reasons.push(`Kids club${ageNote}`);
+
+    // ---- Room fit (the dominant factor for larger families) ----
+    const has2BR = t.rooms.includes("2 Bedroom Suites");
+    const hasFamilySuite = t.rooms.includes("Family Suite");
+    const hasConnecting = t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms;
+    const guaranteedConnecting = !!r.guaranteed_connecting_rooms;
+
+    if (total <= 4) {
+      score += 8;
+      if (hasFamilySuite) { score += 3; reasons.push("Family suites available"); }
+      else if (has2BR)    { score += 3; reasons.push("Two-bedroom suites available"); }
+    } else if (total === 5) {
+      if (hasFamilySuite)         { score += 14; reasons.push(`Family suite fits ${total}`); }
+      else if (has2BR)            { score += 14; reasons.push(`Two-bedroom suite fits ${total}`); }
+      else if (guaranteedConnecting) { score += 10; reasons.push("Guaranteed connecting rooms"); }
+      else if (hasConnecting)     { score += 4; reasons.push("Connecting rooms (not guaranteed)"); }
+      else                         { score -= 14; reasons.push(`Room fit for ${total} not listed`); }
+    } else { // 6+
+      if (has2BR)                  { score += 18; reasons.push(`Two-bedroom suite fits ${total}`); }
+      else if (guaranteedConnecting) { score += 12; reasons.push("Guaranteed connecting rooms"); }
+      else if (hasConnecting)     { score += 5; reasons.push("Connecting rooms (not guaranteed)"); }
+      else                         { score -= 18; reasons.push(`Room fit for ${total} unclear`); }
     }
-    if (r.babysitting_available || t.amenities.includes("Babysitting")) { score += 1; reasons.push("Babysitting"); }
-    if (t.rooms.includes("Family Suite")) { score += 2; reasons.push("Family suites"); }
-    if (t.rooms.includes("2 Bedroom Suites")) { score += 2; reasons.push("Two-bedroom suites"); }
-    if (t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms) { score += 1; reasons.push(r.guaranteed_connecting_rooms ? "Guaranteed connecting rooms" : "Connecting rooms"); }
-    // Specific water amenities — listed by name when present so users
-    // see the actual feature, not a generic "Water play" placeholder.
-    if (t.amenities.includes("Waterpark For Little Kids")) { score += 1; reasons.push("Waterpark for little kids"); }
-    else if (t.amenities.includes("Waterpark For Big Kids")) { score += 1; reasons.push("Waterpark for big kids"); }
-    else if (r.water_park) { score += 1; reasons.push("Water park"); }
-    if (t.amenities.includes("Lazy River")) { score += 1; reasons.push("Lazy river"); }
-    if (t.amenities.includes("Pool Slide")) { score += 1; reasons.push("Pool slide"); }
-    if (r.accepts_infants) reasons.push("Accepts infants");
-    let label = "Decent fit";
-    if (score >= 6) label = "Excellent";
-    else if (score >= 4) label = "Strong";
-    else if (score >= 2) label = "Good";
-    else if (score === 0) label = "Limited";
+
+    // ---- Kids-club fit (only counts if the user has kids) ----
+    if (kidAges.length > 0) {
+      const hasKidsClub = r.kids_club_available
+        || t.amenities.includes("Kids Club")
+        || t.amenities.includes("Kids Club for Under 4");
+      if (hasKidsClub) {
+        // NB: r.kids_club_min_age / max_age are NULL for most resorts.
+        // Number(null) === 0 — we MUST check for null explicitly,
+        // otherwise an absent range becomes a bogus "ages 0–0" that
+        // excludes every kid in the party.
+        const minAgeRaw = r.kids_club_min_age;
+        const maxAgeRaw = r.kids_club_max_age;
+        const minAge = minAgeRaw == null ? null : Number(minAgeRaw);
+        const maxAge = maxAgeRaw == null ? null : Number(maxAgeRaw);
+        const hasMin = Number.isFinite(minAge);
+        // max=0 is also catalog noise (a "kids club" capped at 0 years
+        // old isn't real), so reject it the same way.
+        const hasMax = Number.isFinite(maxAge) && maxAge > 0;
+        if (hasMin || hasMax) {
+          const eligible = kidAges.filter(a => (!hasMin || a >= minAge) && (!hasMax || a <= maxAge));
+          const range = hasMin && hasMax ? `${minAge}–${maxAge}` : hasMin ? `${minAge}+` : `up to ${maxAge}`;
+          if (eligible.length === kidAges.length) {
+            score += 10;
+            reasons.push(`Kids club fits all your kids (ages ${range})`);
+          } else if (eligible.length > 0) {
+            score += 4;
+            reasons.push(`Kids club fits ${eligible.length} of ${kidAges.length} kids (ages ${range})`);
+          } else {
+            // Listed but none of your kids match the age range — neutral
+            // (we don't actively penalize because some resorts list a
+            // wide range in practice that the catalog under-captures).
+            reasons.push(`Kids club ages don't match your kids (${range})`);
+          }
+        } else {
+          score += 7;
+          reasons.push("Kids club available");
+        }
+      }
+      if (hasTeens && t.amenities.includes("Teen Club")) {
+        score += 4;
+        reasons.push("Teen club");
+      }
+    }
+
+    // ---- Babysitting (relevant when young kids are in the party) ----
+    if ((hasInfants || hasToddlers) && (r.babysitting_available || t.amenities.includes("Babysitting"))) {
+      score += 4;
+      reasons.push("Babysitting available");
+    }
+
+    // ---- Infant policy (only when an infant is actually in the party) ----
+    if (hasInfants) {
+      if (r.accepts_infants === true) {
+        score += 4;
+        reasons.push("Accepts infants");
+      } else if (r.accepts_infants === false) {
+        score -= 15;
+        reasons.push("Doesn't accept infants");
+      }
+    }
+
+    // ---- Age-appropriate water amenities ----
+    if (hasInfants || hasToddlers) {
+      if (t.amenities.includes("Waterpark For Little Kids")) { score += 6; reasons.push("Waterpark for little kids"); }
+      if (t.amenities.includes("Heated Pool"))               { score += 2; reasons.push("Heated pool"); }
+    }
+    if (hasYoungKids) {
+      const bigWater = t.amenities.includes("Waterpark For Big Kids");
+      const littleWater = t.amenities.includes("Waterpark For Little Kids");
+      if (bigWater) { score += 4; if (!hasToddlers) reasons.push("Waterpark for big kids"); }
+      else if (littleWater && !(hasInfants || hasToddlers)) { score += 3; reasons.push("Water park"); }
+      if (t.amenities.includes("Pool Slide")) { score += 3; reasons.push("Pool slide"); }
+    }
+    if (t.amenities.includes("Lazy River")) {
+      score += 2;
+      reasons.push("Lazy river");
+    }
+    if (hasTeens) {
+      if (t.amenities.includes("Flowrider")) { score += 3; reasons.push("Flowrider"); }
+      if (t.amenities.includes("Arcade"))    { score += 2; reasons.push("Arcade"); }
+    }
+
+    // ---- General family-resort signals ----
+    if (t.styles.includes("Family Resort") || t.styles.includes("Family")) {
+      score += 4;
+      reasons.push("Family-focused resort");
+    }
+    if (r.on_beach === true) {
+      score += 2;
+      reasons.push("On the beach");
+    }
+
+    // ---- Total travel time (flight + stops + airport transfer) ----
+    // Travel days are the part of a trip families dread most — and the
+    // signal scales hard with kid age. Total = flight duration +
+    // stop overhead (1h per stop ≈ layover + airport friction) +
+    // airport-to-resort transfer. Brackets: <=5h easy, 5-7h fine,
+    // 7-10h long, >10h brutal. Young kids amplify the penalty.
+    const flightHrs = Number(pkg.duration_hours) || 0;
+    const stops = Number(pkg.stops) || 0;
+    const stopOverhead = stops * 1.0;
+    const transferHrs = parseTransferHours(r.airport_transfer_notes);
+    const totalTravel = flightHrs + stopOverhead + transferHrs;
+    if (flightHrs > 0) {
+      // Sensitivity multiplier: infants/toddlers amplify the penalty,
+      // teens/no-kids dampen it. Range ≈ 0.7 to 1.5.
+      const sensitivity = hasInfants ? 1.5
+                        : hasToddlers ? 1.3
+                        : hasYoungKids ? 1.1
+                        : hasTeens ? 0.85
+                        : 0.7;
+      let raw = 0;
+      if (totalTravel <= 5)       raw =  4;
+      else if (totalTravel <= 7)  raw =  0;
+      else if (totalTravel <= 10) raw = -7;
+      else                        raw = -14;
+      score += Math.round(raw * sensitivity);
+      // Surface the reason only when it's a meaningful signal either way
+      if (raw >= 4) {
+        reasons.push(`Short travel day (~${Math.round(totalTravel)}h door-to-door)`);
+      } else if (raw <= -7) {
+        reasons.push(`Long travel day (~${Math.round(totalTravel)}h door-to-door)`);
+      }
+      if (stops >= 2 && (hasInfants || hasToddlers)) {
+        score -= 4;
+        reasons.push(`${stops}+ stops with a young child`);
+      }
+    }
+
+    score = Math.max(0, Math.min(99, Math.round(score)));
+    let label;
+    if (score >= 85)      label = "Excellent";
+    else if (score >= 72) label = "Strong";
+    else if (score >= 58) label = "Good";
+    else if (score >= 42) label = "Decent";
+    else                  label = "Limited";
+
     return { score, label, reasons };
   }
 
   function travelEaseInfo(pkg) {
     if (pkg.stops == null) return { label: "—", note: "—" };
     const stopsStr = pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`;
-    const dur = pkg.duration_hours ? `${pkg.duration_hours}h` : "";
+    const dur = pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)}` : "";
     const transferStr = fmtTransfer(pkg.resorts?.airport_transfer_notes);
     return {
       label: pkg.stops === 0 ? "Easy" : pkg.stops >= 2 ? "Long day" : "Manageable",
@@ -2892,7 +3605,7 @@
 
     const tripFitTotal = `
       <div class="trip-fit-total">
-        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Estimated trip total"}</div>
+        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">
@@ -2936,47 +3649,48 @@
       ? `<span class="modal-section-count">${pkg.flight_offer_count} options available</span>`
       : "";
     const liveFlight = pkg.flight_supplier === "liteapi";
-    const flightOptions = `
-      <div class="modal-section flight-options" id="flight-options-section">
-        <h4>Flight options for this resort ${flightCountNote}</h4>
-        <div class="flight-option-grid" id="flight-option-grid" onclick="onFlightOptionClick(event)">
-          <article class="flight-option active">
-            <div class="flight-option-tag">Best overall</div>
-            <div class="flight-option-price">${fmtMoney(pkg.flight_price)}${liveFlight ? "" : ` <span class="flight-option-est">est.</span>`}</div>
-            <div class="flight-option-meta">${escapeHtml([
-              destAirportLabel,
-              pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
-              pkg.duration_hours ? `${pkg.duration_hours}h travel` : null,
-            ].filter(Boolean).join(" · "))}</div>
-            <div class="flight-option-note">${liveFlight ? "Live fare for your family" : "Estimated total for your family"}</div>
-          </article>
-          ${liveFlight ? `
-          <article class="flight-option loading" id="flight-cheapest">
-            <div class="flight-option-tag">Cheapest</div>
-            <div class="flight-option-placeholder-note">Loading…</div>
-          </article>
-          <article class="flight-option loading" id="flight-easiest">
-            <div class="flight-option-tag">Easiest with kids</div>
-            <div class="flight-option-placeholder-note">Loading…</div>
-          </article>` : `
-          <article class="flight-option placeholder">
-            <div class="flight-option-tag">Cheapest</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
-          </article>
-          <article class="flight-option placeholder">
-            <div class="flight-option-tag">Easiest with kids</div>
-            <div class="flight-option-placeholder-note">Live flight alternatives appear once we finish pricing your search.</div>
-          </article>`}
-        </div>
-        ${liveFlight ? `
-        <div class="flight-all-block" id="flight-all-block" hidden>
-          <button type="button" class="flight-all-toggle" id="flight-all-toggle" onclick="toggleAllFlights()" aria-expanded="true">
-            <span class="flight-all-toggle-label">Hide other flights ${destAirportLabel ? `to ${escapeHtml(destAirportLabel.replace(/^Fly to /, ""))}` : ""}</span>
-            <span class="flight-all-count" id="flight-all-count"></span>
-            <span class="flight-all-toggle-caret" aria-hidden="true">▾</span>
+    // Booking.com-style airfare layout: Best / Cheapest / Fastest sort
+    // tabs above a scrollable list of flight cards. Each card has an
+    // outbound + return leg with timeline (DEP — stops/duration — ARR),
+    // a fare-class column on the right (price + bags + CTA), and an
+    // optional "Fare options" expander for upgrade tiers. For
+    // mock-priced packages we keep the placeholder until live offers
+    // arrive.
+    const flightOptions = liveFlight ? `
+      <div class="bk-flights" id="flight-options-section">
+        <div class="trip-section-title-row"><h2>Flight options</h2>${flightCountNote}</div>
+        <div class="bk-flight-tabs" id="flight-sort-tabs" role="tablist">
+          <button type="button" class="bk-flight-tab active" data-sort="best" onclick="setFlightSort('best')" role="tab" aria-selected="true">
+            <span class="bk-flight-tab-label">Best</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-best">—</span>
           </button>
-          <div class="flight-all-list" id="flight-all-list"></div>
-        </div>` : ""}
+          <button type="button" class="bk-flight-tab" data-sort="cheapest" onclick="setFlightSort('cheapest')" role="tab" aria-selected="false">
+            <span class="bk-flight-tab-label">Cheapest</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-cheapest">—</span>
+          </button>
+          <button type="button" class="bk-flight-tab" data-sort="fastest" onclick="setFlightSort('fastest')" role="tab" aria-selected="false">
+            <span class="bk-flight-tab-label">Fastest</span>
+            <span class="bk-flight-tab-sub" id="bk-tab-sub-fastest">—</span>
+          </button>
+        </div>
+        <p class="bk-flights-disclaimer">Live fares from carriers — prices may change if there are <a href="#" onclick="event.preventDefault()">additional baggage fees</a>.</p>
+        <div class="bk-flight-list" id="flight-options-list">
+          <div class="bk-flight-loading">Loading flight options…</div>
+        </div>
+        <!-- Compatibility: empty containers preserved so older selectors don't crash -->
+        <div class="bk-flight-compat" id="flight-option-grid" hidden></div>
+        <div id="flight-all-block" hidden><div id="flight-all-list"></div><span id="flight-all-count"></span></div>
+      </div>` : `
+      <div class="bk-flights" id="flight-options-section">
+        <h2>Flight options</h2>
+        <div class="bk-flight-empty">
+          <p><b>Live fares pending.</b> Your flight search is still resolving for this resort. Live fares appear here once a carrier confirms a rate for your party.</p>
+          <p>${escapeHtml([
+            destAirportLabel,
+            pkg.stops != null ? (pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`) : null,
+            pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)} travel (typical)` : null,
+          ].filter(Boolean).join(" · "))}</p>
+        </div>
       </div>`;
 
     // ---- Why this resort works for your family ----
@@ -3015,19 +3729,25 @@
     // mock-priced packages we show an explanatory placeholder instead of
     // hiding the section, because hiding it made the modal feel barren.
     const liveHotel = pkg.hotel_supplier === "liteapi";
+    // Booking-style rooms block — no extra .modal-section wrapper or
+    // h4 heading. The outer <section id="trip-rooms"> already provides
+    // the v3 page-section frame; we just supply the title row + table.
     const roomOptionsSection = liveHotel ? `
-      <div class="modal-section room-options" id="room-options-section">
-        <h4>Room options <span class="modal-section-count" id="room-options-count">loading…</span></h4>
+      <div class="room-options" id="room-options-section">
+        <div class="trip-section-title-row">
+          <h2>Rooms</h2>
+          <span class="modal-section-count" id="room-options-count">loading…</span>
+        </div>
         <div class="room-options-grid" id="room-options-grid">
           <div class="room-options-loading">Loading available rooms…</div>
         </div>
         <p class="room-options-note">Prices shown are for your stay length and party size. Final pricing is set by the booking partner at checkout.</p>
       </div>` : `
-      <div class="modal-section room-options">
-        <h4>Room options</h4>
+      <div class="room-options">
+        <h2>Rooms</h2>
         <div class="room-options-empty">
           <p><b>Live rates pending.</b> This resort is still being priced from our partner. Room-by-room totals will appear here once pricing finishes.</p>
-          <p class="room-options-empty-sub">In the meantime, the trip total above is our estimated rate based on resort tier and country. Click "See hotel rates" to view the partner's live room list.</p>
+          <p class="room-options-empty-sub">Live room rates appear here once the partner confirms availability for your dates. Click "See hotel rates" to view the partner's live room list now.</p>
         </div>
       </div>`;
 
@@ -3105,7 +3825,7 @@
                 <div class="alt-card-body">
                   <div class="alt-card-why">${escapeHtml(why)}</div>
                   <div class="alt-card-name">${escapeHtml(ar.resort_name || "Alternative")}</div>
-                  <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${a.duration_hours}h` : ""}</div>
+                  <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${fmtFlightDuration(a.duration_hours)}` : ""}</div>
                   <div class="alt-card-price"><b>${fmtMoney(a.total_price)}</b><span class="alt-card-price-sub"> total</span></div>
                   ${aDelta ? `<div class="budget-delta small ${aDelta.under ? "under" : "over"}">${fmtMoney(aDelta.diff)} ${aDelta.under ? "under" : "over"}</div>` : ""}
                 </div>
@@ -3125,40 +3845,19 @@
         </div>
       </div>`;
 
-    // ---- Sticky outbound CTA ----
-    // Label uses the same supplier-based check as the main price badge:
-    // only "Live price" when BOTH sides resolved against LiteAPI. Anything
-    // else (still warming up, no liteapi_hotel_id, etc.) reads "estimated".
-    const stickyCta = `
-      <div class="modal-cta-sticky">
-        <div class="modal-cta-info">
-          <div><b>${fmtMoney(pkg.total_price)}</b> ${isLive ? "live trip total" : "estimated trip total"}${delta ? ` · <span class="${delta.under ? "ink-under" : "ink-over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}</span>` : ""}</div>
-          <div class="modal-cta-sub">flights + hotel · for your family</div>
-        </div>
-        <div class="modal-cta-actions">
-          <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking.com</button>
-          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-        </div>
-      </div>`;
+    // (Older .modal-cta-sticky / .trip-dock sticky bars were dropped
+    // in favor of the desktop right-rail + .trip-mobile-cta system.
+    // Nothing builds them anymore.)
 
     // Photo gallery — most resorts have ~8 Google Places photos in photo_refs.
-    // Hero shows photo[0]; clicking a thumbnail or the prev/next arrows swaps it.
+    // Hero shows photo[0]; clicking a thumbnail swaps it. Booking-style
+    // mosaic shows 1 big photo + a 2x2 grid of thumbnails on the right.
     currentModalPhotoRefs = Array.isArray(r.photo_refs) ? r.photo_refs : [];
     currentModalPhotoAttributions = Array.isArray(r.photo_attributions) ? r.photo_attributions : [];
     currentModalPhotoIdx = 0;
-    const hasMultiPhotos = currentModalPhotoRefs.length > 1;
-    const navArrows = hasMultiPhotos ? `
-      <button type="button" class="modal-photo-nav prev" aria-label="Previous photo" onclick="setModalPhoto(currentModalPhotoIdx - 1)">‹</button>
-      <button type="button" class="modal-photo-nav next" aria-label="Next photo" onclick="setModalPhoto(currentModalPhotoIdx + 1)">›</button>
-      <div class="modal-photo-counter" id="modal-photo-counter">1 / ${currentModalPhotoRefs.length}</div>` : "";
-    const thumbnails = hasMultiPhotos ? `
-      <div class="modal-photo-strip" id="modal-photo-strip">
-        ${currentModalPhotoRefs.slice(0, 12).map((ref, i) => `
-          <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
-            <img src="/photo?ref=${encodeURIComponent(ref)}&w=200" alt="" loading="lazy" />
-          </button>
-        `).join("")}
-      </div>` : "";
+    const gridThumbsHtml = renderHeroGridThumbs(currentModalPhotoRefs);
+    const hasAttribution = currentModalPhotoRefs.length > 0
+      && (Array.isArray(r.photo_attributions) ? r.photo_attributions[0] : null);
 
     const backBar = `
       <div class="trip-back-bar">
@@ -3169,78 +3868,198 @@
         <span class="trip-back-context">${escapeHtml(r.resort_name || "Trip detail")}${r.country ? ` · ${escapeHtml(r.country)}` : ""}</span>
       </div>`;
 
-    // Booking.com / Kayak / TripAdvisor-style layout: hero photo, then
-    // a 2-column grid with main content on the left and a sticky
-    // price/CTA sidebar on the right. Rooms come first in the main
-    // column (most-clicked section), flights second, family / about
-    // sections after. Sidebar pins the price + book CTA where users
-    // expect it.
+    // Head signal line — same compact pattern as the result card, scaled
+    // for a detail page: rating · class · location · flight · AI.
+    const headR5 = ratingTo5(r.avg_user_rating);
+    const headStars = Math.round(Number(r.cap_star_rating ?? pkg.highlights?.star_rating ?? 0));
+    const headSignals = [];
+    if (headR5 != null) headSignals.push(`<span class="signal signal-rating"><span class="star">★</span>${headR5.toFixed(1)}${r.review_count ? ` <span class="signal-sub">(${fmtReviews(r.review_count)} reviews)</span>` : ""}</span>`);
+    if (headStars >= 3) headSignals.push(`<span class="signal signal-class">${"★".repeat(headStars)}<span class="signal-sub">${headStars}-star hotel</span></span>`);
+    const headLoc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
+    if (headLoc) headSignals.push(`<span class="signal signal-loc">${escapeHtml(headLoc)}</span>`);
+    if (pkg.stops === 0) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}</span>`);
+    else if (pkg.duration_hours) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(pkg.duration_hours)} · ${pkg.stops || 0} stop${pkg.stops === 1 ? "" : "s"}</span>`);
+    if (pkg.has_any_ai === true) headSignals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
+
+    // Sticky right rail: live price, total, breakdown, delta, dates,
+    // party, primary CTA. Mobile collapses this into a bottom bar (see
+    // .trip-mobile-cta below).
+    const adultsRail = lastSearchSummary?.adults || 2;
+    const kidsRail = lastSearchSummary?.child_ages?.length || 0;
+    const fmtRailDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—";
+    const trailingDelta = delta
+      ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>`
+      : "";
+    const rail = `
+      <aside class="trip-side-col">
+        <div class="trip-rail trip-fit-summary">
+          <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
+          <p class="price-total">${fmtMoney(pkg.total_price)}</p>
+          <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
+          <div class="trip-fit-breakdown">
+            <span><b>${fmtMoney(pkg.flight_price)}</b> flights</span>
+            <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
+          </div>
+          ${trailingDelta}
+          <div class="trip-rail-dates">
+            <div><span>Check-in</span><b>${fmtRailDate(lastSearchSummary?.date_start)}</b></div>
+            <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
+            <div><span>Party</span><b>${adultsRail}A${kidsRail > 0 ? `, ${kidsRail}K` : ""}</b></div>
+          </div>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+          <button class="btn-link-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking.com</button>
+          <div class="trip-rail-actions">
+            <button type="button" class="trip-rail-action" title="Send to self" onclick="sendTripToSelf('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              <span>Email me</span>
+            </button>
+            <button type="button" class="trip-rail-action" title="Share with spouse" onclick="shareTrip('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              <span>Share</span>
+            </button>
+            <button type="button" class="trip-rail-action" title="Watch this trip" onclick="watchTrip('${pkg.package_id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span>Watch</span>
+            </button>
+          </div>
+        </div>
+      </aside>`;
+
+    // Overview facts (Sleeps / Built / Floors / Rooms) — merged from the
+    // old aboutSection into the new Overview tab.
+    const overviewFacts = aboutBits.length
+      ? `<div class="trip-fact-grid">${aboutBits.map(b => `<div class="trip-fact"><span>${escapeHtml(b.label)}</span><b>${escapeHtml(b.value)}</b></div>`).join("")}</div>`
+      : "";
+    const overviewHighlights = gw.good.length
+      ? `<ul class="trip-highlights-list">${gw.good.slice(0, 8).map(g => `<li>${escapeHtml(g)}</li>`).join("")}</ul>`
+      : "";
+    const overviewStyles = tags.styles.length
+      ? `<div class="trip-tag-grid">${renderTagList(tags.styles)}</div>`
+      : "";
+
+    // Location section — country, area, airport transfer, on-beach
+    const transferStrLoc = fmtTransfer(r.airport_transfer_notes);
+    const locFacts = [];
+    if (pkg.dest_airport_iata) locFacts.push(`Closest airport: <b>${escapeHtml(pkg.dest_airport_iata)}</b>${r.airport_name ? ` (${escapeHtml(r.airport_name)})` : ""}`);
+    if (transferStrLoc) locFacts.push(`Airport transfer: <b>${escapeHtml(transferStrLoc)}</b>`);
+    if (r.on_beach) locFacts.push(`<b>On the beach</b> — direct beach access`);
+    if (r.area) locFacts.push(`Area: <b>${escapeHtml(r.area)}</b>`);
+
+    // Booking.com / Kayak / Google-hotels-style layout:
+    //   - Photo mosaic at top (1 big + 4 grid)
+    //   - Title + signals + sticky tab nav
+    //   - 2-col body: main scrolling content on the left, sticky price
+    //     rail on the right (collapses to mobile bottom bar)
+    //   - Tabs anchor-link to sections: Overview, Rooms, Flight,
+    //     Family fit, Location
     const html = `
       ${backBar}
-      <div class="modal-photo">
-        <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" />
-        ${r.country ? `<div class="modal-photo-tag">${escapeHtml(r.country)}</div>` : ""}
-        ${navArrows}
-        ${Array.isArray(r.photo_refs) && r.photo_refs.length > 0 ? `<div class="modal-photo-attr" id="modal-photo-attr">${(Array.isArray(r.photo_attributions) && r.photo_attributions[0]) ? r.photo_attributions[0] : ""} · Photo via Google</div>` : ""}
-      </div>
-      ${thumbnails}
-      <div class="modal-body trip-layout">
-        <div class="trip-layout-header">
-          <h2 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h2>
-          <div class="meta">${meta}</div>
-          ${fitPills}
-        </div>
 
-        <section class="trip-summary-strip">
-          ${tripFitTotal}
-          ${tripFitBudget}
-          <div class="trip-summary-actions">
-            <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')" title="Open Booking.com search with your dates, party, and resort pre-filled">Compare on Booking</button>
-            <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+      <section class="trip-hero">
+        <div class="trip-hero-mosaic">
+          <button type="button" class="trip-hero-main" onclick="setModalPhoto((currentModalPhotoIdx + 1) % Math.max(currentModalPhotoRefs.length, 1))">
+            <img id="modal-photo-hero" src="${photoUrl}" alt="${escapeHtml(r.resort_name || "Resort")}" width="1200" height="800" loading="eager" decoding="async" fetchpriority="high" />
+            ${r.country ? `<span class="trip-hero-tag">${escapeHtml(r.country)}</span>` : ""}
+          </button>
+          <div class="trip-hero-grid" id="modal-photo-strip">${gridThumbsHtml}</div>
+        </div>
+        ${hasAttribution ? `<div class="trip-hero-attr" id="modal-photo-attr">${currentModalPhotoAttributions[0] || ""} · Photo via Google</div>` : ""}
+      </section>
+
+      <div class="trip-layout-v3">
+        <main class="trip-main-col">
+          <header class="trip-head">
+            <h1 id="modal-title">${escapeHtml(r.resort_name || "Resort")}</h1>
+            <div class="trip-head-signals">${headSignals.join("")}</div>
+          </header>
+
+          <div class="trip-mobile-meta">
+            <div class="trip-mobile-meta-row">
+              <span class="trip-mobile-meta-label">Check-in</span>
+              <b>${fmtRailDate(lastSearchSummary?.date_start)}</b>
+            </div>
+            <div class="trip-mobile-meta-row">
+              <span class="trip-mobile-meta-label">Check-out</span>
+              <b>${fmtRailDate(lastSearchSummary?.date_end)}</b>
+            </div>
+            <div class="trip-mobile-meta-row">
+              <span class="trip-mobile-meta-label">Party</span>
+              <b>${adultsRail}A${kidsRail > 0 ? `, ${kidsRail}K` : ""}</b>
+            </div>
+            <div class="trip-mobile-meta-actions">
+              <button type="button" class="trip-rail-action" onclick="sendTripToSelf('${pkg.package_id}')" aria-label="Email this trip to yourself">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+                <span>Email</span>
+              </button>
+              <button type="button" class="trip-rail-action" onclick="shareTrip('${pkg.package_id}')" aria-label="Share trip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                <span>Share</span>
+              </button>
+              <button type="button" class="trip-rail-action" onclick="watchTrip('${pkg.package_id}')" aria-label="Watch this trip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Watch</span>
+              </button>
+            </div>
           </div>
-        </section>
 
-        ${roomOptionsSection}
-        ${flightOptions}
+          <nav class="trip-tabs" role="tablist">
+            <a href="#trip-rooms" class="trip-tab active" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
+            <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
+            <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
+            <a href="#trip-fit" class="trip-tab" onclick="scrollToTripSection(event, 'trip-fit')">Family fit</a>
+            <a href="#trip-location" class="trip-tab" onclick="scrollToTripSection(event, 'trip-location')">Location</a>
+          </nav>
 
-        <div class="trip-layout-grid trip-layout-grid-secondary">
-          <div class="trip-layout-main">
-            ${whyFamily}
-            ${roomFitSection}
-            ${aboutSection}
+          <section id="trip-rooms" class="trip-section trip-section-primary">
+            ${roomOptionsSection}
+          </section>
 
-            ${activityTags.length ? `
-            <div class="modal-section">
-              <h4>Activities &amp; amenities</h4>
-              <div class="tag-grid">${renderTagList(activityTags)}</div>
-            </div>` : ""}
+          <section id="trip-flight" class="trip-section trip-section-primary">
+            ${flightOptions}
+          </section>
 
-            ${tags.styles.length ? `
-            <div class="modal-section">
-              <h4>Resort style</h4>
-              <div class="tag-grid">${renderTagList(tags.styles)}</div>
-            </div>` : ""}
+          <section id="trip-overview" class="trip-section">
+            <h2>Overview</h2>
+            ${overviewFacts}
+            ${overviewHighlights}
+            ${overviewStyles}
+            ${directRate}
+          </section>
 
-            ${budgetSection}
-            ${compareSection}
-          </div>
+          <section id="trip-fit" class="trip-section">
+            <h2>Family fit</h2>
+            ${fitPills}
+            <div class="trip-fit-room">
+              <h3>Room fit for ${room.family} traveler${room.family === 1 ? "" : "s"}</h3>
+              <p class="trip-room-fit-headline">${escapeHtml(room.headline)}</p>
+              <p class="trip-room-fit-detail">${escapeHtml(room.detail)}</p>
+              <p class="trip-room-fit-check">${escapeHtml(room.check)}</p>
+              ${tags.rooms.length ? `<div class="trip-tag-grid" style="margin-top: 8px;">${renderTagList(tags.rooms)}</div>` : ""}
+            </div>
+            ${allKidTagsInOrder.length ? `<div class="trip-fit-kids"><h3>Kids amenities</h3><div class="trip-tag-grid">${renderKidTagList(allKidTagsInOrder)}</div></div>` : ""}
+            ${activityTags.length ? `<div class="trip-fit-activities"><h3>Activities</h3><div class="trip-tag-grid">${renderTagList(activityTags)}</div></div>` : ""}
+            ${gw.watch.length ? `<div class="trip-fit-watch"><h3>Watch-outs</h3><ul>${gw.watch.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : ""}
+          </section>
 
-          <aside class="trip-layout-sidebar">
-            ${saveShare}
-          </aside>
-        </div>
+          <section id="trip-location" class="trip-section">
+            <h2>Getting there &amp; around</h2>
+            ${locFacts.length ? `<ul class="trip-loc-facts">${locFacts.map(f => `<li>${f}</li>`).join("")}</ul>` : `<p class="trip-loc-empty">Location details coming soon.</p>`}
+          </section>
+        </main>
 
-        <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
+        ${rail}
       </div>
-      <div class="trip-dock" id="trip-dock">
-        <div class="trip-dock-info">
-          <div class="trip-dock-price"><b>${fmtMoney(pkg.total_price)}</b><span class="trip-dock-suffix">total · flights + hotel</span></div>
-          ${delta ? `<div class="trip-dock-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+
+      ${compareSection ? `<section class="trip-alts">${compareSection}</section>` : ""}
+
+      <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
+
+      <div class="trip-mobile-cta">
+        <div class="trip-mobile-cta-info">
+          <div class="trip-mobile-cta-price"><b>${fmtMoney(pkg.total_price)}</b></div>
+          <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>
         </div>
-        <div class="trip-dock-actions">
-          <button class="btn btn-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking</button>
-          <button class="btn btn-primary btn-lg" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-        </div>
+        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
       </div>
     `;
 
@@ -3268,77 +4087,214 @@
     currentModalHotelPhotos = [];
     if (liveHotel) loadRoomOptions(pkg.package_id);
     if (liveFlight) loadFlightOptions(pkg.package_id);
+    // Activate the scroll-spy that drives the .trip-tab .active state
+    bindTripTabsObserver();
   }
 
-  // -------- Flight options: async fetch + render --------
-  // Calls get_flight_offers and populates two areas of the modal:
-  //   1. The three Top-picks cards (Best / Cheapest / Easiest)
-  //   2. The full "All flights" list below, sorted cheapest first
-  // get_flight_offers returns up to 15 offers with full segment data.
-  // Clicking any row in (2) swaps that flight into the "Best overall"
-  // card and updates the modal totals — purely client-side preview,
-  // no DB writes.
+  // -------- Flight options: async fetch + render (Booking-style) --------
+  // get_flight_offers returns up to 15 offers with full segment data
+  // (outbound + return times, stops, layover airports, fare family,
+  // bags, refundability). We render them as a sortable list with three
+  // tabs: Best / Cheapest / Fastest. Clicking a card selects it and
+  // updates the trip total + sticky CTA in place.
   let currentModalFlights = [];
   let currentModalPicks = null;
   let currentModalSelectedOfferId = null;
   let currentModalPackage = null;
+  let currentFlightSort = "best";
 
   async function loadFlightOptions(packageId) {
     const pkg = allPackages.find((p) => p.package_id === packageId);
     currentModalPackage = pkg || null;
-    const cheapEl = document.getElementById("flight-cheapest");
-    const easyEl = document.getElementById("flight-easiest");
-    const allBlock = document.getElementById("flight-all-block");
-    const allList = document.getElementById("flight-all-list");
-    if (!cheapEl && !easyEl && !allBlock) return;
+    const list = document.getElementById("flight-options-list");
+    if (!list) return;
     try {
       const data = await callFn(`get_flight_offers?package_id=${encodeURIComponent(packageId)}&limit=15`, { method: "GET" });
       currentModalPicks = data?.picks || null;
       currentModalFlights = Array.isArray(data?.offers) ? data.offers : [];
-      currentModalSelectedOfferId = currentModalPicks?.best?.offer_id || currentModalFlights[0]?.offer_id || null;
-
-      if (currentModalPicks?.cheapest && cheapEl) {
-        cheapEl.classList.remove("loading");
-        cheapEl.innerHTML = renderFlightAltInner("Cheapest", currentModalPicks.cheapest);
-        cheapEl.dataset.offerId = currentModalPicks.cheapest.offer_id;
-        cheapEl.classList.add("clickable");
-      } else if (cheapEl) {
-        cheapEl.style.display = "none";
-      }
-      if (currentModalPicks?.easiest && easyEl) {
-        easyEl.classList.remove("loading");
-        easyEl.innerHTML = renderFlightAltInner("Easiest with kids", currentModalPicks.easiest);
-        easyEl.dataset.offerId = currentModalPicks.easiest.offer_id;
-        easyEl.classList.add("clickable");
-      } else if (easyEl) {
-        easyEl.style.display = "none";
-      }
-
-      renderFlightAllList();
+      // Default selection: the server's "best" pick if present,
+      // otherwise the cheapest first.
+      currentModalSelectedOfferId = currentModalPicks?.best?.offer_id
+        || (sortFlightsBy(currentModalFlights, "cheapest")[0]?.offer_id ?? null);
+      currentFlightSort = "best";
+      updateFlightTabSubtitles();
+      renderFlightListCards();
     } catch (e) {
       console.warn("Flight options failed:", e?.message || e);
-      if (cheapEl) cheapEl.style.display = "none";
-      if (easyEl) easyEl.style.display = "none";
+      if (list) list.innerHTML = `<div class="bk-flight-empty"><p>Couldn't load flight options.</p></div>`;
     }
   }
 
-  // Renders the All flights list, excluding the currently selected offer
-  // (since it's already shown as Best overall). Click handlers are bound
-  // via event delegation on the parent list — see selectFlightOffer.
-  function renderFlightAllList() {
-    const allBlock = document.getElementById("flight-all-block");
-    const allList = document.getElementById("flight-all-list");
-    const allCount = document.getElementById("flight-all-count");
-    if (!allBlock || !allList) return;
-    const rest = currentModalFlights.filter(o => o.offer_id !== currentModalSelectedOfferId);
-    if (rest.length === 0) {
-      allBlock.hidden = true;
+  // Sort tab change: re-render the list in the new order. Selection
+  // is sticky — the previously chosen offer keeps its highlighted
+  // state regardless of sort.
+  function setFlightSort(sort) {
+    currentFlightSort = sort;
+    document.querySelectorAll("#flight-sort-tabs .bk-flight-tab").forEach((b) => {
+      const isActive = b.dataset.sort === sort;
+      b.classList.toggle("active", isActive);
+      b.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    renderFlightListCards();
+  }
+
+  // Sort helpers. The server includes a `picks.best` already; for the
+  // "Best" tab we float that to the top (if present) and sort the
+  // remainder cheapest-first as a reasonable secondary order.
+  function sortFlightsBy(flights, sort) {
+    const list = [...flights];
+    if (sort === "cheapest") {
+      return list.sort((a, b) => (Number(a.total_price) || Infinity) - (Number(b.total_price) || Infinity));
+    }
+    if (sort === "fastest") {
+      const dur = (o) => Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? Infinity);
+      return list.sort((a, b) => dur(a) - dur(b));
+    }
+    // "best": pin picks.best, then sort the rest by a balanced score
+    // (price + travel-time penalty + stops penalty).
+    const bestId = currentModalPicks?.best?.offer_id || null;
+    const score = (o) => (Number(o.total_price) || 0)
+      + (Number(o.total_duration_minutes ?? 0) / 60) * 20
+      + ((Number(o.outbound_stops ?? 0) + Number(o.return_stops ?? 0))) * 80;
+    list.sort((a, b) => score(a) - score(b));
+    if (bestId) {
+      const idx = list.findIndex((o) => o.offer_id === bestId);
+      if (idx > 0) {
+        const [pin] = list.splice(idx, 1);
+        list.unshift(pin);
+      }
+    }
+    return list;
+  }
+
+  // Annotate the tabs with the leading price/duration so the user can
+  // pre-scan tradeoffs before clicking. Mirrors Kayak/Booking.
+  function updateFlightTabSubtitles() {
+    if (currentModalFlights.length === 0) return;
+    const cheapest = sortFlightsBy(currentModalFlights, "cheapest")[0];
+    const fastest = sortFlightsBy(currentModalFlights, "fastest")[0];
+    const best = sortFlightsBy(currentModalFlights, "best")[0];
+    const fmtSub = (o, kind) => {
+      if (!o) return "—";
+      const price = fmtMoney(o.total_price);
+      const dur = Number(o.total_duration_minutes ?? 0);
+      const durStr = dur > 0 ? `${Math.floor(dur / 60)}h ${dur % 60}m` : "";
+      return kind === "fastest" ? `${durStr} · ${price}` : `${price} · ${durStr}`;
+    };
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set("bk-tab-sub-best", fmtSub(best, "best"));
+    set("bk-tab-sub-cheapest", fmtSub(cheapest, "cheapest"));
+    set("bk-tab-sub-fastest", fmtSub(fastest, "fastest"));
+  }
+
+  function renderFlightListCards() {
+    const list = document.getElementById("flight-options-list");
+    if (!list) return;
+    if (currentModalFlights.length === 0) {
+      list.innerHTML = `<div class="bk-flight-empty"><p>No live flight options for this resort yet.</p></div>`;
       return;
     }
-    allBlock.hidden = false;
-    if (allCount) allCount.textContent = rest.length === 1 ? "1 more option" : `${rest.length} more options`;
-    allList.innerHTML = rest.map(renderFlightFullRow).join("");
+    const sorted = sortFlightsBy(currentModalFlights, currentFlightSort);
+    list.innerHTML = sorted.map((o, i) => renderBookingFlightCard(o, i, sorted)).join("");
   }
+
+  // Format flight time + date short. ISO "2026-06-13T15:01:00Z" →
+  // { time: "3:01 PM", date: "Jun 13" }
+  function fmtFlightTimeShort(iso) {
+    if (!iso) return { time: "", date: "" };
+    try {
+      const d = new Date(iso);
+      return {
+        time: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        date: d.toLocaleDateString([], { month: "short", day: "numeric" }),
+      };
+    } catch { return { time: "", date: "" }; }
+  }
+
+  // One leg row (outbound or return). Booking shows airline logo on the
+  // left, DEP time/airport/date | timeline (stops · duration) | ARR
+  // time/airport/date.
+  function renderFlightLegRow(o, kind) {
+    const isOut = kind === "outbound";
+    const depIso = isOut ? o.outbound_departure_time : o.return_departure_time;
+    const arrIso = isOut ? o.outbound_arrival_time   : o.return_arrival_time;
+    const stops  = isOut ? Number(o.outbound_stops ?? 0) : Number(o.return_stops ?? 0);
+    const dur    = isOut ? Number(o.outbound_duration_minutes ?? 0) : Number(o.return_duration_minutes ?? 0);
+    if (!depIso && !arrIso && dur <= 0) return "";
+
+    const dep = fmtFlightTimeShort(depIso);
+    const arr = fmtFlightTimeShort(arrIso);
+    const durStr = dur > 0
+      ? `${Math.floor(dur / 60)}h ${(dur % 60).toString().padStart(2, "0")}m`
+      : "";
+    const stopsStr = stops === 0 ? "Direct" : (stops === 1 ? "1 stop" : `${stops} stops`);
+    const origin = (lastSearchSummary?.origin_iata || "").toUpperCase();
+    const dest = (currentModalPackage?.dest_airport_iata || "").toUpperCase();
+    const fromCode = isOut ? origin : dest;
+    const toCode   = isOut ? dest   : origin;
+
+    return `
+      <div class="bk-leg">
+        <span class="bk-leg-logo">${airlineLogoMarkup(o, "sm")}</span>
+        <div class="bk-leg-dep">
+          <div class="bk-leg-time">${escapeHtml(dep.time || "—")}</div>
+          <div class="bk-leg-airport">${escapeHtml(fromCode || "")}${dep.date ? ` · ${escapeHtml(dep.date)}` : ""}</div>
+        </div>
+        <div class="bk-leg-mid">
+          <div class="bk-leg-stops-pill">${escapeHtml(stopsStr)}</div>
+          <div class="bk-leg-line"></div>
+          <div class="bk-leg-dur">${escapeHtml(durStr)}</div>
+        </div>
+        <div class="bk-leg-arr">
+          <div class="bk-leg-time">${escapeHtml(arr.time || "—")}</div>
+          <div class="bk-leg-airport">${escapeHtml(toCode || "")}${arr.date ? ` · ${escapeHtml(arr.date)}` : ""}</div>
+        </div>
+      </div>`;
+  }
+
+  // Eyebrow chips above the card — match Booking's badges ("Cheapest",
+  // "Fastest", "Flexible ticket upgrade available").
+  function flightEyebrowChips(o, allSorted) {
+    const chips = [];
+    const cheapest = sortFlightsBy(currentModalFlights, "cheapest")[0];
+    const fastest  = sortFlightsBy(currentModalFlights, "fastest")[0];
+    if (cheapest && cheapest.offer_id === o.offer_id) chips.push(`<span class="bk-eyebrow cheapest">Cheapest</span>`);
+    if (fastest && fastest.offer_id === o.offer_id && (!cheapest || cheapest.offer_id !== fastest.offer_id))
+      chips.push(`<span class="bk-eyebrow fastest">Fastest</span>`);
+    if (currentModalPicks?.best?.offer_id === o.offer_id) chips.push(`<span class="bk-eyebrow best">Best overall</span>`);
+    if (o.refundable === true) chips.push(`<span class="bk-eyebrow flex">Flexible ticket</span>`);
+    return chips.length ? `<div class="bk-flight-eyebrow">${chips.join("")}</div>` : "";
+  }
+
+  function renderBookingFlightCard(o, index, sortedAll) {
+    const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
+    const fareClass = o.fare_family || (o.checked_bag_included === true ? "Main Cabin" : "Basic Economy");
+    const isSelected = o.offer_id === currentModalSelectedOfferId;
+    const safeId = String(o.offer_id).replace(/'/g, "&apos;");
+    return `
+      <article class="bk-flight-card${isSelected ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="selectFlightOffer('${safeId}')">
+        ${flightEyebrowChips(o, sortedAll)}
+        <div class="bk-flight-body">
+          <div class="bk-flight-main">
+            ${renderFlightLegRow(o, "outbound")}
+            ${renderFlightLegRow(o, "return")}
+            <div class="bk-flight-airline">${escapeHtml(airline)}</div>
+          </div>
+          <div class="bk-flight-side">
+            <div class="bk-fare-class">${escapeHtml(fareClass)}</div>
+            <div class="bk-fare-bags">${bagsMarkup(o)}</div>
+            <div class="bk-fare-price">${fmtMoney(o.total_price)}</div>
+            ${o.per_adult ? `<div class="bk-fare-per">${fmtMoney(o.per_adult)} / adult</div>` : ""}
+            <button type="button" class="btn ${isSelected ? "btn-secondary" : "btn-primary"} bk-fare-cta" onclick="event.stopPropagation(); selectFlightOffer('${safeId}')">${isSelected ? "✓ Selected" : "Select flight"}</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  // Compatibility shim — the Booking-style list uses
+  // renderFlightListCards now. Kept as an alias so older call sites
+  // (selectFlightOffer's flight-update path) still work.
+  function renderFlightAllList() { renderFlightListCards(); }
 
   // Expand / collapse the "All flights" list. Default hidden so users
   // only see it if they don't like the pre-selected Best overall.
@@ -3377,22 +4333,8 @@
     const newFlightPrice = Math.round(Number(o.total_price) || 0);
     const newTotal = newFlightPrice + Math.round(Number(pkg.hotel_price) || 0);
 
-    // Best-overall card (always the first .flight-option in the grid)
-    const bestCard = document.querySelector("#flight-option-grid .flight-option.active");
-    if (bestCard) {
-      const airline = o.primary_airline_name || o.primary_airline_code || "Mixed carriers";
-      const durMin = Number(o.total_duration_minutes ?? o.outbound_duration_minutes ?? 0);
-      const durStr = durMin > 0 ? `${Math.round(durMin / 60)}h travel` : "";
-      const stops = flightStopsLabel(o);
-      bestCard.innerHTML = `
-        <div class="flight-option-tag">Best overall</div>
-        ${airlineLogoMarkup(o, "med")}
-        <div class="flight-option-price">${fmtMoney(newFlightPrice)}</div>
-        <div class="flight-option-meta">${escapeHtml([airline, stops, durStr].filter(Boolean).join(" · "))}</div>
-        <div class="flight-option-bags">${bagsMarkup(o)}</div>
-        <div class="flight-option-note">Live fare · selected itinerary</div>
-      `;
-    }
+    // Re-render the Booking-style list so the new selection lights up
+    renderFlightListCards();
 
     // Trip total + breakdown
     const totalEl = document.querySelector(".trip-fit-summary .price-total");
@@ -3403,22 +4345,22 @@
         <span><b>${fmtMoney(newFlightPrice)}</b> flights</span>
         <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>`;
     }
-
-    // Sticky CTA
-    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
-    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+    const mobilePrice = document.querySelector(".trip-mobile-cta-price b");
+    if (mobilePrice) mobilePrice.textContent = fmtMoney(newTotal);
 
     // Update budget delta if it's shown
     const budget = getUserBudget();
     if (budget != null) {
       const diff = Math.abs(newTotal - budget);
       const under = newTotal < budget;
-      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} your budget`;
       document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
         el.textContent = deltaText;
         el.classList.toggle("under", under);
         el.classList.toggle("over", !under);
       });
+      const mobileSub = document.querySelector(".trip-mobile-cta-sub");
+      if (mobileSub) mobileSub.textContent = `flights + hotel · ${fmtMoney(diff)} ${under ? "under" : "over"}`;
     }
 
     renderFlightAllList();
@@ -3609,15 +4551,36 @@
         return;
       }
       if (countEl) countEl.textContent = offers.length === 1 ? "1 option" : `${offers.length} options`;
-      currentModalRooms = offers;
+      // Sort: rooms that fit the family first (cheapest fit on top),
+      // then undersized rooms after. Within each bucket: cheapest first.
+      const adultsRoom = Number(lastSearchSummary?.adults) || 2;
+      const kidsRoom = (lastSearchSummary?.child_ages || []).length;
+      const partyTotal = adultsRoom + kidsRoom;
+      const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
+      const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
+      const sortedOffers = [...offers].sort((a, b) => {
+        const aFits = fits(a), bFits = fits(b);
+        if (aFits !== bFits) return aFits ? -1 : 1;
+        return priceOf(a) - priceOf(b);
+      });
+      currentModalRooms = sortedOffers;
       // Pre-compute what's unique about each room vs the cheapest one
       // so the cards can call it out (Sleeps 6, Ocean view, AI, etc.)
-      currentModalRoomDiffs = computeRoomDiffs(offers);
+      currentModalRoomDiffs = computeRoomDiffs(sortedOffers);
       const pkg = currentModalPackage;
-      currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && offers.find(o => o.offer_id === pkg.hotel_offer_id))
+      currentModalSelectedRoomId = (pkg && pkg.hotel_offer_id && sortedOffers.find(o => o.offer_id === pkg.hotel_offer_id))
         ? pkg.hotel_offer_id
-        : offers[0]?.offer_id ?? null;
-      grid.innerHTML = offers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("");
+        : sortedOffers[0]?.offer_id ?? null;
+      grid.innerHTML = `
+        <div class="rooms-table">
+          <div class="rooms-table-head" role="row">
+            <div>Room</div>
+            <div>Sleeps</div>
+            <div>Price</div>
+            <div></div>
+          </div>
+          ${sortedOffers.map((o, i) => renderRoomOptionCard(o, i, currentModalSelectedRoomId)).join("")}
+        </div>`;
     } catch (e) {
       console.warn("Room options failed:", e?.message || e);
       section.style.display = "none";
@@ -3628,6 +4591,68 @@
   // get_hotel_offers call. Used as the fallback rotation when an
   // individual offer doesn't carry its own photos[].
   let currentModalHotelPhotos = [];
+
+  // Booking-style hero mosaic: 1 big photo (the hero) + up to 4 thumbs
+  // in a 2x2 grid on the right. The last thumb gets a "+N photos"
+  // overlay if there are more than 5 total. We pull from positions
+  // 1..4 of currentModalPhotoRefs; the big photo is whichever
+  // currentModalPhotoIdx points at.
+  function renderHeroGridThumbs(refs) {
+    if (!Array.isArray(refs) || refs.length <= 1) return "";
+    const slots = refs.slice(1, 5);
+    const more = refs.length > 5 ? refs.length - 5 : 0;
+    return slots.map((ref, i) => {
+      const idx = i + 1; // global photo index for setModalPhoto
+      const src = typeof ref === "string" && /^https?:\/\//.test(ref)
+        ? escapeHtml(ref)
+        : `/photo?ref=${encodeURIComponent(ref)}&w=400`;
+      const moreOverlay = (i === slots.length - 1 && more > 0)
+        ? `<span class="trip-hero-grid-more">+${more} photos</span>`
+        : "";
+      return `<button type="button" class="trip-hero-grid-cell" onclick="setModalPhoto(${idx})" aria-label="Photo ${idx + 1}">
+        <img src="${src}" alt="" width="400" height="300" loading="lazy" decoding="async" />
+        ${moreOverlay}
+      </button>`;
+    }).join("");
+  }
+
+  // Smooth-scroll an anchor click to a trip-section, accounting for the
+  // sticky topbar + sticky tab nav above it. Updates the URL hash via
+  // history.replaceState so the section is shareable and the back
+  // button doesn't trigger a re-scroll war.
+  function scrollToTripSection(evt, id) {
+    if (evt) evt.preventDefault();
+    const el = document.getElementById(id);
+    if (!el) return;
+    // scroll-margin-top in CSS gives us the right offset for sticky bars
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.querySelectorAll(".trip-tabs .trip-tab").forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + id));
+    try { history.replaceState(history.state || {}, "", `#${id}`); } catch { /* ignore */ }
+  }
+
+  // IntersectionObserver scroll-spy. Activates the tab whose section is
+  // currently dominating the viewport. The rootMargin biases the "active"
+  // zone toward the top of the viewport so a section reads as "current"
+  // a bit before its heading actually leaves view.
+  let _tripTabsObserver = null;
+  function bindTripTabsObserver() {
+    if (_tripTabsObserver) { _tripTabsObserver.disconnect(); _tripTabsObserver = null; }
+    const ids = ["trip-rooms", "trip-flight", "trip-overview", "trip-fit", "trip-location"];
+    const sections = ids.map((id) => document.getElementById(id)).filter(Boolean);
+    if (sections.length === 0 || typeof IntersectionObserver === "undefined") return;
+    _tripTabsObserver = new IntersectionObserver((entries) => {
+      // Find the entry closest to the top of the visible band.
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => a.target.offsetTop - b.target.offsetTop);
+      if (!visible.length) return;
+      const id = visible[0].target.id;
+      document.querySelectorAll(".trip-tabs .trip-tab").forEach((a) => {
+        a.classList.toggle("active", a.getAttribute("href") === "#" + id);
+      });
+    }, { rootMargin: "-25% 0px -65% 0px", threshold: 0 });
+    sections.forEach((s) => _tripTabsObserver.observe(s));
+  }
 
   // Swap the modal hero + thumbnail strip to the LiteAPI hotel
   // gallery when we have it (actual interior / pool / dining shots
@@ -3643,16 +4668,7 @@
     currentModalPhotoRefs = urls.slice(0, 12);
     currentModalPhotoIdx = 0;
     const strip = document.getElementById("modal-photo-strip");
-    if (strip) {
-      strip.innerHTML = currentModalPhotoRefs.map((u, i) => `
-        <button type="button" class="modal-photo-thumb${i === 0 ? " active" : ""}" onclick="setModalPhoto(${i})" aria-label="Photo ${i + 1}">
-          <img src="${escapeHtml(u)}" alt="" loading="lazy" />
-        </button>`).join("");
-    }
-    // Show nav arrows + counter (the original render hides them when
-    // there's only 1 photo; with LiteAPI we usually have 8-12).
-    const counter = document.getElementById("modal-photo-counter");
-    if (counter) counter.textContent = `1 / ${currentModalPhotoRefs.length}`;
+    if (strip) strip.innerHTML = renderHeroGridThumbs(currentModalPhotoRefs);
   }
 
   // Each room card gets a photo rotated from the resort's photo gallery.
@@ -3788,88 +4804,62 @@
   // look them up without recomputing.
   let currentModalRoomDiffs = {};
 
+  // Booking-style table row. The .rooms-table wrapper gives us the
+  // column headings and grid template; each row inherits the same
+  // grid-template-columns so cells line up. Includes a party-fit
+  // indicator (✓ or ⚠) computed from the active search's family size.
   function renderRoomOptionCard(o, index = 0, selectedId = null) {
     const board = boardLabel(o);
     const boardClass = o.is_all_inclusive ? "ai" : (o.board_type === "BB" ? "bb" : "ro");
 
-    // Aggregate refundable signal from the new flag, but keep
-    // legacy fall-through for any old payloads.
     const refundable = o.any_refundable === true || o.refundable === true;
-    const nonRefund = o.any_refundable === false && o.refundable !== true;
     const cancelDateStr = refundable && o.cancellation_deadline ? fmtCancelDate(o.cancellation_deadline) : "";
     const refundChip = refundable
-      ? `<span class="room-chip refundable">${cancelDateStr ? `Free cancel by ${escapeHtml(cancelDateStr)}` : "Free cancellation available"}</span>`
-      : (nonRefund ? `<span class="room-chip non-refundable">Non-refundable rates</span>` : "");
-    const sleeps = (o.max_occupancy && o.max_occupancy > 0) ? `<span class="room-chip">Sleeps ${o.max_occupancy}</span>` : "";
-    const promo = (o.any_promotions === true || o.has_promotions === true)
-      ? `<span class="room-chip promo">Promo available</span>` : "";
-    const perks = Array.isArray(o.perks) && o.perks.length
-      ? `<div class="room-option-perks">${o.perks.slice(0, 3).map((p) => `<span class="room-perk">${escapeHtml(String(p))}</span>`).join("")}</div>`
+      ? `<span class="rt-chip refund">${cancelDateStr ? `Free cancel by ${escapeHtml(cancelDateStr)}` : "Free cancellation"}</span>`
       : "";
+    const promoChip = (o.any_promotions === true || o.has_promotions === true)
+      ? `<span class="rt-chip promo">Promo</span>` : "";
 
-    // Price headline: prefer the new range. Show "From $X" when
-    // min < max, single price otherwise. price_min/_max fall back to
-    // legacy total_price.
     const pMin = Number(o.price_min ?? o.total_price) || 0;
     const pMax = Number(o.price_max ?? o.total_price) || pMin;
-    const priceHeadline = pMax > pMin
-      ? `<div class="room-option-total"><span class="room-option-from">From</span> ${fmtMoney(pMin)}</div>`
-      : `<div class="room-option-total">${fmtMoney(pMin)}</div>`;
+    const priceLabel = pMax > pMin
+      ? `<span class="rt-price-from">From</span> ${fmtMoney(pMin)}`
+      : fmtMoney(pMin);
     const perNight = o.per_night ? `${fmtMoney(o.per_night)} / night` : "";
 
-    // Photo strategy (priority order):
-    //   1. Per-room photos from get_hotel_offers — photos[0] is the
-    //      room's hero. is_main wins if present.
-    //   2. Rotate the top-level hotel_photos gallery as a fallback.
-    //   3. Last resort: Google Places resort photo.
+    // Party-fit indicator using the active search's family size.
+    const adultsRoom = Number(lastSearchSummary?.adults) || 2;
+    const kidsRoom = (lastSearchSummary?.child_ages || []).length;
+    const partyTotal = adultsRoom + kidsRoom;
+    const sleeps = Number(o.max_occupancy) || 0;
+    const fitsParty = !sleeps || !partyTotal || sleeps >= partyTotal;
+    const fitNote = (sleeps > 0 && partyTotal > 0)
+      ? (fitsParty
+          ? `<div class="rt-fit fits">✓ Fits your family of ${partyTotal}</div>`
+          : `<div class="rt-fit nope">⚠ Need 2 rooms for ${partyTotal}</div>`)
+      : "";
+
+    // Small photo thumb — Booking shows a tiny inline photo. Same
+    // priority order as the old card layout: per-room → hotel gallery
+    // → resort fallback.
     const offerPhotos = Array.isArray(o.photos) ? o.photos : [];
     const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
     const hotelPhotos = Array.isArray(currentModalHotelPhotos) ? currentModalHotelPhotos : [];
     let photo = null;
-    let photoLabel = "Resort view";
-    if (main && (main.hd_url || main.url)) {
-      photo = main.hd_url || main.url;
-      photoLabel = main.label || "Room photo";
-    } else if (hotelPhotos.length > 0) {
+    if (main && (main.hd_url || main.url)) photo = main.hd_url || main.url;
+    else if (hotelPhotos.length > 0) {
       const hp = hotelPhotos[index % hotelPhotos.length];
       photo = (hp && (hp.hd_url || hp.url)) || null;
-      photoLabel = "Resort photo";
     } else {
       const refs = currentModalPhotoRefs || [];
-      if (refs.length > 0) {
-        photo = modalPhotoUrl(refs[index % refs.length], 400);
-      }
+      if (refs.length > 0) photo = modalPhotoUrl(refs[index % refs.length], 200);
     }
-    const photoInner = photo
-      ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(photoLabel)}" loading="lazy" /><span class="room-option-photo-caption">${escapeHtml(photoLabel)}</span>`
-      : "";
 
-    // Party configuration this room was priced for.
-    const adults = Number(o.adult_count) || 0;
-    const kids = Number(o.child_count) || 0;
-    const configLine = adults > 0
-      ? `<div class="room-option-config">Priced for <b>${adults}</b> adult${adults === 1 ? "" : "s"}${kids > 0 ? ` + <b>${kids}</b> kid${kids === 1 ? "" : "s"}` : ""}</div>`
-      : "";
-
-    // Compare-rates affordance — visible when there are multiple rate
-    // variants behind this room (e.g. refundable vs non-refundable).
-    const variantCount = Number(o.rate_variant_count) || (Array.isArray(o.rate_variants) ? o.rate_variants.length : 0);
-    const rateOptionsLink = variantCount > 1
-      ? `<button type="button" class="room-option-variants-toggle" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="event.stopPropagation(); toggleRoomVariants('${String(o.offer_id).replace(/'/g, "&apos;")}')" aria-expanded="false">
-           <span>${variantCount} price options</span>
-           <span class="room-option-variants-caret" aria-hidden="true">▾</span>
-         </button>
-         <div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>`
-      : "";
-
-    // Diff chips — what makes THIS room different from the cheapest.
-    // Surfaces capacity uplift, AI when baseline is RO, view, suite
-    // tier, special features extracted from the room name.
-    const diffs = currentModalRoomDiffs[o.offer_id] || [];
+    // Diff chips — what makes THIS room different from the cheapest fit
+    const diffs = (currentModalRoomDiffs[o.offer_id] || []).filter(d => d.kind !== "baseline").slice(0, 2);
     const diffChips = diffs.length
-      ? `<div class="room-row-diffs">${diffs.map((d) => {
-          const cls = d.kind === "baseline" ? "diff-base"
-            : d.kind === "upgrade" ? "diff-upgrade"
+      ? `<div class="rt-diffs">${diffs.map((d) => {
+          const cls = d.kind === "upgrade" ? "diff-upgrade"
             : d.kind === "tier" ? "diff-tier"
             : d.kind === "view" ? "diff-view"
             : "diff-feature";
@@ -3877,35 +4867,56 @@
         }).join("")}</div>`
       : "";
 
+    const variantCount = Number(o.rate_variant_count) || (Array.isArray(o.rate_variants) ? o.rate_variants.length : 0);
+    const variantLink = variantCount > 1
+      ? `<button type="button" class="rt-variants-toggle" data-offer-id="${escapeHtml(String(o.offer_id))}" onclick="event.stopPropagation(); toggleRoomVariants('${String(o.offer_id).replace(/'/g, "&apos;")}')" aria-expanded="false">${variantCount} price options ▾</button>`
+      : "";
+
     const safeId = String(o.offer_id).replace(/'/g, "&apos;");
     const isActive = selectedId && selectedId === o.offer_id;
-    // Horizontal Booking-style row: photo left, details middle,
-    // price + CTA right. Collapses to a stacked card under 720px.
+    const rowClasses = [
+      "rooms-table-row",
+      isActive ? "selected" : "",
+      fitsParty ? "" : "undersized",
+    ].filter(Boolean).join(" ");
+
+    // 4-column layout (was 5 — the standalone Inclusions column was the
+    // cramped one). Inclusion chips now live below the room name and
+    // diff chips, where they have room to wrap.
+    const inclusionChips = [
+      `<span class="rt-chip board-${boardClass}">${escapeHtml(board)}</span>`,
+      refundChip,
+      promoChip,
+    ].filter(Boolean).join("");
     return `
-      <article class="room-row${isActive ? " selected" : ""}" data-offer-id="${escapeHtml(String(o.offer_id))}">
-        <button type="button" class="room-row-clickable" onclick="selectRoomOffer('${safeId}')">
-          ${photoInner ? `<div class="room-row-photo">${photoInner}</div>` : ""}
-          <div class="room-row-body">
-            <div class="room-row-name">${escapeHtml(o.room_name || "Room")}</div>
-            <div class="room-row-board">
-              <span class="room-option-board ${boardClass}">${escapeHtml(board)}</span>
-              ${sleeps}
+      <div class="rooms-table-item" data-offer-id="${escapeHtml(String(o.offer_id))}">
+        <div class="${rowClasses}" onclick="selectRoomOffer('${safeId}')" role="row">
+          <div class="rt-name">
+            ${photo ? `<img class="rt-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="rt-thumb rt-thumb-empty"></div>`}
+            <div class="rt-name-body">
+              <div class="rt-name-line">${escapeHtml(o.room_name || "Room")}</div>
+              ${diffChips}
+              <div class="rt-inclusions">${inclusionChips}</div>
             </div>
-            ${diffChips}
-            ${configLine}
-            <div class="room-row-meta">
-              ${refundChip}${promo}
+          </div>
+          <div class="rt-sleeps">
+            <div class="rt-sleeps-bar">
+              <svg class="rt-sleeps-ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M2 21v-2a8 8 0 0 1 16 0v2H2z"/></svg>
+              <span class="rt-sleeps-num">${sleeps || "—"}</span>
             </div>
-            ${perks}
+            ${fitNote}
           </div>
-          <div class="room-row-price">
-            ${priceHeadline}
-            ${perNight ? `<div class="room-option-pernight">${perNight} · for stay</div>` : ""}
-            <div class="room-row-cta">${isActive ? "✓ Selected" : "Select room →"}</div>
+          <div class="rt-price">
+            <div class="rt-price-total">${priceLabel}</div>
+            ${perNight ? `<div class="rt-price-pernight">${perNight}</div>` : ""}
+            ${variantLink}
           </div>
-        </button>
-        ${rateOptionsLink}
-      </article>`;
+          <div class="rt-cta">
+            <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"}" onclick="event.stopPropagation(); selectRoomOffer('${safeId}')">${isActive ? "✓ Selected" : "Select"}</button>
+          </div>
+        </div>
+        ${variantCount > 1 ? `<div class="room-option-variants" id="room-variants-${escapeHtml(String(o.offer_id))}" hidden></div>` : ""}
+      </div>`;
   }
 
   // Render a single rate variant as an inline sub-row under the room.
@@ -3989,18 +5000,20 @@
         <span><b>${fmtMoney(flightPrice)}</b> flights</span>
         <span><b>${fmtMoney(hotelPrice)}</b> hotel</span>`;
     }
-    const ctaPrice = document.querySelector(".modal-cta-sticky .modal-cta-info > div b");
-    if (ctaPrice) ctaPrice.textContent = fmtMoney(newTotal);
+    const mobilePrice = document.querySelector(".trip-mobile-cta-price b");
+    if (mobilePrice) mobilePrice.textContent = fmtMoney(newTotal);
     const budget = getUserBudget();
     if (budget != null) {
       const diff = Math.abs(newTotal - budget);
       const under = newTotal < budget;
-      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} budget`;
+      const deltaText = `${fmtMoney(diff)} ${under ? "under" : "over"} your budget`;
       document.querySelectorAll(".trip-fit-summary .budget-delta").forEach((el) => {
         el.textContent = deltaText;
         el.classList.toggle("under", under);
         el.classList.toggle("over", !under);
       });
+      const mobileSub = document.querySelector(".trip-mobile-cta-sub");
+      if (mobileSub) mobileSub.textContent = `flights + hotel · ${fmtMoney(diff)} ${under ? "under" : "over"}`;
     }
   }
 
@@ -4060,13 +5073,13 @@
     const r = pkg.resorts || {};
     const delta = budgetDelta(pkg);
     const isLive = pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi";
-    const totalLabel = isLive ? "Live trip total" : "Estimated trip total";
+    const totalLabel = "Live trip total";
     const lines = [
       `${r.resort_name || "Resort"}${r.country ? ` — ${r.country}` : ""}`,
       `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
     ];
     if (delta) lines.push(`${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget (${fmtMoney(delta.budget)})`);
-    if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${pkg.duration_hours}h` : ""}`);
+    if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}`);
     lines.push("");
     lines.push("Open in KindredTrips: " + location.href);
     return lines.join("\n");

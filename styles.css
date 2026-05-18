@@ -75,6 +75,22 @@
   --s-16: 64px;
   --s-20: 80px;
   --s-24: 96px;
+
+  /* Sticky-stack contract — one place to change the heights. Used by
+   * .topbar, .trip-back-bar, .trip-tabs, and .trip-section's
+   * scroll-margin-top so anchor jumps land below all stacked bars. */
+  --topbar-h: 60px;
+  --back-bar-h: 48px;
+  --tabs-h: 46px;
+  --stack-tabs-top: calc(var(--topbar-h) + var(--back-bar-h));
+  --stack-section-anchor: calc(var(--topbar-h) + var(--back-bar-h) + var(--tabs-h) + 8px);
+}
+@media (max-width: 720px) {
+  :root {
+    --topbar-h: 52px;
+    --back-bar-h: 44px;
+    --tabs-h: 42px;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -1978,6 +1994,529 @@ details.rank-explainer > p {
   font-weight: 500;
   margin-bottom: var(--s-2);
 }
+.empty-fixes {
+  margin-top: var(--s-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+}
+.empty-fixes-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.empty-fixes-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 540px;
+}
+.empty-fix-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  color: var(--ink-1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, transform 0.05s;
+}
+.empty-fix-btn:hover { background: var(--bg-soft); border-color: var(--ink-3); }
+.empty-fix-btn:active { transform: translateY(1px); }
+.empty-fix-btn::before {
+  content: "×";
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+/* ---------- Sticky search-summary header ---------- */
+.results-header {
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  background: rgba(252, 251, 247, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-4) var(--s-5);
+  margin-bottom: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+@media (max-width: 980px) {
+  .results-header { top: 56px; padding: 12px 14px; }
+}
+/* While the big pricing widget is up, drop the sticky behavior + the
+ * inline refreshing-prices banner so the two status surfaces don't
+ * stack at the top of the page. */
+body.kt-pricing-active .results-header { position: static; }
+body.kt-pricing-active .results-header .pricing-updater { display: none !important; }
+.results-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.rh-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rh-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  background: var(--bg-soft);
+  color: var(--ink-1);
+  border: 1px solid var(--line);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.rh-chip-strong {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+  font-weight: 600;
+}
+.rh-chip-muted {
+  background: transparent;
+  color: var(--ink-3);
+  border-color: var(--line-soft);
+  font-weight: 500;
+}
+.rh-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.rh-edit:hover { background: var(--ink); color: #fff; }
+.results-header-meta {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+.rh-count {
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.rh-count b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.results-header .sort-controls {
+  font-size: 13px;
+}
+.results-header .sort-controls label {
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-size: 11px;
+}
+.results-header .sort-controls select {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Section header between hero card and the rest of the list */
+.results-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin: var(--s-6) 0 var(--s-2);
+  padding: 0 4px;
+}
+.results-list-head-label {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--ink-1);
+  letter-spacing: -0.01em;
+}
+.results-list-head-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+}
+
+/* ---------- Score row inside cards ---------- */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+  flex-wrap: wrap;
+}
+.score-fit {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+.score-fit-num {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.score-fit-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+.score-grades {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.score-grade {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.sg-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.sg-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+  border: 1px solid var(--line);
+  min-width: 24px;
+  text-align: center;
+}
+.sg-val.sg-a { background: var(--good-soft); color: var(--good); border-color: #c5e0cd; }
+.sg-val.sg-b { background: #EEF4FF; color: #2A4FB0; border-color: #D2DEFA; }
+.sg-val.sg-c { background: #FFF4E6; color: #9A6420; border-color: #F2D9B4; }
+.sg-val.sg-d { background: #FFEEE7; color: #9A4B2F; border-color: #F4CDBD; }
+
+/* "Why this ranks here" decision line */
+.card-why {
+  font-size: 13px;
+  color: var(--ink-1);
+  line-height: 1.5;
+  padding: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.card-why-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.card-why-text { color: var(--ink-1); }
+
+/* ---------- Hero card (#1 result) ---------- */
+.hero-card {
+  background: #fff;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 6px 28px rgba(13, 43, 69, 0.08);
+  transition: box-shadow 0.2s, transform 0.2s;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--s-4);
+}
+.hero-card:hover { box-shadow: 0 12px 40px rgba(13, 43, 69, 0.14); transform: translateY(-2px); }
+.hero-card-photo {
+  position: relative;
+  height: 280px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+.hero-card-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+.hero-card:hover .hero-card-photo img { transform: scale(1.03); }
+.hero-card-eyebrow {
+  position: absolute;
+  top: var(--s-4); left: var(--s-4);
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hero-card-tag {
+  position: absolute;
+  top: var(--s-4); right: var(--s-4);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  color: var(--ink-1);
+}
+.hero-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 0;
+}
+@media (max-width: 880px) {
+  .hero-card-body { grid-template-columns: 1fr; }
+  .hero-card-photo { height: 220px; }
+}
+.hero-card-info {
+  padding: var(--s-6) var(--s-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  border-right: 1px solid var(--line-soft);
+}
+@media (max-width: 880px) {
+  .hero-card-info { padding: var(--s-5); border-right: none; border-bottom: 1px solid var(--line-soft); }
+}
+.hero-card-title {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.hero-card-meta {
+  font-size: 14px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hero-score {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+  flex-wrap: wrap;
+}
+.hero-score-num {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: var(--s-4);
+  border-right: 1px solid var(--line);
+}
+.hero-score-val {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 36px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.hero-score-lbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+.hero-score-grades {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.hero-why {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+}
+.hero-why-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.hero-reasons {
+  margin: 0; padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+}
+.hero-reasons li {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  position: relative;
+  padding-left: 16px;
+  line-height: 1.4;
+}
+.hero-reasons li::before {
+  content: "✓";
+  position: absolute;
+  left: 0; top: 0;
+  color: var(--good);
+  font-weight: 700;
+}
+.hero-why-text { font-size: 13.5px; color: var(--ink-1); margin: 0; }
+.hero-flight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-1);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  align-self: flex-start;
+}
+.hero-card-pricing {
+  padding: var(--s-6) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--bg) 0%, #fff 70%);
+}
+@media (max-width: 880px) {
+  .hero-card-pricing { padding: var(--s-5); }
+}
+.hero-price-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.hero-price-eyebrow.live { color: var(--good); }
+.hero-price-eyebrow.live::after {
+  content: " ●";
+  font-size: 7px;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.hero-price-total {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 42px;
+  font-weight: 600;
+  margin: 4px 0 2px;
+  color: var(--ink);
+  letter-spacing: -0.025em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hero-price-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: var(--s-2);
+}
+.hero-price-split {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-1);
+}
+.hero-price-split b { font-weight: 600; }
+.hero-price-split .dot { color: var(--ink-4); }
+.hero-delta {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.hero-delta.under { color: #1f7d4d; }
+.hero-delta.over { color: #b15a3a; }
+.hero-cta {
+  margin-top: var(--s-4);
+  width: 100%;
+  font-size: 14px;
+  padding: 12px 18px;
+}
+
+/* Loading tip rotation */
+.pricing-progress-tip {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+  font-style: italic;
+  letter-spacing: -0.005em;
+  min-height: 18px;
+}
+.pricing-progress-tip.flash {
+  animation: tipFade 0.45s ease-out;
+}
+@keyframes tipFade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* ---------- Static pages ---------- */
 .page {
@@ -2374,8 +2913,9 @@ details.rank-explainer > p {
   .trip-dock-actions .btn-secondary { display: none; }
   .trip-dock { padding: 8px 12px; }
 }
-/* Pad the page body so the dock doesn't cover the footer note. */
-.modal-overlay.page-mode .modal-body { padding-bottom: 96px; }
+/* No more 96px dock reservation — the dock is dead. The mobile bottom
+ * CTA reserves its own space via body.trip-detail-open .site-footer
+ * { padding-bottom: 80px } (see .trip-mobile-cta media query). */
 
 /* ---------- Room rows (Booking/Kayak-style table-like list) ---------- */
 .room-options-grid {
@@ -2543,9 +3083,9 @@ details.rank-explainer > p {
  * stays accessible while the user scrolls deep into the detail. */
 .trip-back-bar {
   position: sticky;
-  top: 60px;
-  z-index: 12;
-  background: rgba(250, 250, 247, 0.92);
+  top: var(--topbar-h);
+  z-index: 40;
+  background: rgba(250, 250, 247, 0.94);
   backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   margin: 0 calc(-1 * var(--s-6));
@@ -2872,6 +3412,12 @@ details.rank-explainer > p {
   text-align: center;
   margin-top: var(--s-3);
   line-height: 1.5;
+}
+/* The fixed bottom CTA sits at z-index 60 on mobile. The footer note
+ * is a sibling above the CTA — ensure enough bottom padding on mobile
+ * so the CTA never covers the disclaimer text. */
+@media (max-width: 1000px) {
+  .modal-footer-note { padding-bottom: 88px; }
 }
 
 /* ---------- Animations ---------- */
@@ -3588,13 +4134,14 @@ body.trip-detail-open #status { display: none !important; }
 .ink-over { color: #b15a3a; font-weight: 600; }
 
 /* ---------- Modal: Room options (live rate variants) ---------- */
+/* Wrapper for the Booking-style rooms-table. The table fills the full
+ * width of the trip-main-col on its own — we just want a block-level
+ * container, NOT the legacy 2-column grid that was used by the old
+ * room-card layout (which squished the table to 50% width). */
 .room-options-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--s-3);
+  display: block;
   margin-top: var(--s-2);
 }
-@media (max-width: 640px) { .room-options-grid { grid-template-columns: 1fr; } }
 .room-options-loading {
   grid-column: 1 / -1;
   font-size: 13px;
@@ -4535,4 +5082,1719 @@ body.trip-detail-open #status { display: none !important; }
 @media (max-width: 600px) {
   .modal-cta-actions { width: 100%; flex-direction: column-reverse; }
   .modal-cta-actions .btn { width: 100%; }
+}
+
+/* ---------- Sidebar groups (named sections) ---------- */
+.sidebar-group {
+  margin-bottom: var(--s-5);
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.sidebar-group:last-of-type { border-bottom: none; }
+.sidebar-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  margin: 0 0 var(--s-2) 4px;
+}
+.sidebar-group .sidebar-block { border: none; padding: 0 0 6px; margin: 0; }
+.sidebar-group .sidebar-block + .sidebar-block { margin-top: 4px; }
+.sidebar-block.sidebar-block-flat {
+  /* Used by Must-haves / Flight ease — no <details> wrapper, just the
+   * tag rows. Keeps the named group visible above without a redundant
+   * second collapsing summary. */
+  display: block;
+  padding: 0;
+}
+.sidebar-block.sidebar-block-flat > .sidebar-block-body {
+  padding: 0;
+}
+.sidebar-group details.sidebar-block { border: none; padding: 0; }
+.sidebar-group details.sidebar-block > summary { padding: 8px 0; }
+.sidebar-group details.sidebar-block > .sidebar-block-body { padding: 0 0 var(--s-2); }
+.sidebar-group details.sidebar-block + details.sidebar-block { margin-top: 0; border-top: 1px dashed var(--line-soft); }
+
+/* ---------- View toggle (Ranked list / By destination) ---------- */
+.rh-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  padding: 2px;
+  background: #fff;
+}
+.view-toggle-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: -0.005em;
+  transition: background 0.15s, color 0.15s;
+}
+.view-toggle-btn:hover { color: var(--ink); }
+.view-toggle-btn.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+/* ---------- Destination grouping ---------- */
+.dest-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-bottom: var(--s-6);
+}
+.dest-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 0 4px var(--s-2);
+  border-bottom: 1px solid var(--line-soft);
+  margin-top: var(--s-3);
+}
+.dest-group-name {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.dest-group-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.dest-group-more {
+  text-align: center;
+  padding-top: 6px;
+}
+.dest-group-more-btn {
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  padding: 8px 16px;
+  color: var(--ink-1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.dest-group-more-btn:hover { background: var(--bg-soft); border-color: var(--ink-3); }
+
+/* ---------- Compare button on cards ---------- */
+.card-cta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  align-items: stretch;
+}
+.btn-compare {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: #fff;
+  color: var(--ink-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.btn-compare:hover { background: var(--bg-soft); border-color: var(--ink-3); }
+.btn-compare.active {
+  background: #E8F7F7;
+  color: #0D6F78;
+  border-color: #BEE8E8;
+}
+.hero-compare {
+  margin-top: 8px;
+  width: 100%;
+}
+.card.is-compared {
+  outline: 2px solid #0D6F78;
+  outline-offset: -2px;
+}
+
+/* ---------- Compare tray (bottom-sticky) ---------- */
+.compare-tray {
+  position: fixed;
+  bottom: var(--s-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  background: var(--ink);
+  color: #fff;
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 40px rgba(13, 43, 69, 0.30);
+  max-width: 980px;
+  width: calc(100% - var(--s-8));
+}
+.compare-tray-inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--s-4);
+  align-items: center;
+  padding: 12px 16px;
+}
+@media (max-width: 720px) {
+  .compare-tray-inner {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+.compare-tray-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.compare-tray-label b { color: #fff; font-size: 14px; font-weight: 700; }
+.compare-tray-clear {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.compare-tray-clear:hover { color: #fff; }
+.compare-tray-slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.compare-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--r-xs);
+  padding: 6px 8px;
+  min-height: 44px;
+  position: relative;
+}
+.compare-slot.empty {
+  justify-content: center;
+  text-align: center;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.40);
+  border-style: dashed;
+  line-height: 1.3;
+}
+.compare-slot-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.30);
+}
+.compare-slot-photo {
+  width: 34px; height: 34px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.compare-slot-info { min-width: 0; flex: 1; }
+.compare-slot-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-slot-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-slot-meta b { color: #fff; font-weight: 600; }
+.compare-slot-x {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 2px 4px 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.compare-slot-x:hover { color: #fff; }
+.compare-tray-cta {
+  white-space: nowrap;
+  padding: 9px 18px;
+  font-size: 13px;
+  background: #fff;
+  color: var(--ink);
+  border-color: #fff;
+}
+.compare-tray-cta:hover { background: rgba(255, 255, 255, 0.92); border-color: #fff; }
+.compare-tray-cta:disabled { opacity: 0.40; cursor: not-allowed; }
+
+/* Make room above the footer / dock for the floating tray */
+.compare-tray:not([hidden]) ~ .site-footer { padding-bottom: 100px; }
+
+/* ---------- Simplified result card (v3) ---------- */
+/* Override the dense v2 .card-body layout: title row, one signal line,
+ * one Family Fit chip, one italic why line. No badge wall, no labeled
+ * boxes, no score-grade row. */
+.card-body {
+  padding: var(--s-5) var(--s-6);
+  gap: 10px;
+}
+.card-body h3 {
+  font-size: 19px;
+  line-height: 24px;
+}
+.card-signals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+.signal-sub { color: var(--ink-3); font-size: 12px; }
+.signal-rating { color: var(--ink-1); font-weight: 600; }
+.signal-rating .star { color: var(--warn); }
+.signal-class { color: var(--ink-3); }
+.signal-class span { display: inline; }
+.signal-loc { color: var(--ink-2); }
+.signal-flight .signal-ico { font-size: 11px; color: var(--ink-3); }
+.signal-ai {
+  background: var(--good-soft);
+  color: var(--good);
+  border: 1px solid #c5e0cd;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: 12px;
+}
+.signal-ai .ai-check { font-weight: 700; }
+
+.card-fit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+}
+.card-fit-num {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.card-fit-lbl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: -0.005em;
+}
+.card-why-inline {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin: 0;
+  letter-spacing: -0.005em;
+}
+
+/* Simplified price column: single column, vertical, no nested .price-block-top */
+.card-price {
+  padding: var(--s-5) var(--s-5);
+  gap: 4px;
+  text-align: right;
+  align-items: flex-end;
+}
+.card-price .price-from {
+  margin-bottom: 2px;
+}
+.card-price .price-total {
+  font-size: 30px;
+  margin: 0;
+}
+.card-price .price-sub {
+  margin: 0 0 4px;
+}
+.price-breakdown-inline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.price-breakdown-inline b { color: var(--ink-1); font-weight: 600; }
+.price-breakdown-inline .dot { color: var(--ink-4); }
+.card-price .budget-delta {
+  margin: 2px 0 8px;
+}
+.card-price .btn-primary {
+  width: 100%;
+  margin-top: 6px;
+}
+.btn-compare-link {
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.btn-compare-link:hover { color: var(--ink-1); text-decoration-color: var(--ink-3); }
+.btn-compare-link.active { color: #0D6F78; }
+
+@media (max-width: 720px) {
+  .card-price { align-items: flex-start; text-align: left; }
+  .price-breakdown-inline { justify-content: flex-start; }
+}
+
+/* ---------- Simplified hero card ---------- */
+.hero-card-info { gap: 12px; padding: var(--s-7) var(--s-7); }
+.hero-card-info .card-signals { font-size: 14px; gap: 6px 16px; }
+.hero-fit .card-fit-num { font-size: 38px; }
+.hero-fit .card-fit-lbl { font-size: 14px; }
+.hero-reasons {
+  margin: 4px 0 0; padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px 14px;
+}
+@media (min-width: 600px) {
+  .hero-reasons { grid-template-columns: 1fr 1fr; }
+}
+.hero-reasons li {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  position: relative;
+  padding-left: 16px;
+  line-height: 1.4;
+}
+.hero-reasons li::before {
+  content: "✓";
+  position: absolute;
+  left: 0; top: 0;
+  color: var(--good);
+  font-weight: 700;
+}
+.hero-why-text { font-size: 13.5px; color: var(--ink-1); margin: 0; font-style: italic; }
+.hero-card-pricing .btn-compare-link { margin-top: 4px; }
+
+/* ---------- Pending (no-mock policy) skeleton card ---------- */
+.card-pending { cursor: default; opacity: 0.96; }
+.card-pending:hover { box-shadow: none; border-color: var(--line); }
+.card-pending .card-photo img { filter: saturate(0.85); }
+.card-pending-note {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-style: italic;
+  margin: 4px 0 0;
+}
+.card-pending-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+.price-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+  align-items: flex-end;
+}
+.skel {
+  display: block;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bg-soft) 0%, #ECECE6 50%, var(--bg-soft) 100%);
+  background-size: 200% 100%;
+  animation: kt-skel-shimmer 1.4s linear infinite;
+}
+.skel-line { height: 12px; }
+.skel-line-lg { width: 120px; height: 24px; }
+.skel-line-md { width: 90px; }
+.skel-line-sm { width: 140px; height: 9px; }
+@keyframes kt-skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (max-width: 720px) {
+  .price-skeleton { align-items: flex-start; }
+}
+
+/* =====================================================================
+ * Trip detail page — Booking/Kayak/Google-style redesign (v3)
+ * Hero mosaic + sticky tab nav + 2-col with sticky right-rail price.
+ * ===================================================================== */
+
+/* When the trip detail is open, the overlay is in page-mode (already
+ * configured elsewhere). We just scope our new layout to the modal
+ * container so the v3 layout doesn't bleed into other modals. */
+
+/* Hero mosaic — 1 big photo + 2x2 grid of 4 thumbs */
+.trip-hero {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 var(--s-6);
+}
+@media (max-width: 720px) { .trip-hero { padding: 0 var(--s-4); } }
+.trip-hero-mosaic {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  height: 440px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+@media (max-width: 820px) {
+  .trip-hero-mosaic { height: 360px; grid-template-columns: 2fr 1fr; }
+  .trip-hero-mosaic .trip-hero-grid-cell:nth-child(n+3) { display: none; }
+}
+@media (max-width: 540px) {
+  /* Phones: big photo on top, horizontal-scroll filmstrip below. The
+   * gallery is the strongest visual real-estate on the smallest
+   * screen — we don't throw it away. */
+  .trip-hero-mosaic {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: 240px 76px;
+    gap: 6px;
+  }
+  .trip-hero-main { grid-column: 1; grid-row: 1 / 2; }
+  .trip-hero-grid {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .trip-hero-grid::-webkit-scrollbar { display: none; }
+  .trip-hero-grid-cell {
+    flex: 0 0 110px;
+    height: 76px;
+  }
+}
+.trip-hero-main {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  position: relative;
+  border: none;
+  padding: 0;
+  background: var(--bg-soft);
+  overflow: hidden;
+  cursor: pointer;
+  font-family: inherit;
+}
+.trip-hero-main img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+  display: block;
+}
+.trip-hero-main:hover img { transform: scale(1.02); }
+.trip-hero-tag {
+  position: absolute;
+  top: 16px; left: 16px;
+  /* Solid white at .96 alpha — no backdrop-filter. Stacked over a
+   * scaling/transforming image, the blur was a known jank source on
+   * mid-range Android. The visual diff vs. blurred is imperceptible. */
+  background: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  color: var(--ink-1);
+}
+.trip-hero-grid {
+  grid-column: 2 / 4;
+  grid-row: 1 / 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+}
+@media (max-width: 820px) {
+  .trip-hero-grid { grid-column: 2; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+}
+.trip-hero-grid-cell {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: var(--bg-soft);
+  overflow: hidden;
+  cursor: pointer;
+  font-family: inherit;
+}
+.trip-hero-grid-cell img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+  display: block;
+}
+.trip-hero-grid-cell:hover img { transform: scale(1.04); }
+.trip-hero-grid-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 43, 69, 0.62);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  pointer-events: none;
+}
+.trip-hero-attr {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+/* 2-col layout */
+.trip-layout-v3 {
+  max-width: 1500px;
+  margin: var(--s-6) auto 0;
+  padding: 0 var(--s-6);
+  display: grid;
+  /* Slimmer rail (320 vs old 360) + wider container give the main
+   * column ~1100px on a typical 1440 laptop, ~1180px on a 1600+
+   * screen. Was ~820px before. */
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--s-8);
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .trip-layout-v3 { grid-template-columns: 1fr; gap: var(--s-5); }
+}
+@media (max-width: 720px) {
+  .trip-layout-v3 { padding: 0 var(--s-4); margin-top: var(--s-4); }
+}
+
+.trip-main-col { min-width: 0; }
+
+/* Head */
+.trip-head { padding: 8px 0 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 14px; }
+.trip-head h1 {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: clamp(26px, 3.5vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin: 0 0 10px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+/* Ease tracking + bump line-height on narrow screens — Playfair at
+ * -0.02em + 28px on a 40-character resort name was getting cramped. */
+@media (max-width: 540px) {
+  .trip-head h1 { letter-spacing: -0.005em; }
+}
+.trip-head-signals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* Sticky tab nav — stacks under topbar + back-bar via the
+ * --stack-tabs-top token (60+48 desktop, 52+44 mobile). */
+.trip-tabs {
+  position: sticky;
+  top: var(--stack-tabs-top);
+  z-index: 30;
+  background: rgba(252, 251, 247, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  gap: 4px;
+  padding: 6px 0;
+  margin-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.trip-tabs::-webkit-scrollbar { display: none; }
+.trip-tab {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+  transition: color 0.15s, border-color 0.15s;
+}
+.trip-tab:hover { color: var(--ink); text-decoration: none; }
+.trip-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+.trip-tab:focus { outline: none; }
+.trip-tab:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Each anchored section — scroll-margin-top lands the heading below
+ * the full sticky stack (topbar + back-bar + tabs + 8px breathing). */
+.trip-section {
+  scroll-margin-top: var(--stack-section-anchor);
+  padding: var(--s-6) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.trip-section:last-of-type { border-bottom: none; }
+.trip-section h2 {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--s-4);
+  color: var(--ink);
+}
+.trip-section h3 {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  margin: var(--s-4) 0 var(--s-2);
+}
+.trip-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: var(--s-3);
+}
+.trip-fact {
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.trip-fact > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+}
+.trip-fact > b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.trip-highlights-list {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+}
+.trip-highlights-list li {
+  font-size: 14px;
+  color: var(--ink-1);
+  position: relative;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+.trip-highlights-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0; top: 0;
+  color: var(--good);
+  font-weight: 700;
+}
+.trip-tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--s-3);
+}
+.trip-fit-pills {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: var(--s-3);
+}
+.trip-fit-room, .trip-fit-kids, .trip-fit-activities, .trip-fit-watch {
+  margin-top: var(--s-4);
+}
+.trip-fit-watch ul { margin: 0; padding-left: 22px; }
+.trip-fit-watch li { font-size: 14px; color: var(--ink-1); margin: 4px 0; }
+.trip-room-fit-headline { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 6px; }
+.trip-room-fit-detail { font-size: 14px; color: var(--ink-1); margin: 0 0 6px; line-height: 1.5; }
+.trip-room-fit-check { font-size: 13px; color: var(--ink-2); margin: 0; font-style: italic; }
+.trip-loc-facts {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trip-loc-facts li {
+  font-size: 14px;
+  color: var(--ink-1);
+  padding: 10px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xs);
+}
+.trip-loc-empty { font-size: 13px; color: var(--ink-3); }
+
+/* Sticky right rail */
+.trip-side-col { min-width: 0; }
+@media (min-width: 1001px) {
+  .trip-side-col { position: sticky; top: 90px; align-self: start; }
+}
+.trip-rail {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+}
+.trip-rail .price-from { font-size: 11px; }
+.trip-rail .price-total {
+  /* Use the same Playfair stack as h1/h2 so the single most important
+   * number on the page looks deliberate, not like an unstyled fallback. */
+  font-family: "Playfair Display", ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 36px;
+  font-weight: 600;
+  margin: 4px 0 2px;
+  color: var(--ink);
+  letter-spacing: -0.025em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+.trip-rail-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.trip-rail .trip-fit-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  color: var(--ink-1);
+  margin-bottom: 8px;
+}
+.trip-rail .trip-fit-breakdown b { font-weight: 600; }
+.trip-rail .budget-delta {
+  margin: 0 0 var(--s-3);
+}
+.trip-rail-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3) 0;
+  margin: 0 0 var(--s-3);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.trip-rail-dates > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.trip-rail-dates span {
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.trip-rail-dates b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.trip-rail-cta {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 15px;
+}
+.btn-link-secondary {
+  background: transparent;
+  border: none;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  width: 100%;
+  text-align: center;
+}
+.btn-link-secondary:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.trip-rail-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line-soft);
+}
+.trip-rail-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.trip-rail-action svg { width: 16px; height: 16px; }
+.trip-rail-action:hover {
+  background: var(--bg-soft);
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+/* Alternatives section below the 2-col body */
+.trip-alts {
+  max-width: 1500px;
+  margin: var(--s-8) auto 0;
+  padding: var(--s-6);
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Booking-style rooms table ---------- */
+.rooms-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: #fff;
+}
+.rooms-table-head,
+.rooms-table-row {
+  display: grid;
+  /* Was 5 cramped columns; now 4 with the inclusion chips folded into
+   * the room-name cell where they can wrap freely. */
+  grid-template-columns: minmax(0, 1fr) 120px 160px 130px;
+  gap: 20px;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rooms-table-head {
+  background: var(--bg-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+  padding: 12px 20px;
+}
+.rooms-table-head > div:nth-child(3) { text-align: right; }
+.rooms-table-row {
+  cursor: pointer;
+  transition: background 0.12s;
+  align-items: flex-start;
+}
+.rooms-table-row:hover { background: var(--bg-soft); }
+.rooms-table-row.selected {
+  background: #F2FAF5;
+  outline: 2px solid var(--good);
+  outline-offset: -2px;
+}
+.rooms-table-row.undersized .rt-thumb,
+.rooms-table-row.undersized .rt-name-line { opacity: 0.7; }
+
+.rooms-table-item:last-child .rooms-table-row { border-bottom: none; }
+
+.rt-name {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.rt-thumb {
+  width: 88px; height: 88px;
+  object-fit: cover;
+  border-radius: var(--r-xs);
+  flex-shrink: 0;
+}
+.rt-thumb-empty { background: var(--bg-soft); }
+.rt-name-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+.rt-name-line {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  /* Allow two lines, then ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-diffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rt-inclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.rt-sleeps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+.rt-sleeps-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+}
+.rt-sleeps-ico {
+  width: 16px; height: 16px;
+  color: var(--ink-2);
+}
+.rt-sleeps-num { font-variant-numeric: tabular-nums; line-height: 1; }
+.rt-fit {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  max-width: 130px;
+}
+.rt-fit.fits { color: var(--good); }
+.rt-fit.nope { color: #b15a3a; }
+.rt-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--bg-soft);
+  color: var(--ink-1);
+  border: 1px solid var(--line);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.rt-chip.board-ai {
+  background: var(--good-soft);
+  color: var(--good);
+  border-color: #c5e0cd;
+}
+.rt-chip.board-bb {
+  background: #FFF4E6;
+  color: #9A6420;
+  border-color: #F2D9B4;
+}
+.rt-chip.refund {
+  background: #EEF4FF;
+  color: #2A4FB0;
+  border-color: #D2DEFA;
+}
+.rt-chip.promo {
+  background: #FFEBF0;
+  color: #B22A55;
+  border-color: #F5C9D6;
+}
+
+.rt-price {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+  padding-top: 4px;
+}
+.rt-price-total {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.rt-price-from {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-right: 2px;
+}
+.rt-price-pernight {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rt-variants-toggle {
+  background: transparent;
+  border: none;
+  padding: 4px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--line-strong);
+  cursor: pointer;
+  font-family: inherit;
+}
+.rt-variants-toggle:hover { color: var(--ink); }
+.rt-cta {
+  padding-top: 4px;
+}
+.rt-cta .btn {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 820px) {
+  .rooms-table-head { display: none; }
+  .rooms-table-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  .rt-name { gap: 12px; }
+  .rt-thumb { width: 72px; height: 72px; }
+  .rt-sleeps { flex-direction: row; gap: 10px; align-items: center; padding-top: 0; }
+  .rt-price { text-align: left; align-items: flex-start; padding-top: 0; }
+  .rt-cta { padding-top: 0; }
+  .rt-cta .btn { width: 100%; padding: 12px 14px; font-size: 14px; }
+}
+
+/* Trip-section title row — primary heading + count badge inline */
+.trip-section-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 var(--s-4);
+  flex-wrap: wrap;
+}
+.trip-section-title-row h2 {
+  margin: 0;
+}
+.trip-section-title-row .modal-section-count {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink-3);
+  background: var(--bg-soft);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  text-transform: none;
+}
+/* Primary sections (Rooms, Flight) get extra emphasis — slightly more
+ * top padding and a subtle accent so they read as the actionable
+ * blocks. */
+.trip-section-primary {
+  padding-top: 8px;
+}
+.trip-section-primary > .room-options > .trip-section-title-row,
+.trip-section-primary > .bk-flights > .trip-section-title-row {
+  border-bottom: none;
+}
+
+/* ---------- Booking.com-style flight layout (trip detail) ---------- */
+.bk-flights { padding-top: 8px; }
+.bk-flight-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: #fff;
+  margin: 0 0 12px;
+}
+.bk-flight-tab {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line);
+  padding: 14px 16px;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  transition: background 0.12s;
+}
+.bk-flight-tab:last-child { border-right: none; }
+.bk-flight-tab:hover { background: var(--bg-soft); }
+.bk-flight-tab.active { background: #fff; }
+.bk-flight-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: #006CE4;
+}
+.bk-flight-tab-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.bk-flight-tab.active .bk-flight-tab-label { color: #006CE4; }
+.bk-flight-tab-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.bk-flights-disclaimer {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+.bk-flights-disclaimer a {
+  color: #006CE4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.bk-flight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bk-flight-loading,
+.bk-flight-empty {
+  background: var(--bg-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 18px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-align: center;
+}
+.bk-flight-empty b { color: var(--ink); }
+
+.bk-flight-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.bk-flight-card:hover { border-color: var(--ink-3); box-shadow: 0 4px 12px rgba(13, 43, 69, 0.05); }
+.bk-flight-card.selected { border-color: var(--good); box-shadow: 0 0 0 2px var(--good-soft) inset; }
+
+.bk-flight-eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+.bk-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 3px;
+  letter-spacing: -0.005em;
+}
+.bk-eyebrow.cheapest { background: #E5F4ED; color: #0E7E4B; }
+.bk-eyebrow.fastest  { background: #FFF4E6; color: #9A6420; }
+.bk-eyebrow.best     { background: #EAF2FF; color: #1B4FCC; }
+.bk-eyebrow.flex     { background: #E5F4ED; color: #0E7E4B; }
+
+.bk-flight-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  align-items: stretch;
+}
+.bk-flight-main {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bk-flight-side {
+  padding: 14px 16px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  text-align: right;
+  background: var(--bg-soft);
+}
+
+.bk-leg {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(140px, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.bk-leg-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bk-leg-logo .airline-logo {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+}
+.bk-leg-dep, .bk-leg-arr { min-width: 0; }
+.bk-leg-time {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+.bk-leg-airport {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.bk-leg-mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+.bk-leg-stops-pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  z-index: 1;
+}
+.bk-leg-line {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  border-top: 1px solid var(--line-strong);
+  transform: translateY(-50%);
+  z-index: 0;
+}
+.bk-leg-dur {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  background: #fff;
+  padding: 0 4px;
+  z-index: 1;
+}
+.bk-flight-airline {
+  font-size: 12px;
+  color: var(--ink-3);
+  padding-left: 48px;
+  font-weight: 600;
+}
+
+.bk-fare-class {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.bk-fare-bags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0;
+}
+.bk-fare-bags .bag-icon { color: var(--good); }
+.bk-fare-bags .bag-icon .bag-label { display: none; }
+.bk-fare-price {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.bk-fare-per {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.bk-fare-cta {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 820px) {
+  .bk-flight-body { grid-template-columns: 1fr; }
+  .bk-flight-side {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    align-items: stretch;
+    text-align: left;
+  }
+  .bk-leg { grid-template-columns: 28px minmax(0, 1fr) minmax(100px, 1fr) minmax(0, 1fr); gap: 8px; }
+  .bk-leg-logo .airline-logo { width: 24px; height: 24px; }
+  .bk-leg-time { font-size: 16px; }
+  .bk-flight-airline { padding-left: 36px; }
+  .bk-flight-tabs { grid-template-columns: 1fr 1fr 1fr; }
+  .bk-flight-tab { padding: 10px 8px; }
+}
+
+/* Mobile sticky bottom CTA (replaces the right-rail on small screens) */
+.trip-mobile-cta {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 60;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  padding: 10px var(--s-4);
+  box-shadow: 0 -4px 20px rgba(13, 43, 69, 0.08);
+  align-items: center;
+  gap: var(--s-3);
+}
+.trip-mobile-cta-info { flex: 1; min-width: 0; }
+.trip-mobile-cta-price b {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+.trip-mobile-cta-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.trip-mobile-cta .btn { padding: 11px 16px; }
+@media (max-width: 1000px) {
+  .trip-mobile-cta { display: flex; }
+  body.trip-detail-open .site-footer { padding-bottom: 80px; }
+  /* Hide the inline rail on mobile — bottom CTA + .trip-mobile-meta
+   * cover the rail's content (price/CTA + dates + save/share/watch). */
+  .trip-side-col { display: none; }
+}
+
+/* Mobile-only metadata strip — surfaces dates, party, and save/share
+ * actions that lived in the desktop right rail. Hidden on desktop. */
+.trip-mobile-meta { display: none; }
+@media (max-width: 1000px) {
+  .trip-mobile-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px 14px;
+    margin: var(--s-3) 0 var(--s-4);
+    padding: var(--s-3) var(--s-4);
+    background: var(--bg-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+  }
+  .trip-mobile-meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .trip-mobile-meta-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .trip-mobile-meta-row b {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .trip-mobile-meta-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-soft);
+  }
+}
+
+/* ---------- Compare modal ---------- */
+.compare-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 43, 69, 0.48);
+  z-index: 110;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--s-8);
+  overflow-y: auto;
+}
+.compare-modal-overlay.open { display: flex; }
+.compare-modal {
+  background: #fff;
+  border-radius: var(--r-md);
+  max-width: 1100px;
+  width: 100%;
+  box-shadow: 0 24px 60px rgba(13, 43, 69, 0.30);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--s-16));
+}
+.compare-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px solid var(--line);
+}
+.compare-modal-head h2 {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.compare-modal-close {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.compare-modal-close:hover { background: var(--bg-soft); }
+.compare-modal-body {
+  overflow-y: auto;
+  padding: var(--s-5) var(--s-6) var(--s-6);
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.compare-table th, .compare-table td {
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line-soft);
+}
+.compare-row-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--ink-3);
+  width: 130px;
+  background: var(--bg-soft);
+}
+.compare-cell-photo img {
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: var(--r-xs);
+  margin-bottom: 8px;
+}
+.compare-cell-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.compare-cell-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.compare-cell-price {
+  display: flex;
+  flex-direction: column;
+}
+.compare-cell-price-total {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.compare-cell-price-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.compare-cell-fit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.compare-cell-fit-num {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.compare-cell-fit-lbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.compare-cell-grade-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.compare-cell-grade-line > span:last-child { flex: 1; line-height: 1.4; }
+.compare-cell-airport {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.compare-cell-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.compare-mini-chip {
+  display: inline-block;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--ink-1);
+  white-space: nowrap;
+}
+.compare-cell-muted { color: var(--ink-4); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .compare-modal { max-height: calc(100vh - var(--s-8)); }
+  .compare-modal-body { padding: var(--s-4); }
+  .compare-table th, .compare-table td { padding: 10px 8px; font-size: 12px; }
+  .compare-row-label { width: 84px; }
+  .compare-cell-photo img { max-width: 120px; }
+  .compare-cell-name { font-size: 13px; }
 }
