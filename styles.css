@@ -2773,6 +2773,11 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
   box-shadow: none;
   transform: none;
   padding: 0 0 var(--s-24);
+  /* The base .modal rule sets overflow-y:auto so the popup body can
+   * scroll inside the dialog. In page-mode the .modal-overlay itself
+   * is the scrolling container, and having an inner overflow context
+   * silently breaks the sticky right rail. */
+  overflow: visible;
 }
 @media (max-width: 720px) {
   .modal-overlay.page-mode .modal { padding: 0 0 var(--s-12); }
@@ -7025,6 +7030,24 @@ body.trip-detail-open #status { display: none !important; }
   grid-template-columns: 36px minmax(0, 1fr) minmax(140px, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
+}
+.bk-leg + .bk-leg {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+.bk-leg-placeholder { opacity: 0.78; }
+.bk-leg-time-tbd {
+  font-style: italic;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.bk-leg-stops-tbd {
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 11px;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
 }
 .bk-leg-logo {
   display: inline-flex;

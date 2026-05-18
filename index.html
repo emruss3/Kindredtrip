@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-sleeps-icons" />
-<meta name="kt-build" content="20260515-sleeps-icons" />
+<link rel="stylesheet" href="/styles.css?v=20260515-sticky-rail" />
+<meta name="kt-build" content="20260515-sticky-rail" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4233,7 +4233,40 @@
     const arrIso = isOut ? o.outbound_arrival_time   : o.return_arrival_time;
     const stops  = isOut ? Number(o.outbound_stops ?? 0) : Number(o.return_stops ?? 0);
     const dur    = isOut ? Number(o.outbound_duration_minutes ?? 0) : Number(o.return_duration_minutes ?? 0);
-    if (!depIso && !arrIso && dur <= 0) return "";
+    const origin = (lastSearchSummary?.origin_iata || "").toUpperCase();
+    const dest = (currentModalPackage?.dest_airport_iata || "").toUpperCase();
+    const fromCode = isOut ? origin : dest;
+    const toCode   = isOut ? dest   : origin;
+
+    // Outbound has full data. Return is currently NULL across every
+    // offer in the pipeline (LiteAPI sandbox returns one-way journeys
+    // for round-trip requests, and price_flights_worker hasn't been
+    // taught to pair them yet). Render a placeholder return leg
+    // showing the airports + the search's return date so the UI
+    // clearly shows two legs.
+    const hasRealData = !!(depIso || arrIso || dur > 0);
+    if (!hasRealData && !isOut) {
+      const retDate = lastSearchSummary?.date_end || null;
+      const retLabel = retDate ? fmtFlightDateOnly(retDate) : "";
+      return `
+        <div class="bk-leg bk-leg-placeholder" title="Return flight times become available at checkout">
+          <span class="bk-leg-logo">${airlineLogoMarkup(o, "sm")}</span>
+          <div class="bk-leg-dep">
+            <div class="bk-leg-time bk-leg-time-tbd">Return</div>
+            <div class="bk-leg-airport">${escapeHtml(fromCode || "")}${retLabel ? ` · ${escapeHtml(retLabel)}` : ""}</div>
+          </div>
+          <div class="bk-leg-mid">
+            <div class="bk-leg-stops-pill bk-leg-stops-tbd">Times shown at checkout</div>
+            <div class="bk-leg-line"></div>
+            <div class="bk-leg-dur"></div>
+          </div>
+          <div class="bk-leg-arr">
+            <div class="bk-leg-time bk-leg-time-tbd">—</div>
+            <div class="bk-leg-airport">${escapeHtml(toCode || "")}</div>
+          </div>
+        </div>`;
+    }
+    if (!hasRealData) return "";
 
     const dep = fmtFlightTimeShort(depIso);
     const arr = fmtFlightTimeShort(arrIso);
@@ -4241,10 +4274,6 @@
       ? `${Math.floor(dur / 60)}h ${(dur % 60).toString().padStart(2, "0")}m`
       : "";
     const stopsStr = stops === 0 ? "Direct" : (stops === 1 ? "1 stop" : `${stops} stops`);
-    const origin = (lastSearchSummary?.origin_iata || "").toUpperCase();
-    const dest = (currentModalPackage?.dest_airport_iata || "").toUpperCase();
-    const fromCode = isOut ? origin : dest;
-    const toCode   = isOut ? dest   : origin;
 
     return `
       <div class="bk-leg">
@@ -4263,6 +4292,15 @@
           <div class="bk-leg-airport">${escapeHtml(toCode || "")}${arr.date ? ` · ${escapeHtml(arr.date)}` : ""}</div>
         </div>
       </div>`;
+  }
+
+  // Format a YYYY-MM-DD into "Aug 23" for the return-leg placeholder.
+  function fmtFlightDateOnly(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(`${iso}T12:00:00`);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch { return ""; }
   }
 
   // Eyebrow chips above the card — match Booking's badges ("Cheapest",
