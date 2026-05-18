@@ -7049,6 +7049,45 @@ body.trip-detail-open #status { display: none !important; }
   background: transparent;
   border: 1px dashed var(--line-strong);
 }
+
+/* ---------- Two-leg flight cost split + outbound-only badge ---------- */
+.flight-split-plus {
+  display: inline-block;
+  color: var(--ink-3);
+  font-weight: 500;
+  margin: 0 2px;
+  font-size: 0.95em;
+}
+.flight-oneway-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9A6420;
+  background: #FFF4E6;
+  border: 1px solid #F2D9B4;
+  border-radius: var(--r-pill);
+  vertical-align: 1px;
+  cursor: help;
+}
+.flight-basis-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+}
+.flight-basis-badge.basis-oneway {
+  color: #9A6420;
+  background: #FFF4E6;
+  border: 1px solid #F2D9B4;
+}
 .bk-leg-logo {
   display: inline-flex;
   align-items: center;

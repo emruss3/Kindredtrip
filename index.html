@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-sticky-rail" />
-<meta name="kt-build" content="20260515-sticky-rail" />
+<link rel="stylesheet" href="/styles.css?v=20260515-flight-basis" />
+<meta name="kt-build" content="20260515-flight-basis" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -1354,6 +1354,41 @@
     return "$" + Math.round(n).toLocaleString("en-US");
   }
 
+  // Renders the flight side of a "flights · hotel" price split,
+  // honoring get_packages v25's flight_price_basis:
+  //   'summed_oneway'    → "$X out + $Y return"  (two real one-way fares)
+  //   'oneway_outbound'  → "$X out · return TBD" (return not yet priced)
+  //   'roundtrip_native' → "$X flights"          (one combined RT fare)
+  //   null / missing     → "$X flights"          (legacy / unpriced)
+  // Returns an inline-HTML string ready to drop into the existing
+  // breakdown rows. Per-segment <b> wraps preserve the existing
+  // emphasis treatment.
+  function renderFlightCostBreakdown(pkg) {
+    const basis = pkg?.flight_price_basis || null;
+    const fp = Number(pkg?.flight_price) || 0;
+    const ob = pkg?.flight_outbound_price;
+    const rt = pkg?.flight_return_price;
+
+    if (basis === "summed_oneway" && ob != null && rt != null) {
+      return `<b>${fmtMoney(ob)}</b> outbound <span class="flight-split-plus">+</span> <b>${fmtMoney(rt)}</b> return`;
+    }
+    if (basis === "oneway_outbound") {
+      const obShown = ob != null ? ob : fp;
+      return `<b>${fmtMoney(obShown)}</b> outbound <span class="flight-oneway-tag" title="Return flight not yet priced — total is outbound only">Outbound only</span>`;
+    }
+    return `<b>${fmtMoney(fp)}</b> flights`;
+  }
+
+  // For places that only want the basis chip (e.g. card eyebrow,
+  // detail-page title row). Returns "" when there's nothing notable
+  // to surface so callers can drop it into a template safely.
+  function flightBasisBadge(pkg) {
+    if (pkg?.flight_price_basis === "oneway_outbound") {
+      return `<span class="flight-basis-badge basis-oneway" title="Return flight not yet priced — total is outbound only">Outbound only</span>`;
+    }
+    return "";
+  }
+
   // "0:27:00" or "1:05:00" → "27 min" / "1h 5m"
   function fmtTransfer(notes) {
     if (!notes) return null;
@@ -2319,7 +2354,7 @@
       const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs }, 320);
       return `<div class="compare-cell-photo"><img src="${photo}" alt="${escapeHtml(rr.resort_name || "")}" loading="lazy" /><div class="compare-cell-name">${escapeHtml(rr.resort_name || "")}</div><div class="compare-cell-sub">${escapeHtml(rr.area || rr.country || "")}</div></div>`;
     };
-    const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${fmtMoney(p.flight_price)} flights · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
+    const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${renderFlightCostBreakdown(p)} · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
     const fitCell = (p) => `<div class="compare-cell-fit"><span class="compare-cell-fit-num">${familyFitScore(p)}</span><span class="compare-cell-fit-lbl">Family Fit</span></div>`;
     const gradeCell = (p, k) => {
       const g = gradesFor(p)[k];
@@ -3080,7 +3115,7 @@
           <p class="price-total">${fmtMoney(p.total_price)}</p>
           <div class="price-sub">flights + hotel</div>
           <div class="price-breakdown-inline">
-            <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
+            <span>${renderFlightCostBreakdown(p)}</span>
             <span class="dot">·</span>
             <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
           </div>
@@ -3144,7 +3179,7 @@
             <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
             <div class="hero-price-sub">total · flights + hotel</div>
             <div class="hero-price-split">
-              <span><b>${fmtMoney(p.flight_price)}</b> flights</span>
+              <span>${renderFlightCostBreakdown(p)}</span>
               <span class="dot">·</span>
               <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
             </div>
@@ -3609,7 +3644,7 @@
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">
-          <span><b>${fmtMoney(pkg.flight_price)}</b> flights</span>
+          <span>${renderFlightCostBreakdown(pkg)}</span>
           <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
         </div>
       </div>`;
@@ -3897,7 +3932,7 @@
           <p class="price-total">${fmtMoney(pkg.total_price)}</p>
           <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
           <div class="trip-fit-breakdown">
-            <span><b>${fmtMoney(pkg.flight_price)}</b> flights</span>
+            <span>${renderFlightCostBreakdown(pkg)}</span>
             <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
           </div>
           ${trailingDelta}
@@ -4238,25 +4273,32 @@
     const fromCode = isOut ? origin : dest;
     const toCode   = isOut ? dest   : origin;
 
-    // Outbound has full data. Return is currently NULL across every
-    // offer in the pipeline (LiteAPI sandbox returns one-way journeys
-    // for round-trip requests, and price_flights_worker hasn't been
-    // taught to pair them yet). Render a placeholder return leg
-    // showing the airports + the search's return date so the UI
-    // clearly shows two legs.
+    // Outbound has full data. Return may be NULL on a specific offer
+    // row even when the package as a whole is fully round-trip priced
+    // (get_packages v25 supplies basis at the package level; the
+    // per-offer table is being backfilled separately). Two cases for
+    // the placeholder:
+    //   (a) package basis is 'oneway_outbound' → return genuinely not
+    //       priced; show the "Times shown at checkout" placeholder.
+    //   (b) basis is round-trip / summed but this specific offer row
+    //       lacks return columns → suppress the placeholder; the
+    //       package totals already reflect both legs and the return
+    //       time will populate as the per-offer backfill catches up.
     const hasRealData = !!(depIso || arrIso || dur > 0);
     if (!hasRealData && !isOut) {
+      const basis = currentModalPackage?.flight_price_basis || null;
+      if (basis && basis !== "oneway_outbound") return "";
       const retDate = lastSearchSummary?.date_end || null;
       const retLabel = retDate ? fmtFlightDateOnly(retDate) : "";
       return `
-        <div class="bk-leg bk-leg-placeholder" title="Return flight times become available at checkout">
+        <div class="bk-leg bk-leg-placeholder" title="Return flight not yet priced — total is outbound only">
           <span class="bk-leg-logo">${airlineLogoMarkup(o, "sm")}</span>
           <div class="bk-leg-dep">
             <div class="bk-leg-time bk-leg-time-tbd">Return</div>
             <div class="bk-leg-airport">${escapeHtml(fromCode || "")}${retLabel ? ` · ${escapeHtml(retLabel)}` : ""}</div>
           </div>
           <div class="bk-leg-mid">
-            <div class="bk-leg-stops-pill bk-leg-stops-tbd">Times shown at checkout</div>
+            <div class="bk-leg-stops-pill bk-leg-stops-tbd">Outbound only — return priced later</div>
             <div class="bk-leg-line"></div>
             <div class="bk-leg-dur"></div>
           </div>
@@ -5493,8 +5535,21 @@
     if (totalEl) totalEl.textContent = fmtMoney(newTotal);
     const breakdown = document.querySelector(".trip-fit-summary .trip-fit-breakdown");
     if (breakdown) {
+      // Preserve the basis-aware flight breakdown when a flight offer
+      // is selected — currentModalSelectedOfferId points at one in
+      // currentModalFlights which is one-way data from the offers
+      // table (return basis is per-package, not per-offer). When the
+      // user picks a specific flight, fall back to a flat
+      // "$X flights" label since we don't know the basis of that
+      // chosen pair.
+      const pkg = currentModalPackage;
+      const usedDefault = currentModalSelectedOfferId == null
+        && pkg && Math.round(Number(pkg.flight_price) || 0) === Math.round(Number(flightPrice) || 0);
+      const flightHtml = usedDefault
+        ? renderFlightCostBreakdown(pkg)
+        : `<b>${fmtMoney(flightPrice)}</b> flights`;
       breakdown.innerHTML = `
-        <span><b>${fmtMoney(flightPrice)}</b> flights</span>
+        <span>${flightHtml}</span>
         <span><b>${fmtMoney(hotelPrice)}</b> hotel</span>`;
     }
     const mobilePrice = document.querySelector(".trip-mobile-cta-price b");
