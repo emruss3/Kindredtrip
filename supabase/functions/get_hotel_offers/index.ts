@@ -18,9 +18,19 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_hotel_offers_v1";
+const VERSION = "get_hotel_offers_v2_catalog";
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 24;
+
+// v2 (2026-05-18):
+//   Surface the LiteAPI hotel-level content + the standalone room catalog
+//   we backfilled into resorts (liteapi_*) and resort_rooms. The detail
+//   page should render real descriptions, bed configs, and room sizes,
+//   not just rate-offer names.
+//
+//   The rate-offer ↔ catalog-room join is unreliable (10% match by name,
+//   opaque rate room_type_ids), so catalog_rooms is returned as a
+//   standalone list, not joined to offers.
 
 function corsHeaders() {
   return {
@@ -60,7 +70,9 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data, error } = await sb
+    // Fire the three reads in parallel: rate offers, resort row (with the
+    // new liteapi_* content cols), and resort_rooms catalog.
+    const offersP = sb
       .from("hotel_rate_offers")
       .select(`
         offer_id, package_id, room_name, board_type, board_name,
@@ -72,7 +84,32 @@ serve(async (req) => {
       .order("total_price", { ascending: true })
       .limit(MAX_LIMIT);
 
+    const pkgP = sb
+      .from("packages")
+      .select("resort_id")
+      .eq("package_id", package_id)
+      .maybeSingle();
+
+    const [{ data, error }, { data: pkgRow, error: pkgErr }] = await Promise.all([offersP, pkgP]);
     if (error) throw error;
+    if (pkgErr) throw pkgErr;
+
+    let resort: any = null;
+    let catalogRooms: any[] = [];
+    if (pkgRow?.resort_id) {
+      const [{ data: resortRow }, { data: rooms }] = await Promise.all([
+        sb.from("resorts")
+          .select("resort_id, resort_name, liteapi_description, liteapi_important_info, liteapi_checkin_time, liteapi_checkout_time, liteapi_policies")
+          .eq("resort_id", pkgRow.resort_id)
+          .maybeSingle(),
+        sb.from("resort_rooms")
+          .select("room_id, room_name, description, room_size_sqm, bed_types, bed_relation, max_adults, max_children, max_occupancy, room_amenities, views, photos")
+          .eq("resort_id", pkgRow.resort_id)
+          .order("max_occupancy", { ascending: false, nullsFirst: false }),
+      ]);
+      resort = resortRow ?? null;
+      catalogRooms = rooms ?? [];
+    }
 
     // De-dupe near-identical offers (same room name + board + refundable +
     // occupancy at the same price) so the UI doesn't show three copies of
@@ -98,6 +135,8 @@ serve(async (req) => {
       package_id,
       count: deduped.length,
       offers: deduped,
+      resort,
+      catalog_rooms: catalogRooms,
     }), { status: 200, headers });
 
   } catch (e) {

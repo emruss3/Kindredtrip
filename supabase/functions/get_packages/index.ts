@@ -1,8 +1,14 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v12_transfer_minutes";
+const VERSION = "get_packages_v13_leg_durations";
 
+// v13 (2026-05-18):
+//   Attach per-leg flight durations + stops from flight_offers so the
+//   frontend can treat outbound and inbound as two separate travel days
+//   instead of summing them. Falls back silently for mock packages where
+//   no flight_offers row exists.
+//
 // v12 (2026-05-19):
 //   Include resorts.airport_transfer_minutes so the frontend's flight
 //   friction score can use real numeric transfer time instead of the
@@ -221,6 +227,31 @@ serve(async (req) => {
 
     const { data: packages, error: pErr, count } = await q;
     if (pErr) throw pErr;
+
+    // Attach per-leg flight durations / stops from flight_offers so the
+    // frontend can treat outbound and inbound as separate travel days.
+    // packages.flight_offer_id has no FK to flight_offers so we do this
+    // as a batched secondary fetch instead of a PostgREST nested select.
+    const offerIds = (packages ?? [])
+      .map((p: any) => p.flight_offer_id)
+      .filter((id: any) => typeof id === "string" && id.length > 0);
+    if (offerIds.length > 0) {
+      const { data: offers } = await sb
+        .from("flight_offers")
+        .select("offer_id, outbound_duration_minutes, return_duration_minutes, outbound_stops, return_stops")
+        .in("offer_id", offerIds);
+      const offerMap = new Map<string, any>();
+      for (const o of (offers ?? [])) offerMap.set(o.offer_id, o);
+      for (const p of (packages ?? [])) {
+        const fo = offerMap.get(p.flight_offer_id);
+        if (fo) {
+          p.outbound_minutes = fo.outbound_duration_minutes ?? null;
+          p.return_minutes   = fo.return_duration_minutes ?? null;
+          p.outbound_stops   = fo.outbound_stops ?? null;
+          p.return_stops     = fo.return_stops ?? null;
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({

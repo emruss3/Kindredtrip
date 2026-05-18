@@ -1412,6 +1412,24 @@
     if (mm === 0) return `${hh}h`;
     return `${hh}h ${mm}m`;
   }
+
+  // Build the small ✈ chip for a result card. Uses per-leg outbound/return
+  // when available (live flights from flight_offers); falls back to
+  // pkg.duration_hours/stops (mock packages). Shows the longer of the two
+  // travel days, since that's the one a parent actually plans around.
+  function flightSignalChipHtml(pkg) {
+    const dur = flightLegHours(pkg);
+    const stops = flightLegStops(pkg);
+    const durTxt = Number.isFinite(dur) ? fmtFlightDuration(dur) : null;
+    if (stops === 0) {
+      return `<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${durTxt ? ` · ${durTxt}` : ""}</span>`;
+    }
+    if (durTxt || Number.isFinite(stops)) {
+      const s = Number.isFinite(stops) ? stops : 0;
+      return `<span class="signal signal-flight"><span class="signal-ico">✈</span>${durTxt ?? ""}${durTxt && Number.isFinite(stops) ? " · " : ""}${Number.isFinite(stops) ? `${s} stop${s === 1 ? "" : "s"}` : ""}</span>`;
+    }
+    return "";
+  }
   // Parse "HH:MM" transfer time into hours (decimal). Returns 0 when
   // unparseable so missing data doesn't penalize the resort.
   function parseTransferHours(notes) {
@@ -1455,10 +1473,39 @@
   //     longest comfortable single-leg from US East to Caribbean)
   //   - Each 15 min of transfer over 30 min adds ~5 points (30 min
   //     is the median across our 731 backfilled resorts)
+  // Pick the worst (longest) single travel day. Outbound and return are
+  // two separate days, so summing them over-penalises the trip; the
+  // experience is bounded by the worse leg, not their total.
+  function flightLegHours(pkg) {
+    const ob = Number(pkg?.outbound_minutes);
+    const rt = Number(pkg?.return_minutes);
+    if (Number.isFinite(ob) || Number.isFinite(rt)) {
+      const longest = Math.max(Number.isFinite(ob) ? ob : 0, Number.isFinite(rt) ? rt : 0);
+      if (longest > 0) return longest / 60;
+    }
+    // Fallback for mock packages where flight_offers isn't populated.
+    // mock_flight_pricing.typical_duration_hours is already one-way, so
+    // packages.duration_hours is one travel day on that path.
+    const dur = Number(pkg?.duration_hours);
+    return Number.isFinite(dur) ? dur : NaN;
+  }
+
+  // Worst-leg stop count. Outbound and return stops can differ; the
+  // worse one drives friction.
+  function flightLegStops(pkg) {
+    const ob = Number(pkg?.outbound_stops);
+    const rt = Number(pkg?.return_stops);
+    if (Number.isFinite(ob) || Number.isFinite(rt)) {
+      return Math.max(Number.isFinite(ob) ? ob : 0, Number.isFinite(rt) ? rt : 0);
+    }
+    const s = Number(pkg?.stops);
+    return Number.isFinite(s) ? s : NaN;
+  }
+
   function flightFrictionInfo(pkg, pool) {
     const r = pkg?.resorts || {};
-    const stops = Number(pkg?.stops);
-    const dur = Number(pkg?.duration_hours);
+    const stops = flightLegStops(pkg);
+    const dur = flightLegHours(pkg);
     const transferMin = transferMinutes(r);
 
     let friction = 0;
@@ -1475,8 +1522,8 @@
     let percentile = null;
     if (Array.isArray(pool) && pool.length > 4 && Number.isFinite(dur)) {
       const doorMin = (p) => {
-        const d = Number(p?.duration_hours);
-        const s = Number(p?.stops);
+        const d = flightLegHours(p);
+        const s = flightLegStops(p);
         const t = transferMinutes(p?.resorts);
         if (!Number.isFinite(d)) return null;
         return d * 60 + (Number.isFinite(s) ? s * 60 : 0) + (Number.isFinite(t) ? t : 30);
@@ -3105,10 +3152,22 @@
     return 0.30 * rating + 0.20 * fit + 0.20 * flight + 0.20 * value + 0.10 * starBonus;
   }
 
+  // Bucket a composite 0-100 into a qualitative trip-score label.
+  function tripScoreLabel(score) {
+    if (score >= 78) return "Excellent fit";
+    if (score >= 66) return "Strong fit";
+    if (score >= 54) return "Good fit";
+    if (score >= 42) return "Decent";
+    return "Weak fit";
+  }
+
   function applyClientSort(packages) {
     const num = (v) => (v == null ? Infinity : Number(v));
     const budget = getUserBudget();
     const arr = [...packages];
+    // Always stash the composite trip score on every package so cards display
+    // the same number we rank by, regardless of which sort is selected.
+    for (const p of arr) p._tripScore = Math.round(compositeScore(p, arr));
     switch (lastSortBy) {
       case "price_asc":
         return arr.sort((a, b) => num(a.total_price) - num(b.total_price));
@@ -3121,7 +3180,11 @@
         return within.concat(over);
       }
       case "shortest_travel":
-        return arr.sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)));
+        return arr.sort((a, b) => {
+          const sa = flightLegStops(a), sb = flightLegStops(b);
+          const da = flightLegHours(a), db = flightLegHours(b);
+          return (num(sa) - num(sb)) || (num(da) - num(db));
+        });
       case "best_within_budget": {
         const rate = (p) => p.resorts?.avg_user_rating || 0;
         if (budget == null) return arr.sort((a, b) => rate(b) - rate(a));
@@ -3132,14 +3195,8 @@
         return within.concat(over);
       }
       case "score":
-      default: {
-        const cache = new Map();
-        const s = (p) => {
-          if (!cache.has(p)) cache.set(p, compositeScore(p, arr));
-          return cache.get(p);
-        };
-        return arr.sort((a, b) => s(b) - s(a));
-      }
+      default:
+        return arr.sort((a, b) => (b._tripScore ?? 0) - (a._tripScore ?? 0));
     }
   }
 
@@ -3226,20 +3283,17 @@
     }
     const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
-    if (p.stops === 0) {
-      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
-    } else if (p.duration_hours) {
-      signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
-    }
+    const flightChip = flightSignalChipHtml(p);
+    if (flightChip) signals.push(flightChip);
     if (p.has_any_ai === true) {
       signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
     }
 
-    // Family Fit — one chip, just the number + qualitative label.
-    // Letter grades move to the detail page; they were too much for a
-    // glance-and-decide flow.
-    const fitScore = familyFitScore(p);
-    const fitInfo = familyFitInfo(p);
+    // Trip Score — the same composite we rank by. Number + qualitative
+    // label. Letter grades and family-fit-only signals move to the detail
+    // page; they were too much for a glance-and-decide flow.
+    const tripScore = p._tripScore ?? Math.round(compositeScore(p, [p]));
+    const tripLabel = tripScoreLabel(tripScore);
 
     // One italic line that explains the rank, no labeled box.
     const whyLine = whyThisRanksLine(p, rankBadge, budgetBadge);
@@ -3262,8 +3316,8 @@
           </div>
           <div class="card-signals">${signals.join("")}</div>
           <div class="card-fit">
-            <span class="card-fit-num">${fitScore}</span>
-            <span class="card-fit-lbl">Family Fit · ${escapeHtml(fitInfo.label)}</span>
+            <span class="card-fit-num">${tripScore}</span>
+            <span class="card-fit-lbl">Trip score · ${escapeHtml(tripLabel)}</span>
           </div>
           <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
@@ -3291,7 +3345,8 @@
   function renderHeroCard(p, rankBadge, budgetBadge) {
     const r = p.resorts || {};
     const fit = familyFitInfo(p);
-    const score = familyFitScore(p);
+    const tripScore = p._tripScore ?? Math.round(compositeScore(p, [p]));
+    const tripLabel = tripScoreLabel(tripScore);
     const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
     const isLive = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
@@ -3305,8 +3360,8 @@
     if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
     const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
-    if (p.stops === 0) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${p.duration_hours ? ` · ${fmtFlightDuration(p.duration_hours)}` : ""}</span>`);
-    else if (p.duration_hours) signals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(p.duration_hours)} · ${p.stops || 0} stop${p.stops === 1 ? "" : "s"}</span>`);
+    const heroFlightChip = flightSignalChipHtml(p);
+    if (heroFlightChip) signals.push(heroFlightChip);
     if (p.has_any_ai === true) signals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
 
     const reasons = fit.reasons.slice(0, 3);
@@ -3326,8 +3381,8 @@
             <h3 class="hero-card-title">${escapeHtml(r.resort_name || "Unknown resort")}</h3>
             <div class="card-signals">${signals.join("")}</div>
             <div class="card-fit hero-fit">
-              <span class="card-fit-num">${score}</span>
-              <span class="card-fit-lbl">Family Fit · ${escapeHtml(fit.label)}</span>
+              <span class="card-fit-num">${tripScore}</span>
+              <span class="card-fit-lbl">Trip score · ${escapeHtml(tripLabel)}</span>
             </div>
             ${reasonsHtml}
           </div>
@@ -4217,9 +4272,12 @@
 
           <section id="trip-overview" class="trip-section">
             <h2>Overview</h2>
+            <div id="trip-resort-info" class="trip-resort-info" hidden></div>
+            <div id="trip-resort-desc" class="trip-resort-desc" hidden></div>
             ${overviewFacts}
             ${overviewHighlights}
             ${overviewStyles}
+            <div id="trip-resort-times" class="trip-resort-times" hidden></div>
             ${directRate}
           </section>
 
@@ -4252,6 +4310,7 @@
 
           <section id="trip-rooms" class="trip-section trip-section-primary">
             ${roomOptionsSection}
+            <div id="trip-catalog-rooms" class="trip-catalog-rooms" hidden></div>
           </section>
 
           <section id="trip-flight" class="trip-section trip-section-primary">
@@ -4824,6 +4883,134 @@
   // Tracks which room cards the user has expanded — set of offer_ids.
   // Persists across re-renders (e.g. when async room details land).
   let currentModalExpandedRooms = new Set();
+
+  // Render LiteAPI resort-level content into the trip-overview hooks.
+  // Description is shown only if substantive (>= 80 chars). Important
+  // info renders as a "Good to know" notice strip when present.
+  function renderResortLiteapiContent(resort) {
+    const infoEl  = document.getElementById("trip-resort-info");
+    const descEl  = document.getElementById("trip-resort-desc");
+    const timesEl = document.getElementById("trip-resort-times");
+    if (!resort) {
+      if (infoEl)  infoEl.hidden = true;
+      if (descEl)  descEl.hidden = true;
+      if (timesEl) timesEl.hidden = true;
+      return;
+    }
+    if (infoEl) {
+      const info = (resort.liteapi_important_info || "").trim();
+      if (info.length > 0) {
+        infoEl.innerHTML = `<div class="trip-notice"><b>Good to know.</b> ${escapeHtml(info)}</div>`;
+        infoEl.hidden = false;
+      } else {
+        infoEl.hidden = true;
+      }
+    }
+    if (descEl) {
+      const desc = (resort.liteapi_description || "").trim();
+      if (desc.length >= 80) {
+        const preview = desc.length > 360 ? desc.slice(0, 360).replace(/\s+\S*$/, "") + "…" : desc;
+        descEl.innerHTML = `
+          <h3 class="trip-resort-desc-h">About this resort</h3>
+          <p class="trip-resort-desc-p" id="trip-resort-desc-p">${escapeHtml(preview)}</p>
+          ${desc.length > 360 ? `<button type="button" class="trip-resort-desc-more" onclick="(function(b){const p=document.getElementById('trip-resort-desc-p');p.textContent=${JSON.stringify(desc)};b.remove();})(this)">Read more</button>` : ""}
+        `;
+        descEl.hidden = false;
+      } else {
+        descEl.hidden = true;
+      }
+    }
+    if (timesEl) {
+      const ci = (resort.liteapi_checkin_time  || "").trim();
+      const co = (resort.liteapi_checkout_time || "").trim();
+      if (ci || co) {
+        timesEl.innerHTML = `
+          <div class="trip-times-row">
+            ${ci ? `<span class="trip-time"><span class="trip-time-lbl">Check-in</span><b>${escapeHtml(ci)}</b></span>` : ""}
+            ${co ? `<span class="trip-time"><span class="trip-time-lbl">Check-out</span><b>${escapeHtml(co)}</b></span>` : ""}
+          </div>`;
+        timesEl.hidden = false;
+      } else {
+        timesEl.hidden = true;
+      }
+    }
+  }
+
+  // Render the standalone resort_rooms catalog beneath the bookable rate
+  // offers. The catalog covers every room type the resort publishes (real
+  // bed configs, sizes, amenities, photos) — the rate-offer ↔ catalog-room
+  // join is 10% reliable so we keep this as a separate "every room type"
+  // panel rather than pretending we know which catalog row a rate maps to.
+  function renderCatalogRooms(rooms) {
+    const el = document.getElementById("trip-catalog-rooms");
+    if (!el) return;
+    if (!Array.isArray(rooms) || rooms.length === 0) {
+      el.hidden = true;
+      return;
+    }
+    const adults = Number(lastSearchSummary?.adults) || 2;
+    const kids = (lastSearchSummary?.child_ages || []).length;
+    const party = adults + kids;
+    const fits = (r) => party === 0 || !r.max_occupancy || Number(r.max_occupancy) >= party;
+    const sorted = [...rooms].sort((a, b) => {
+      const af = fits(a), bf = fits(b);
+      if (af !== bf) return af ? -1 : 1;
+      return (Number(b.room_size_sqm) || 0) - (Number(a.room_size_sqm) || 0);
+    });
+
+    const bedLine = (room) => {
+      const beds = Array.isArray(room.bed_types) ? room.bed_types : [];
+      if (beds.length === 0) return "";
+      const parts = beds.map((b) => {
+        const q = Number(b.quantity) || 1;
+        const t = String(b.bedType || "").trim() || "bed";
+        return `${q}× ${t}${q > 1 && !t.endsWith("s") ? "s" : ""}`;
+      });
+      const rel = room.bed_relation === "OR" ? " or " : (room.bed_relation === "AND" ? " + " : " · ");
+      return parts.join(rel);
+    };
+
+    const cardHtml = (r) => {
+      const photo = Array.isArray(r.photos) && r.photos.length > 0
+        ? (r.photos[0]?.url || r.photos[0]?.hd_url || "")
+        : "";
+      const size = Number(r.room_size_sqm);
+      const sizeStr = Number.isFinite(size) && size > 0 ? `${Math.round(size)} m²` : "";
+      const cap = [
+        Number.isFinite(Number(r.max_adults))  ? `${r.max_adults} adult${r.max_adults === 1 ? "" : "s"}` : "",
+        Number.isFinite(Number(r.max_children)) && Number(r.max_children) > 0 ? `${r.max_children} child${r.max_children === 1 ? "" : "ren"}` : "",
+      ].filter(Boolean).join(", ");
+      const views = (Array.isArray(r.views) ? r.views : []).map(v => String(v?.view || "").trim()).filter(Boolean).slice(0, 2);
+      const fitTag = fits(r)
+        ? `<span class="catalog-room-fit fits">Fits your ${party}-person party</span>`
+        : `<span class="catalog-room-fit nofit">Too small for ${party}</span>`;
+      return `
+        <article class="catalog-room-card">
+          ${photo ? `<img class="catalog-room-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(r.room_name || "Room")}" loading="lazy" />` : ""}
+          <div class="catalog-room-body">
+            <h4 class="catalog-room-name">${escapeHtml(r.room_name || "Room")}</h4>
+            <div class="catalog-room-meta">
+              ${sizeStr ? `<span>${sizeStr}</span>` : ""}
+              ${cap ? `<span>Sleeps ${cap}</span>` : ""}
+              ${views.length ? `<span>${escapeHtml(views.join(", "))}</span>` : ""}
+            </div>
+            ${bedLine(r) ? `<div class="catalog-room-beds">${escapeHtml(bedLine(r))}</div>` : ""}
+            ${fitTag}
+          </div>
+        </article>
+      `;
+    };
+
+    el.innerHTML = `
+      <div class="catalog-rooms-head">
+        <h3>Every room type at this resort</h3>
+        <p class="catalog-rooms-sub">${sorted.length} catalog room${sorted.length === 1 ? "" : "s"} from LiteAPI. Bookable rates above may not cover every type.</p>
+      </div>
+      <div class="catalog-rooms-grid">${sorted.map(cardHtml).join("")}</div>
+    `;
+    el.hidden = false;
+  }
+
   // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
@@ -4840,6 +5027,11 @@
       // Update the hero photo + gallery if LiteAPI gave us a better
       // set than the Google Places refs we started with.
       applyHeroFromHotelPhotos(currentModalHotelPhotos);
+      // LiteAPI resort-level content (description / important info /
+      // check-in/out times) + room catalog. Both come back from
+      // get_hotel_offers v2; render in Overview + Rooms.
+      renderResortLiteapiContent(data?.resort);
+      renderCatalogRooms(Array.isArray(data?.catalog_rooms) ? data.catalog_rooms : []);
       if (offers.length === 0) {
         section.style.display = "none";
         return;
