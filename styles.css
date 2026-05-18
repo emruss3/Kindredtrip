@@ -75,6 +75,22 @@
   --s-16: 64px;
   --s-20: 80px;
   --s-24: 96px;
+
+  /* Sticky-stack contract — one place to change the heights. Used by
+   * .topbar, .trip-back-bar, .trip-tabs, and .trip-section's
+   * scroll-margin-top so anchor jumps land below all stacked bars. */
+  --topbar-h: 60px;
+  --back-bar-h: 48px;
+  --tabs-h: 46px;
+  --stack-tabs-top: calc(var(--topbar-h) + var(--back-bar-h));
+  --stack-section-anchor: calc(var(--topbar-h) + var(--back-bar-h) + var(--tabs-h) + 8px);
+}
+@media (max-width: 720px) {
+  :root {
+    --topbar-h: 52px;
+    --back-bar-h: 44px;
+    --tabs-h: 42px;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -2897,8 +2913,9 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
   .trip-dock-actions .btn-secondary { display: none; }
   .trip-dock { padding: 8px 12px; }
 }
-/* Pad the page body so the dock doesn't cover the footer note. */
-.modal-overlay.page-mode .modal-body { padding-bottom: 96px; }
+/* No more 96px dock reservation — the dock is dead. The mobile bottom
+ * CTA reserves its own space via body.trip-detail-open .site-footer
+ * { padding-bottom: 80px } (see .trip-mobile-cta media query). */
 
 /* ---------- Room rows (Booking/Kayak-style table-like list) ---------- */
 .room-options-grid {
@@ -3066,9 +3083,9 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
  * stays accessible while the user scrolls deep into the detail. */
 .trip-back-bar {
   position: sticky;
-  top: 60px;
-  z-index: 12;
-  background: rgba(250, 250, 247, 0.92);
+  top: var(--topbar-h);
+  z-index: 40;
+  background: rgba(250, 250, 247, 0.94);
   backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   margin: 0 calc(-1 * var(--s-6));
@@ -3395,6 +3412,12 @@ body.kt-pricing-active .results-header .pricing-updater { display: none !importa
   text-align: center;
   margin-top: var(--s-3);
   line-height: 1.5;
+}
+/* The fixed bottom CTA sits at z-index 60 on mobile. The footer note
+ * is a sibling above the CTA — ensure enough bottom padding on mobile
+ * so the CTA never covers the disclaimer text. */
+@media (max-width: 1000px) {
+  .modal-footer-note { padding-bottom: 88px; }
 }
 
 /* ---------- Animations ---------- */
@@ -5579,8 +5602,32 @@ body.trip-detail-open #status { display: none !important; }
   .trip-hero-mosaic .trip-hero-grid-cell:nth-child(n+3) { display: none; }
 }
 @media (max-width: 540px) {
-  .trip-hero-mosaic { height: 260px; grid-template-columns: 1fr; grid-template-rows: 1fr; }
-  .trip-hero-grid { display: none; }
+  /* Phones: big photo on top, horizontal-scroll filmstrip below. The
+   * gallery is the strongest visual real-estate on the smallest
+   * screen — we don't throw it away. */
+  .trip-hero-mosaic {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: 240px 76px;
+    gap: 6px;
+  }
+  .trip-hero-main { grid-column: 1; grid-row: 1 / 2; }
+  .trip-hero-grid {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .trip-hero-grid::-webkit-scrollbar { display: none; }
+  .trip-hero-grid-cell {
+    flex: 0 0 110px;
+    height: 76px;
+  }
 }
 .trip-hero-main {
   grid-column: 1;
@@ -5603,8 +5650,10 @@ body.trip-detail-open #status { display: none !important; }
 .trip-hero-tag {
   position: absolute;
   top: 16px; left: 16px;
+  /* Solid white at .96 alpha — no backdrop-filter. Stacked over a
+   * scaling/transforming image, the blur was a known jank source on
+   * mid-range Android. The visual diff vs. blurred is imperceptible. */
   background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -5683,12 +5732,18 @@ body.trip-detail-open #status { display: none !important; }
 .trip-head { padding: 8px 0 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 14px; }
 .trip-head h1 {
   font-family: "Playfair Display", ui-serif, Georgia, serif;
-  font-size: clamp(28px, 3.5vw, 38px);
+  font-size: clamp(26px, 3.5vw, 38px);
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
   margin: 0 0 10px;
   color: var(--ink);
+  text-wrap: balance;
+}
+/* Ease tracking + bump line-height on narrow screens — Playfair at
+ * -0.02em + 28px on a 40-character resort name was getting cramped. */
+@media (max-width: 540px) {
+  .trip-head h1 { letter-spacing: -0.005em; }
 }
 .trip-head-signals {
   display: flex;
@@ -5699,11 +5754,12 @@ body.trip-detail-open #status { display: none !important; }
   color: var(--ink-2);
 }
 
-/* Sticky tab nav */
+/* Sticky tab nav — stacks under topbar + back-bar via the
+ * --stack-tabs-top token (60+48 desktop, 52+44 mobile). */
 .trip-tabs {
   position: sticky;
-  top: 64px;
-  z-index: 25;
+  top: var(--stack-tabs-top);
+  z-index: 30;
   background: rgba(252, 251, 247, 0.94);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -5716,7 +5772,6 @@ body.trip-detail-open #status { display: none !important; }
   -webkit-overflow-scrolling: touch;
 }
 .trip-tabs::-webkit-scrollbar { display: none; }
-@media (max-width: 720px) { .trip-tabs { top: 56px; } }
 .trip-tab {
   padding: 10px 16px;
   font-size: 14px;
@@ -5730,10 +5785,17 @@ body.trip-detail-open #status { display: none !important; }
 }
 .trip-tab:hover { color: var(--ink); text-decoration: none; }
 .trip-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+.trip-tab:focus { outline: none; }
+.trip-tab:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 
-/* Each anchored section */
+/* Each anchored section — scroll-margin-top lands the heading below
+ * the full sticky stack (topbar + back-bar + tabs + 8px breathing). */
 .trip-section {
-  scroll-margin-top: 130px;
+  scroll-margin-top: var(--stack-section-anchor);
   padding: var(--s-6) 0;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -5750,8 +5812,8 @@ body.trip-detail-open #status { display: none !important; }
   font-size: 14px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.10em;
-  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
   margin: var(--s-4) 0 var(--s-2);
 }
 .trip-fact-grid {
@@ -5854,18 +5916,21 @@ body.trip-detail-open #status { display: none !important; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: 0 4px 16px rgba(13, 43, 69, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 .trip-rail .price-from { font-size: 11px; }
 .trip-rail .price-total {
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  /* Use the same Playfair stack as h1/h2 so the single most important
+   * number on the page looks deliberate, not like an unstyled fallback. */
+  font-family: "Playfair Display", ui-serif, Georgia, "Times New Roman", serif;
   font-size: 36px;
   font-weight: 600;
   margin: 4px 0 2px;
   color: var(--ink);
   letter-spacing: -0.025em;
   line-height: 1;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 .trip-rail-sub {
   font-size: 12px;
@@ -6500,12 +6565,13 @@ body.trip-detail-open #status { display: none !important; }
 }
 .trip-mobile-cta-info { flex: 1; min-width: 0; }
 .trip-mobile-cta-price b {
-  font-family: ui-serif, Georgia, serif;
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--ink);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 .trip-mobile-cta-sub {
   font-size: 11.5px;
@@ -6515,8 +6581,53 @@ body.trip-detail-open #status { display: none !important; }
 @media (max-width: 1000px) {
   .trip-mobile-cta { display: flex; }
   body.trip-detail-open .site-footer { padding-bottom: 80px; }
-  /* Hide the inline rail on mobile — bottom CTA covers it */
+  /* Hide the inline rail on mobile — bottom CTA + .trip-mobile-meta
+   * cover the rail's content (price/CTA + dates + save/share/watch). */
   .trip-side-col { display: none; }
+}
+
+/* Mobile-only metadata strip — surfaces dates, party, and save/share
+ * actions that lived in the desktop right rail. Hidden on desktop. */
+.trip-mobile-meta { display: none; }
+@media (max-width: 1000px) {
+  .trip-mobile-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px 14px;
+    margin: var(--s-3) 0 var(--s-4);
+    padding: var(--s-3) var(--s-4);
+    background: var(--bg-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+  }
+  .trip-mobile-meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .trip-mobile-meta-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .trip-mobile-meta-row b {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .trip-mobile-meta-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-soft);
+  }
 }
 
 /* ---------- Compare modal ---------- */
