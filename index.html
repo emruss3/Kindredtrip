@@ -2209,9 +2209,16 @@
       winners.set(easyScored[0].p.package_id, { label: "Easy travel day", cls: "rank rank-easy" });
     }
 
-    // Shortest travel — lowest stops then lowest duration
-    const shortest = [...visible].sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)))[0];
-    if (shortest && !winners.has(shortest.package_id) && shortest.stops != null) {
+    // Shortest travel — lowest stops then lowest duration on the longer
+    // single leg (outbound vs return), matching what the ✈ chip displays.
+    // Using raw pkg.stops / duration_hours here meant the badge could
+    // land on a 12h 15m · 1 stop trip while other 8h 28m · 1 stop trips
+    // ranked lower in the same list.
+    const shortest = [...visible].sort((a, b) =>
+      (num(flightLegStops(a)) - num(flightLegStops(b))) ||
+      (num(flightLegHours(a)) - num(flightLegHours(b)))
+    )[0];
+    if (shortest && !winners.has(shortest.package_id) && Number.isFinite(flightLegStops(shortest))) {
       winners.set(shortest.package_id, { label: "Shortest travel", cls: "rank rank-short" });
     }
 
@@ -4140,8 +4147,8 @@
     if (headStars >= 3) headSignals.push(`<span class="signal signal-class">${"★".repeat(headStars)}<span class="signal-sub">${headStars}-star hotel</span></span>`);
     const headLoc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (headLoc) headSignals.push(`<span class="signal signal-loc">${escapeHtml(headLoc)}</span>`);
-    if (pkg.stops === 0) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>Direct${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}</span>`);
-    else if (pkg.duration_hours) headSignals.push(`<span class="signal signal-flight"><span class="signal-ico">✈</span>${fmtFlightDuration(pkg.duration_hours)} · ${pkg.stops || 0} stop${pkg.stops === 1 ? "" : "s"}</span>`);
+    const headFlightChip = flightSignalChipHtml(pkg);
+    if (headFlightChip) headSignals.push(headFlightChip);
     if (pkg.has_any_ai === true) headSignals.push(`<span class="signal signal-ai"><span class="ai-check">✓</span>All-Inclusive</span>`);
 
     // Sticky right rail: live price, total, breakdown, delta, dates,
