@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v10_dispatch_topup";
+const VERSION = "start_pricing_v11_mapped_room_id";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -97,6 +97,7 @@ type ExtractedRateOffer = {
   offer_id: string;
   raw_offer_id_full: string;  // for storing the full liteapi offer id in raw_offer
   room_type_id: string | null;
+  mapped_room_id: string | null;  // LiteAPI rate.mappedRoomId → joins to resort_rooms.room_id
   room_name: string | null;
   rate_id: string | null;
   max_occupancy: number | null;
@@ -140,6 +141,10 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
     const paymentTypes: string[] = Array.isArray(rt?.paymentTypes) ? rt.paymentTypes : [];
     const supplier = rt?.supplier ?? null;
     const roomTypeId = rt?.roomTypeId ?? null;
+    // mappedRoomId is the documented crosswalk to /data/hotel rooms[].id
+    // (resort_rooms.room_id). Per LiteAPI it can sit on the roomType
+    // wrapper; per-rate is preferred when present (see loop below).
+    const wrapperMappedRoomId = rt?.mappedRoomId ?? null;
 
     const rates: any[] = Array.isArray(rt?.rates) ? rt.rates : [];
     for (const rate of rates) {
@@ -170,6 +175,11 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
       // Stable short id from hotel+rate identifiers. 16 hex chars guaranteed unique.
       const rateId = String(rate?.rateId ?? "r0");
       const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
+      // Per-rate mappedRoomId wins; fall back to the roomType wrapper.
+      // Coerce to string so the join against resort_rooms.room_id (text)
+      // doesn't get tripped up by a numeric LiteAPI id.
+      const mappedRoomIdRaw = rate?.mappedRoomId ?? wrapperMappedRoomId ?? null;
+      const mappedRoomId = mappedRoomIdRaw != null ? String(mappedRoomIdRaw) : null;
 
       // v5: trimmed raw_offer. We only need enough to replay or prebook later;
       // the full LiteAPI rate JSON is large and not used downstream. Store just
@@ -179,6 +189,7 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
         _liteapi_offer_id: liteOfferId,
         _liteapi_room_type_id: roomTypeId,
         _liteapi_rate_id: rateId,
+        _liteapi_mapped_room_id: mappedRoomId,
         board_type: boardType,
         board_name: boardName,
         refundable_tag: refundableTag,
@@ -188,6 +199,7 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
         offer_id: offerId,
         raw_offer_id_full: liteOfferId,
         room_type_id: roomTypeId,
+        mapped_room_id: mappedRoomId,
         room_name: rate?.name ?? null,
         rate_id: rateId,
         max_occupancy: rate?.maxOccupancy ?? null,
@@ -570,6 +582,7 @@ serve(async (req) => {
               resort_id: p.resort_id,
               liteapi_hotel_id: r.liteapi_hotel_id,
               room_type_id: o.room_type_id,
+              mapped_room_id: o.mapped_room_id,
               room_name: o.room_name,
               rate_id: o.rate_id,
               max_occupancy: o.max_occupancy,
