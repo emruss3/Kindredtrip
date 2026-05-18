@@ -1420,6 +1420,110 @@
     if (!m) return 0;
     return parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
   }
+  // Numeric airport-transfer minutes. Prefer the resorts.airport_transfer_minutes
+  // column (backfilled in migration add_airport_transfer_minutes), fall back
+  // to parsing airport_transfer_notes for resorts where the column hasn't
+  // been filled. Returns null when no data is available.
+  function transferMinutes(r) {
+    if (!r) return null;
+    const m = Number(r.airport_transfer_minutes);
+    if (Number.isFinite(m) && m > 0) return m;
+    const hrs = parseTransferHours(r.airport_transfer_notes);
+    return hrs > 0 ? Math.round(hrs * 60) : null;
+  }
+
+  // ---------- Flight friction score (origin-relative) ----------
+  // Returns { score, label, components } where:
+  //   score   = 0..100, lower = easier
+  //   label   = "Easy" | "Good" | "Manageable" | "Long day" | "—"
+  //   components.{stops, durationHours, transferMin, percentile, originRel}
+  //
+  // Inputs combined: flight stops, total flight duration (hours),
+  // airport-to-resort transfer (minutes), plus an origin-relative
+  // percentile (where does this trip sit vs the median for this
+  // origin in the current visible result set). The percentile lets
+  // a Miami → Caribbean trip be called "Easy for your origin" even
+  // when the absolute time is short, and prevents a Seattle →
+  // Caribbean trip from being mislabeled "Easy" just because it's
+  // direct.
+  //
+  // Calibration:
+  //   - 0 stops absolute baseline = 0 friction
+  //   - Each stop adds ~25 points (a 1-stop is significantly harder
+  //     for families than a direct, especially with infants)
+  //   - Each hour of flight time over 5h adds ~6 points (5h is the
+  //     longest comfortable single-leg from US East to Caribbean)
+  //   - Each 15 min of transfer over 30 min adds ~5 points (30 min
+  //     is the median across our 731 backfilled resorts)
+  function flightFrictionInfo(pkg, pool) {
+    const r = pkg?.resorts || {};
+    const stops = Number(pkg?.stops);
+    const dur = Number(pkg?.duration_hours);
+    const transferMin = transferMinutes(r);
+
+    let friction = 0;
+    if (Number.isFinite(stops) && stops > 0) friction += stops * 25;
+    if (Number.isFinite(dur) && dur > 5)     friction += (dur - 5) * 6;
+    if (Number.isFinite(transferMin) && transferMin > 30) {
+      friction += ((transferMin - 30) / 15) * 5;
+    }
+    friction = Math.max(0, Math.min(100, Math.round(friction)));
+
+    // Origin-relative percentile (lower = faster than peers).
+    // Compare door-to-door minutes (flight + 60·stops + transfer) so
+    // the same trip from Miami doesn't look penalised vs Seattle.
+    let percentile = null;
+    if (Array.isArray(pool) && pool.length > 4 && Number.isFinite(dur)) {
+      const doorMin = (p) => {
+        const d = Number(p?.duration_hours);
+        const s = Number(p?.stops);
+        const t = transferMinutes(p?.resorts);
+        if (!Number.isFinite(d)) return null;
+        return d * 60 + (Number.isFinite(s) ? s * 60 : 0) + (Number.isFinite(t) ? t : 30);
+      };
+      const myDoor = doorMin(pkg);
+      if (Number.isFinite(myDoor)) {
+        const all = pool.map(doorMin).filter(Number.isFinite).sort((a, b) => a - b);
+        if (all.length > 4) {
+          const rank = all.filter(d => d <= myDoor).length;
+          percentile = rank / all.length;
+        }
+      }
+    }
+
+    let label;
+    if (!Number.isFinite(stops) || !Number.isFinite(dur)) {
+      label = "—";
+    } else if (stops === 0 && dur <= 6 && (transferMin == null || transferMin <= 45) && friction <= 8) {
+      label = "Easy";
+    } else if (stops <= 1 && friction <= 30) {
+      label = "Good";
+    } else if (friction <= 60) {
+      label = "Manageable";
+    } else {
+      label = "Long day";
+    }
+
+    // Origin-relative refinement. Top quintile that's also direct →
+    // "Easy for your origin". Bottom quintile → downgrade to "Long".
+    let originRel = null;
+    if (percentile != null) {
+      if (percentile <= 0.20 && stops === 0 && label !== "Easy") {
+        originRel = "fast";
+      } else if (percentile >= 0.80) {
+        originRel = "slow";
+        if (label === "Good" || label === "Easy") label = "Manageable";
+        else if (label === "Manageable") label = "Long day";
+      } else if (percentile <= 0.40) {
+        originRel = "shorter";
+      }
+    }
+
+    return {
+      score: friction, label,
+      components: { stops, durationHours: dur, transferMin, percentile, originRel },
+    };
+  }
 
   // 42587 → "42k"; 1402 → "1.4k"; 230 → "230"
   function fmtReviews(n) {
@@ -2045,10 +2149,17 @@
       winners.set(familyScored[0].package_id, { label: "Strong family fit", cls: "rank rank-fit" });
     }
 
-    // Easy travel day — direct flight + lowest duration
-    const easy = visible.filter((p) => p.stops === 0).sort((a, b) => num(a.duration_hours) - num(b.duration_hours))[0];
-    if (easy && !winners.has(easy.package_id)) {
-      winners.set(easy.package_id, { label: "Easy travel day", cls: "rank rank-easy" });
+    // Easy travel day — picks the trip with the lowest friction
+    // score AND whose label actually qualifies as "Easy" (direct,
+    // ≤6h, ≤45min transfer). A 24-hour journey or a 90-minute
+    // transfer disqualifies, regardless of how it ranks in the
+    // visible set.
+    const easyScored = visible
+      .map(p => ({ p, fi: flightFrictionInfo(p, allPackages) }))
+      .filter(x => x.fi.label === "Easy")
+      .sort((a, b) => a.fi.score - b.fi.score);
+    if (easyScored.length > 0 && !winners.has(easyScored[0].p.package_id)) {
+      winners.set(easyScored[0].p.package_id, { label: "Easy travel day", cls: "rank rank-easy" });
     }
 
     // Shortest travel — lowest stops then lowest duration
@@ -2869,11 +2980,18 @@
       else if (pkg.total_price <= q3) priceGrade = "C";
       else priceGrade = "D";
     }
-    // Flight ease: direct = A, 1 stop = B, 2+ stops = C; long durations downgrade
+    // Flight ease — driven by the unified friction score so we count
+    // stops, total travel time, transfer, AND origin-relative position
+    // instead of bucketing by stops alone.
     let flightGrade = "B";
-    if (pkg.stops === 0) flightGrade = pkg.duration_hours && pkg.duration_hours <= 5 ? "A" : "A-";
-    else if (pkg.stops === 1) flightGrade = "B";
-    else if (pkg.stops >= 2) flightGrade = "C";
+    const fi = flightFrictionInfo(pkg, allPackages);
+    if (fi.label === "Easy")             flightGrade = "A";
+    else if (fi.label === "Good")        flightGrade = "B";
+    else if (fi.label === "Manageable")  flightGrade = "C";
+    else if (fi.label === "Long day")    flightGrade = "D";
+    // Top-quintile direct trip from this origin → bump to A even if
+    // the absolute thresholds say "Good"
+    if (fi.components.originRel === "fast" && flightGrade === "B") flightGrade = "A-";
     // Resort quality: 0-100 rating
     const rating = Number(r.avg_user_rating) || 0;
     const resortGrade = letterGrade(rating, [
@@ -3392,7 +3510,10 @@
     const flightHrs = Number(pkg.duration_hours) || 0;
     const stops = Number(pkg.stops) || 0;
     const stopOverhead = stops * 1.0;
-    const transferHrs = parseTransferHours(r.airport_transfer_notes);
+    // Prefer the numeric airport_transfer_minutes column; fall back
+    // to parsing the legacy text notes when missing.
+    const transferMin = transferMinutes(r);
+    const transferHrs = (transferMin != null ? transferMin / 60 : parseTransferHours(r.airport_transfer_notes));
     const totalTravel = flightHrs + stopOverhead + transferHrs;
     if (flightHrs > 0) {
       // Sensitivity multiplier: infants/toddlers amplify the penalty,
@@ -3433,12 +3554,22 @@
 
   function travelEaseInfo(pkg) {
     if (pkg.stops == null) return { label: "—", note: "—" };
+    // Route to the combined friction model so the label reflects
+    // stops + total travel time + transfer + origin-relative
+    // position. allPackages is the pool for the percentile so a
+    // Miami→Caribbean trip is judged against Miami peers.
+    const fi = flightFrictionInfo(pkg, allPackages);
     const stopsStr = pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`;
     const dur = pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)}` : "";
     const transferStr = fmtTransfer(pkg.resorts?.airport_transfer_notes);
+    const originHint = fi.components.originRel === "fast"
+      ? " · fast for your origin"
+      : fi.components.originRel === "slow"
+        ? " · long for your origin"
+        : "";
     return {
-      label: pkg.stops === 0 ? "Easy" : pkg.stops >= 2 ? "Long day" : "Manageable",
-      note: [stopsStr, dur].filter(Boolean).join(" · ") + (transferStr ? ` · ${transferStr} transfer` : ""),
+      label: fi.label,
+      note: [stopsStr, dur].filter(Boolean).join(" · ") + (transferStr ? ` · ${transferStr} transfer` : "") + originHint,
     };
   }
 

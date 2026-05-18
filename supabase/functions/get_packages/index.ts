@@ -1,8 +1,13 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v11_cap_star_rating";
+const VERSION = "get_packages_v12_transfer_minutes";
 
+// v12 (2026-05-19):
+//   Include resorts.airport_transfer_minutes so the frontend's flight
+//   friction score can use real numeric transfer time instead of the
+//   text-only airport_transfer_notes.
+//
 // v10 (2026-05-14):
 //   Added the package-level fields the frontend filter / modal relies
 //   on but that were missing from the SELECT in v9:
@@ -163,6 +168,7 @@ serve(async (req) => {
           year_renovated,
           floors,
           airport_transfer_notes,
+          airport_transfer_minutes,
           beach_quality_score,
           on_beach,
           accepts_infants,
