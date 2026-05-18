@@ -2041,12 +2041,14 @@ details.rank-explainer > p {
 
 /* ---------- Sticky search-summary header ---------- */
 .results-header {
-  position: sticky;
-  top: 64px;
-  z-index: 30;
+  /* Was position: sticky — but it collided with .pricing-progress-slot
+   * (also sticky at top: 60px) every time the user scrolled even
+   * slightly during a search. The compact "Edit search" pill in the
+   * topbar already provides a sticky way to change the search; this
+   * header doesn't need to stack a second sticky surface. */
+  position: relative;
+  z-index: 1;
   background: rgba(252, 251, 247, 0.94);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: var(--s-4) var(--s-5);
@@ -2056,12 +2058,11 @@ details.rank-explainer > p {
   gap: 10px;
 }
 @media (max-width: 980px) {
-  .results-header { top: 56px; padding: 12px 14px; }
+  .results-header { padding: 12px 14px; }
 }
-/* While the big pricing widget is up, drop the sticky behavior + the
- * inline refreshing-prices banner so the two status surfaces don't
- * stack at the top of the page. */
-body.kt-pricing-active .results-header { position: static; }
+/* The kt-pricing-active overrides are no longer needed (the header is
+ * not sticky), but keep the .pricing-updater suppression so we don't
+ * stack two "still pricing" status surfaces. */
 body.kt-pricing-active .results-header .pricing-updater { display: none !important; }
 .results-header-row {
   display: flex;
