@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-no-mock" />
-<meta name="kt-build" content="20260515-no-mock" />
+<link rel="stylesheet" href="/styles.css?v=20260515-trip-reorder" />
+<meta name="kt-build" content="20260515-trip-reorder" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -3657,8 +3657,8 @@
     // mock-priced packages we keep the placeholder until live offers
     // arrive.
     const flightOptions = liveFlight ? `
-      <div class="modal-section bk-flights" id="flight-options-section">
-        <h2>Flight options ${flightCountNote}</h2>
+      <div class="bk-flights" id="flight-options-section">
+        <div class="trip-section-title-row"><h2>Flight options</h2>${flightCountNote}</div>
         <div class="bk-flight-tabs" id="flight-sort-tabs" role="tablist">
           <button type="button" class="bk-flight-tab active" data-sort="best" onclick="setFlightSort('best')" role="tab" aria-selected="true">
             <span class="bk-flight-tab-label">Best</span>
@@ -3681,7 +3681,7 @@
         <div class="bk-flight-compat" id="flight-option-grid" hidden></div>
         <div id="flight-all-block" hidden><div id="flight-all-list"></div><span id="flight-all-count"></span></div>
       </div>` : `
-      <div class="modal-section bk-flights" id="flight-options-section">
+      <div class="bk-flights" id="flight-options-section">
         <h2>Flight options</h2>
         <div class="bk-flight-empty">
           <p><b>Live fares pending.</b> Your flight search is still resolving for this resort. Live fares appear here once a carrier confirms a rate for your party.</p>
@@ -3729,16 +3729,22 @@
     // mock-priced packages we show an explanatory placeholder instead of
     // hiding the section, because hiding it made the modal feel barren.
     const liveHotel = pkg.hotel_supplier === "liteapi";
+    // Booking-style rooms block — no extra .modal-section wrapper or
+    // h4 heading. The outer <section id="trip-rooms"> already provides
+    // the v3 page-section frame; we just supply the title row + table.
     const roomOptionsSection = liveHotel ? `
-      <div class="modal-section room-options" id="room-options-section">
-        <h4>Room options <span class="modal-section-count" id="room-options-count">loading…</span></h4>
+      <div class="room-options" id="room-options-section">
+        <div class="trip-section-title-row">
+          <h2>Rooms</h2>
+          <span class="modal-section-count" id="room-options-count">loading…</span>
+        </div>
         <div class="room-options-grid" id="room-options-grid">
           <div class="room-options-loading">Loading available rooms…</div>
         </div>
         <p class="room-options-note">Prices shown are for your stay length and party size. Final pricing is set by the booking partner at checkout.</p>
       </div>` : `
-      <div class="modal-section room-options">
-        <h4>Room options</h4>
+      <div class="room-options">
+        <h2>Rooms</h2>
         <div class="room-options-empty">
           <p><b>Live rates pending.</b> This resort is still being priced from our partner. Room-by-room totals will appear here once pricing finishes.</p>
           <p class="room-options-empty-sub">Live room rates appear here once the partner confirms availability for your dates. Click "See hotel rates" to view the partner's live room list now.</p>
@@ -3980,12 +3986,20 @@
           </header>
 
           <nav class="trip-tabs" role="tablist">
-            <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
-            <a href="#trip-rooms" class="trip-tab" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
+            <a href="#trip-rooms" class="trip-tab active" onclick="scrollToTripSection(event, 'trip-rooms')">Rooms</a>
             <a href="#trip-flight" class="trip-tab" onclick="scrollToTripSection(event, 'trip-flight')">Flight</a>
+            <a href="#trip-overview" class="trip-tab" onclick="scrollToTripSection(event, 'trip-overview')">Overview</a>
             <a href="#trip-fit" class="trip-tab" onclick="scrollToTripSection(event, 'trip-fit')">Family fit</a>
             <a href="#trip-location" class="trip-tab" onclick="scrollToTripSection(event, 'trip-location')">Location</a>
           </nav>
+
+          <section id="trip-rooms" class="trip-section trip-section-primary">
+            ${roomOptionsSection}
+          </section>
+
+          <section id="trip-flight" class="trip-section trip-section-primary">
+            ${flightOptions}
+          </section>
 
           <section id="trip-overview" class="trip-section">
             <h2>Overview</h2>
@@ -3993,14 +4007,6 @@
             ${overviewHighlights}
             ${overviewStyles}
             ${directRate}
-          </section>
-
-          <section id="trip-rooms" class="trip-section">
-            ${roomOptionsSection}
-          </section>
-
-          <section id="trip-flight" class="trip-section">
-            ${flightOptions}
           </section>
 
           <section id="trip-fit" class="trip-section">

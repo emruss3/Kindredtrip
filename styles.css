@@ -6174,6 +6174,39 @@ body.trip-detail-open #status { display: none !important; }
   .rt-cta .btn { width: 100%; padding: 11px 14px; }
 }
 
+/* Trip-section title row — primary heading + count badge inline */
+.trip-section-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 var(--s-4);
+  flex-wrap: wrap;
+}
+.trip-section-title-row h2 {
+  margin: 0;
+}
+.trip-section-title-row .modal-section-count {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink-3);
+  background: var(--bg-soft);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  text-transform: none;
+}
+/* Primary sections (Rooms, Flight) get extra emphasis — slightly more
+ * top padding and a subtle accent so they read as the actionable
+ * blocks. */
+.trip-section-primary {
+  padding-top: 8px;
+}
+.trip-section-primary > .room-options > .trip-section-title-row,
+.trip-section-primary > .bk-flights > .trip-section-title-row {
+  border-bottom: none;
+}
+
 /* ---------- Booking.com-style flight layout (trip detail) ---------- */
 .bk-flights { padding-top: 8px; }
 .bk-flight-tabs {
