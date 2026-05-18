@@ -5583,7 +5583,7 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Hero mosaic — 1 big photo + 2x2 grid of 4 thumbs */
 .trip-hero {
-  max-width: 1280px;
+  max-width: 1500px;
   margin: 0 auto;
   padding: 0 var(--s-6);
 }
@@ -5711,11 +5711,14 @@ body.trip-detail-open #status { display: none !important; }
 
 /* 2-col layout */
 .trip-layout-v3 {
-  max-width: 1280px;
+  max-width: 1500px;
   margin: var(--s-6) auto 0;
   padding: 0 var(--s-6);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  /* Slimmer rail (320 vs old 360) + wider container give the main
+   * column ~1100px on a typical 1440 laptop, ~1180px on a 1600+
+   * screen. Was ~820px before. */
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: var(--s-8);
   align-items: start;
 }
@@ -6029,7 +6032,7 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Alternatives section below the 2-col body */
 .trip-alts {
-  max-width: 1280px;
+  max-width: 1500px;
   margin: var(--s-8) auto 0;
   padding: var(--s-6);
   border-top: 1px solid var(--line);
