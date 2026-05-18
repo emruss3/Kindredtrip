@@ -3072,6 +3072,39 @@
     return { diff: Math.abs(Math.round(diff)), under: diff >= 0, budget: b };
   }
 
+  // Star-relative price score: how good is the hotel price for its star tier?
+  // Builds a median hotel_price per star bucket from the current result pool
+  // so the bar is "what other 4-star resorts cost on these dates", not a
+  // hard-coded table. Returns 0-100 (higher = better deal).
+  function valueVsStarScore(pkg, pool) {
+    const stars = Math.round(Number(pkg?.resorts?.cap_star_rating ?? pkg?.highlights?.star_rating ?? 0));
+    const price = Number(pkg?.hotel_price);
+    if (!stars || stars < 2 || !Number.isFinite(price) || price <= 0) return 50;
+    const bucket = pool
+      .filter((p) => Math.round(Number(p?.resorts?.cap_star_rating ?? p?.highlights?.star_rating ?? 0)) === stars
+                    && Number(p?.hotel_price) > 0)
+      .map((p) => Number(p.hotel_price))
+      .sort((a, b) => a - b);
+    if (bucket.length < 3) return 50;
+    const median = bucket[Math.floor(bucket.length / 2)];
+    const ratio = median / price;            // >1 = cheaper than peers
+    return Math.max(0, Math.min(100, Math.round((ratio - 0.6) * 100)));
+  }
+
+  // Composite default ranking. Server pre-orders by a resort-only score that
+  // can't see flights, family fit, or star-relative price — so we re-rank
+  // here using the same signals the cards already display.
+  function compositeScore(pkg, pool) {
+    const rating  = Math.max(0, Math.min(100, Number(pkg?.resorts?.avg_user_rating ?? pkg?.highlights?.rating ?? 0)));
+    const fit     = (typeof familyFitScore === "function") ? familyFitScore(pkg) : 50;
+    const fric    = (typeof flightFrictionInfo === "function") ? flightFrictionInfo(pkg, pool).score : 50;
+    const flight  = 100 - fric;
+    const value   = valueVsStarScore(pkg, pool);
+    const stars   = Math.round(Number(pkg?.resorts?.cap_star_rating ?? pkg?.highlights?.star_rating ?? 0));
+    const starBonus = stars >= 5 ? 100 : stars === 4 ? 70 : stars === 3 ? 40 : 0;
+    return 0.30 * rating + 0.20 * fit + 0.20 * flight + 0.20 * value + 0.10 * starBonus;
+  }
+
   function applyClientSort(packages) {
     const num = (v) => (v == null ? Infinity : Number(v));
     const budget = getUserBudget();
@@ -3099,8 +3132,14 @@
         return within.concat(over);
       }
       case "score":
-      default:
-        return arr; // server pre-sorted by score
+      default: {
+        const cache = new Map();
+        const s = (p) => {
+          if (!cache.has(p)) cache.set(p, compositeScore(p, arr));
+          return cache.get(p);
+        };
+        return arr.sort((a, b) => s(b) - s(a));
+      }
     }
   }
 
