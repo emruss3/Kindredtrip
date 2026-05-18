@@ -3658,14 +3658,22 @@
   }
 
   function travelEaseInfo(pkg) {
-    if (pkg.stops == null) return { label: "—", note: "—" };
     // Route to the combined friction model so the label reflects
-    // stops + total travel time + transfer + origin-relative
-    // position. allPackages is the pool for the percentile so a
-    // Miami→Caribbean trip is judged against Miami peers.
+    // stops + travel time + transfer + origin-relative position.
+    // allPackages is the pool for the percentile so a Miami→Caribbean
+    // trip is judged against Miami peers.
     const fi = flightFrictionInfo(pkg, allPackages);
-    const stopsStr = pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`;
-    const dur = pkg.duration_hours ? `${fmtFlightDuration(pkg.duration_hours)}` : "";
+    // Use the per-leg helpers — same source as the ✈ signal chip —
+    // so the Family-fit pill can't say "2 stops · 15h 6m" while the
+    // flight chip says "1 stop · 8h 21m". Raw pkg.stops summed
+    // outbound + return; raw pkg.duration_hours was the sum too.
+    const legStops = flightLegStops(pkg);
+    const legHours = flightLegHours(pkg);
+    if (!Number.isFinite(legStops)) return { label: "—", note: "—" };
+    const stopsStr = legStops === 0
+      ? "Direct"
+      : `${legStops} stop${legStops === 1 ? "" : "s"} per leg`;
+    const dur = Number.isFinite(legHours) ? fmtFlightDuration(legHours) : "";
     const transferStr = fmtTransfer(pkg.resorts?.airport_transfer_notes);
     const originHint = fi.components.originRel === "fast"
       ? " · fast for your origin"
@@ -5049,6 +5057,43 @@
       .toLowerCase();
   }
 
+  // "1× King + 2× Twins" style bed-config line from a catalog row.
+  function catalogBedLine(room) {
+    if (!room || !Array.isArray(room.bed_types) || room.bed_types.length === 0) return "";
+    const parts = room.bed_types.map((b) => {
+      const q = Number(b.quantity) || 1;
+      const t = String(b.bedType || "").trim() || "bed";
+      return `${q}× ${t}${q > 1 && !t.endsWith("s") ? "s" : ""}`;
+    });
+    const rel = room.bed_relation === "OR" ? " or " : (room.bed_relation === "AND" ? " + " : " · ");
+    return parts.join(rel);
+  }
+
+  // Inline meta string for a rate row when we have a catalog match:
+  // "32 m² · 1× King · Ocean view". Returns "" when nothing useful is
+  // available; falls back gracefully on partial data.
+  function catalogRowMeta(room) {
+    if (!room) return "";
+    const parts = [];
+    const size = Number(room.room_size_sqm);
+    if (Number.isFinite(size) && size > 0) parts.push(`${Math.round(size)} m²`);
+    const beds = catalogBedLine(room);
+    if (beds) parts.push(beds);
+    const view = (Array.isArray(room.views) ? room.views : [])
+      .map(v => String(v?.view || "").trim())
+      .filter(Boolean)[0];
+    if (view) parts.push(view);
+    return parts.join(" · ");
+  }
+
+  // Pick the first usable photo from a catalog row.
+  function catalogPhotoUrl(room) {
+    if (!room || !Array.isArray(room.photos)) return null;
+    const p = room.photos[0];
+    if (!p) return null;
+    return p.hd_url || p.url || null;
+  }
+
   // hotel_rate_offers.max_occupancy is the priced party size, not the
   // room's real max — so a 3-bedroom suite and a 2-bedroom suite both
   // show "Sleeps 6" for a family-of-6 search. Where the offer's name
@@ -5087,21 +5132,36 @@
       // set than the Google Places refs we started with.
       applyHeroFromHotelPhotos(currentModalHotelPhotos);
       // LiteAPI resort-level content (description / important info /
-      // check-in/out times) + room catalog. Both come back from
-      // get_hotel_offers v2; render in Overview + Rooms.
+      // check-in/out times) + room catalog. Resort content renders in
+      // Overview; the catalog is folded INTO each matching rate card
+      // below so we don't show two parallel sets of room cards (one
+      // with pricing, one with photos / size / views).
       const catalogRooms = Array.isArray(data?.catalog_rooms) ? data.catalog_rooms : [];
       renderResortLiteapiContent(data?.resort);
-      renderCatalogRooms(catalogRooms);
+      // Hide the standalone catalog panel — it was duplicating the rate
+      // rows and forcing users to read two sets of cards per resort.
+      const catalogEl = document.getElementById("trip-catalog-rooms");
+      if (catalogEl) { catalogEl.hidden = true; catalogEl.innerHTML = ""; }
       // Build normalized-name → catalog room map once, then attach the
-      // true max capacity to each offer where a confident match exists.
+      // full catalog row (capacity + size + views + beds + photos + desc
+      // + amenities) to each offer where a confident match exists.
       const catalogByName = new Map();
       for (const r of catalogRooms) {
         const k = normalizeRoomName(r.room_name);
         if (k && !catalogByName.has(k)) catalogByName.set(k, r);
       }
       for (const o of offers) {
-        const cap = catalogCapacityFor(o.room_name, catalogByName);
-        if (cap) o._catalogCapacity = cap;
+        const room = catalogByName.get(normalizeRoomName(o.room_name)) || null;
+        if (!room) continue;
+        o._catalogRoom = room;
+        const max = Number(room.max_occupancy);
+        if (Number.isFinite(max) && max > 0) {
+          o._catalogCapacity = {
+            max,
+            adults: Number.isFinite(Number(room.max_adults)) ? Number(room.max_adults) : null,
+            children: Number.isFinite(Number(room.max_children)) ? Number(room.max_children) : null,
+          };
+        }
       }
       if (offers.length === 0) {
         section.style.display = "none";
@@ -5740,21 +5800,29 @@
       ? `<div class="rt-fit fits">✓ Fits your family</div>`
       : "";
 
-    // Small photo thumb — Booking shows a tiny inline photo. Same
-    // priority order as the old card layout: per-room → hotel gallery
-    // → resort fallback.
+    // Small photo thumb — Booking shows a tiny inline photo. Priority:
+    // offer's own photo → catalog room photo (real interior shot) →
+    // hotel gallery → resort fallback.
     const offerPhotos = Array.isArray(o.photos) ? o.photos : [];
     const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
     const hotelPhotos = Array.isArray(currentModalHotelPhotos) ? currentModalHotelPhotos : [];
     let photo = null;
     if (main && (main.hd_url || main.url)) photo = main.hd_url || main.url;
-    else if (hotelPhotos.length > 0) {
+    else if (o._catalogRoom) photo = catalogPhotoUrl(o._catalogRoom);
+    if (!photo && hotelPhotos.length > 0) {
       const hp = hotelPhotos[index % hotelPhotos.length];
       photo = (hp && (hp.hd_url || hp.url)) || null;
-    } else {
+    }
+    if (!photo) {
       const refs = currentModalPhotoRefs || [];
       if (refs.length > 0) photo = modalPhotoUrl(refs[index % refs.length], 200);
     }
+
+    // Inline catalog meta — size · beds · view. Lets the user read the
+    // room's real specs without expanding, and avoids a parallel
+    // "every room type" panel duplicating this data.
+    const catMeta = catalogRowMeta(o._catalogRoom);
+    const catMetaHtml = catMeta ? `<div class="rt-cat-meta">${escapeHtml(catMeta)}</div>` : "";
 
     // Diff chips — what makes THIS room different from the cheapest fit
     const diffs = (currentModalRoomDiffs[o.offer_id] || []).filter(d => d.kind !== "baseline").slice(0, 2);
@@ -5814,6 +5882,7 @@
             ${photo ? `<img class="rt-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="rt-thumb rt-thumb-empty"></div>`}
             <div class="rt-name-body">
               <div class="rt-name-line">${escapeHtml(o.room_name || "Room")}</div>
+              ${catMetaHtml}
               ${diffChips}
               <div class="rt-inclusions">${inclusionChips}${summaryDetailChips}</div>
               <button type="button" class="rt-detail-toggle" aria-expanded="${isExpanded ? "true" : "false"}" onclick="event.stopPropagation(); toggleRoomExpand('${safeId}')">
@@ -5858,10 +5927,21 @@
   // Falls back gracefully when LiteAPI hasn't given us details for
   // this room_type_id yet.
   function renderRoomExpandPanel(o, photos, detail, safeId, isActive) {
+    // Catalog row (resort_rooms) attached upstream by name-match. Falls
+    // back to populate every section when get_room_photos didn't return
+    // a detail keyed by the rate's opaque room_type_id (most cases).
+    const cat = o._catalogRoom || null;
+
     // ---- 1. Photos ----
+    let photoUrls = Array.isArray(photos) ? photos.slice() : [];
+    if (photoUrls.length === 0 && cat && Array.isArray(cat.photos)) {
+      photoUrls = cat.photos
+        .map(p => (p && (p.hd_url || p.url)) || null)
+        .filter(Boolean);
+    }
     let photosBlock = "";
-    if (Array.isArray(photos) && photos.length > 0) {
-      const slots = photos.slice(0, 6);
+    if (photoUrls.length > 0) {
+      const slots = photoUrls.slice(0, 6);
       photosBlock = `
         <div class="rt-expand-photos">
           ${slots.map((p, i) => `
@@ -5879,16 +5959,30 @@
     const occupancyBreakdown = (adultCount > 0 || childCount > 0)
       ? `${adultCount} adult${adultCount === 1 ? "" : "s"}${childCount > 0 ? `, ${childCount} child${childCount === 1 ? "" : "ren"}` : ""}`
       : (o.max_occupancy ? `Up to ${o.max_occupancy} guests` : null);
-    const maxAdults = detail?.max_adults;
-    const maxChildren = detail?.max_children;
-    const sizeStr = detail?.size ? `${detail.size.value} ${detail.size.unit}` : null;
+    // Prefer catalog max for headline + breakdown; fall back to detail
+    // (get_room_photos) then to rate-offer occupancy.
+    const catMax = cat && Number.isFinite(Number(cat.max_occupancy)) && Number(cat.max_occupancy) > 0
+      ? Number(cat.max_occupancy) : null;
+    const sleepsHeadline = catMax != null
+      ? `${catMax} guests`
+      : (o.max_occupancy ? `${o.max_occupancy} guests` : null);
+    const maxAdults = cat?.max_adults ?? detail?.max_adults;
+    const maxChildren = cat?.max_children ?? detail?.max_children;
+    const sizeStr = detail?.size
+      ? `${detail.size.value} ${detail.size.unit}`
+      : (cat && Number(cat.room_size_sqm) > 0 ? `${Math.round(Number(cat.room_size_sqm))} m²` : null);
+    const bedStr = detail?.bed_summary || catalogBedLine(cat);
+    const viewStr = detail?.view
+      || ((Array.isArray(cat?.views) ? cat.views : []).map(v => String(v?.view || "").trim()).filter(Boolean)[0] || null);
     const facts = [
-      { label: "Sleeps", value: o.max_occupancy ? `${o.max_occupancy} guests` : null },
+      { label: "Sleeps", value: sleepsHeadline },
       { label: "Booked for", value: occupancyBreakdown },
-      { label: "Max occupancy", value: (maxAdults || maxChildren) ? `${maxAdults || 0} adults${maxChildren ? `, ${maxChildren} children` : ""}` : null },
-      { label: "Beds", value: detail?.bed_summary },
+      { label: "Max occupancy", value: (Number(maxAdults) > 0 || Number(maxChildren) > 0)
+        ? `${Number(maxAdults) || 0} adults${Number(maxChildren) > 0 ? `, ${maxChildren} children` : ""}`
+        : null },
+      { label: "Beds", value: bedStr },
       { label: "Room size", value: sizeStr },
-      { label: "View", value: detail?.view },
+      { label: "View", value: viewStr },
     ].filter(f => f.value);
     const factsBlock = facts.length
       ? `<dl class="rt-expand-facts">
@@ -5897,7 +5991,15 @@
       : "";
 
     // ---- 3. Amenities + description + terms ----
-    const amenities = Array.isArray(detail?.amenities) ? detail.amenities.slice(0, 18) : [];
+    // Catalog room_amenities is an array of {name, sort, amenitiesId};
+    // get_room_photos detail.amenities is an array of strings. Normalize.
+    let amenities = Array.isArray(detail?.amenities) ? detail.amenities.slice() : [];
+    if (amenities.length === 0 && Array.isArray(cat?.room_amenities)) {
+      amenities = cat.room_amenities
+        .map(a => String(a?.name || "").trim())
+        .filter(Boolean);
+    }
+    amenities = amenities.slice(0, 18);
     const amenitiesBlock = amenities.length
       ? `<div class="rt-expand-amenities">
           <h4>Room amenities</h4>
@@ -5905,8 +6007,9 @@
         </div>`
       : "";
 
-    const descBlock = detail?.description
-      ? `<div class="rt-expand-desc"><h4>About this room</h4><p>${escapeHtml(detail.description)}</p></div>`
+    const descText = detail?.description || cat?.description || null;
+    const descBlock = descText
+      ? `<div class="rt-expand-desc"><h4>About this room</h4><p>${escapeHtml(descText)}</p></div>`
       : "";
 
     // Booking terms summary — refund + cancellation deadline + payment
