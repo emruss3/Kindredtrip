@@ -4182,7 +4182,7 @@
           <div class="trip-rail-dates">
             <div><span>Check-in</span><b>${fmtRailDate(lastSearchSummary?.date_start)}</b></div>
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
-            <div><span>Party</span><b>${adultsRail}A${kidsRail > 0 ? `, ${kidsRail}K` : ""}</b></div>
+            <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}</b></div>
           </div>
           <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
           <button class="btn-link-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking.com</button>
@@ -4262,7 +4262,7 @@
             </div>
             <div class="trip-mobile-meta-row">
               <span class="trip-mobile-meta-label">Party</span>
-              <b>${adultsRail}A${kidsRail > 0 ? `, ${kidsRail}K` : ""}</b>
+              <b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}</b>
             </div>
             <div class="trip-mobile-meta-actions">
               <button type="button" class="trip-rail-action" onclick="sendTripToSelf('${pkg.package_id}')" aria-label="Email this trip to yourself">
@@ -5286,23 +5286,26 @@
       return true; // unknown capacity — let it through rather than hide
     };
 
-    // Only render groups that have at least one bookable rate. Catalog
-    // rooms without a rate are excluded (they're not bookable for these
-    // dates anyway — keeping them as decorative cards re-introduces the
-    // "two parallel lists" feeling the user just asked us to drop).
+    // Keep all groups that have either a catalog row or at least one
+    // rate. Bookable groups render with full rate rows; catalog-only
+    // groups (no matching rate at these dates) render greyed-out with
+    // a "Not available for these dates" note instead of rate rows.
     const renderable = Array.from(groups.values())
-      .filter(g => g.rates.length > 0);
+      .filter(g => g.catalog || g.rates.length > 0);
 
     for (const g of renderable) g.rates.sort((a, b) => priceOf(a) - priceOf(b));
 
-    // Fitting first, then undersized; within each bucket cheapest first.
-    renderable.sort((a, b) => {
-      const af = fits(a), bf = fits(b);
-      if (af !== bf) return af ? -1 : 1;
-      return priceOf(a.rates[0]) - priceOf(b.rates[0]);
-    });
-
-    const fitting = renderable.filter(fits);
+    // Undersized rooms (catalog max < party) are filtered out entirely —
+    // we don't want users staring at rooms that physically can't sleep
+    // their family.
+    const fittingAll = renderable.filter(fits);
+    const fittingBookable   = fittingAll.filter(g => g.rates.length > 0);
+    const fittingUnavailable = fittingAll.filter(g => g.rates.length === 0 && g.catalog);
+    // Bookable cheapest first; unavailable largest-capacity first.
+    fittingBookable.sort((a, b) => priceOf(a.rates[0]) - priceOf(b.rates[0]));
+    fittingUnavailable.sort((a, b) =>
+      (Number(b.catalog?.max_occupancy) || 0) - (Number(a.catalog?.max_occupancy) || 0));
+    const fitting = [...fittingBookable, ...fittingUnavailable];
     if (fitting.length === 0) {
       const cap = currentModalResortConnecting;
       let body;
@@ -5386,18 +5389,32 @@
       ? `<div class="rv-fit fits">✓ Fits your family</div>`
       : "";
 
-    const expanded = currentModalExpandedRates.has(g.key);
-    const visibleRates = expanded ? g.rates : g.rates.slice(0, 3);
-    const hiddenCount = g.rates.length - visibleRates.length;
-    const ratesHtml = visibleRates.map(o => renderRateRow(o, currentModalSelectedRoomId)).join("");
-    const moreBtn = hiddenCount > 0
-      ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show ${hiddenCount} more rate${hiddenCount === 1 ? "" : "s"}</button>`
-      : (expanded && g.rates.length > 3
-        ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show fewer</button>`
-        : "");
+    const isBookable = g.rates.length > 0;
+    let ratesHtml;
+    let moreBtn = "";
+    if (isBookable) {
+      const expanded = currentModalExpandedRates.has(g.key);
+      const visibleRates = expanded ? g.rates : g.rates.slice(0, 3);
+      const hiddenCount = g.rates.length - visibleRates.length;
+      ratesHtml = visibleRates.map(o => renderRateRow(o, currentModalSelectedRoomId)).join("");
+      moreBtn = hiddenCount > 0
+        ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show ${hiddenCount} more rate${hiddenCount === 1 ? "" : "s"}</button>`
+        : (expanded && g.rates.length > 3
+          ? `<button type="button" class="rv-more" onclick="toggleRoomVariantsExpand('${escapeHtml(g.key)}')">Show fewer</button>`
+          : "");
+    } else {
+      // Catalog room with no bookable rate at these dates — render the
+      // right column as a "Not available" notice and grey the whole
+      // card so users can still see the room type exists.
+      ratesHtml = `
+        <div class="room-v2-unavail">
+          <div class="room-v2-unavail-lbl">Not available for these dates</div>
+          <p class="room-v2-unavail-sub">No live rates returned for this room type. It may sell out fast or only release closer to the date.</p>
+        </div>`;
+    }
 
     return `
-      <article class="room-v2-card">
+      <article class="room-v2-card${isBookable ? "" : " room-v2-unavailable"}">
         <div class="room-v2-photo">
           ${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(g.name || "Room")}" loading="lazy" />` : `<div class="room-v2-photo-empty"></div>`}
         </div>
@@ -5407,7 +5424,7 @@
           ${meta ? `<div class="room-v2-meta">${escapeHtml(meta)}</div>` : ""}
           ${descPreview ? `<p class="room-v2-desc">${escapeHtml(descPreview)}</p>` : ""}
           ${amenityChips}
-          ${fitTag}
+          ${isBookable ? fitTag : ""}
         </div>
         <div class="room-v2-rates">
           ${ratesHtml}

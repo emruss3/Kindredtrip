@@ -7883,3 +7883,42 @@ body.trip-detail-open #status { display: none !important; }
     padding: 12px 14px 14px;
   }
 }
+
+/* Greyed-out card for catalog rooms that aren't bookable at these dates */
+.room-v2-card.room-v2-unavailable {
+  background: var(--bg-soft);
+  border-color: var(--line-soft);
+}
+.room-v2-card.room-v2-unavailable .room-v2-photo img {
+  filter: grayscale(85%);
+  opacity: 0.75;
+}
+.room-v2-card.room-v2-unavailable .room-v2-name,
+.room-v2-card.room-v2-unavailable .room-v2-sleeps,
+.room-v2-card.room-v2-unavailable .room-v2-meta,
+.room-v2-card.room-v2-unavailable .room-v2-desc {
+  color: var(--ink-3);
+}
+.room-v2-card.room-v2-unavailable .room-v2-sleeps b { color: var(--ink-2); }
+.room-v2-card.room-v2-unavailable .rv-amenities li {
+  color: var(--ink-3);
+  background: #fff;
+}
+.room-v2-unavail {
+  padding: 14px 12px;
+  background: #fff;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-xs);
+  text-align: center;
+}
+.room-v2-unavail-lbl {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.room-v2-unavail-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
