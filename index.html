@@ -40,8 +40,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20260515-trip-reorder" />
-<meta name="kt-build" content="20260515-trip-reorder" />
+<link rel="stylesheet" href="/styles.css?v=20260515-rooms-roomy" />
+<meta name="kt-build" content="20260515-rooms-roomy" />
 
 <!-- Structured data -->
 <script type="application/ld+json">
@@ -4555,9 +4555,8 @@
       grid.innerHTML = `
         <div class="rooms-table">
           <div class="rooms-table-head" role="row">
-            <div>Room type</div>
+            <div>Room</div>
             <div>Sleeps</div>
-            <div>Inclusions</div>
             <div>Price</div>
             <div></div>
           </div>
@@ -4836,6 +4835,14 @@
       fitsParty ? "" : "undersized",
     ].filter(Boolean).join(" ");
 
+    // 4-column layout (was 5 — the standalone Inclusions column was the
+    // cramped one). Inclusion chips now live below the room name and
+    // diff chips, where they have room to wrap.
+    const inclusionChips = [
+      `<span class="rt-chip board-${boardClass}">${escapeHtml(board)}</span>`,
+      refundChip,
+      promoChip,
+    ].filter(Boolean).join("");
     return `
       <div class="rooms-table-item" data-offer-id="${escapeHtml(String(o.offer_id))}">
         <div class="${rowClasses}" onclick="selectRoomOffer('${safeId}')" role="row">
@@ -4844,6 +4851,7 @@
             <div class="rt-name-body">
               <div class="rt-name-line">${escapeHtml(o.room_name || "Room")}</div>
               ${diffChips}
+              <div class="rt-inclusions">${inclusionChips}</div>
             </div>
           </div>
           <div class="rt-sleeps">
@@ -4852,10 +4860,6 @@
               <span class="rt-sleeps-num">${sleeps || "—"}</span>
             </div>
             ${fitNote}
-          </div>
-          <div class="rt-inclusions">
-            <span class="rt-chip board-${boardClass}">${escapeHtml(board)}</span>
-            ${refundChip}${promoChip}
           </div>
           <div class="rt-price">
             <div class="rt-price-total">${priceLabel}</div>

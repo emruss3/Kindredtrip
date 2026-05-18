@@ -5981,24 +5981,28 @@ body.trip-detail-open #status { display: none !important; }
 .rooms-table-head,
 .rooms-table-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 110px minmax(0, 1.2fr) 130px 120px;
-  gap: 14px;
+  /* Was 5 cramped columns; now 4 with the inclusion chips folded into
+   * the room-name cell where they can wrap freely. */
+  grid-template-columns: minmax(0, 1fr) 120px 160px 130px;
+  gap: 20px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--line-soft);
 }
 .rooms-table-head {
   background: var(--bg-soft);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.10em;
   color: var(--ink-3);
-  padding: 10px 16px;
+  padding: 12px 20px;
 }
+.rooms-table-head > div:nth-child(3) { text-align: right; }
 .rooms-table-row {
   cursor: pointer;
   transition: background 0.12s;
+  align-items: flex-start;
 }
 .rooms-table-row:hover { background: var(--bg-soft); }
 .rooms-table-row.selected {
@@ -6013,83 +6017,97 @@ body.trip-detail-open #status { display: none !important; }
 
 .rt-name {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  gap: 14px;
+  align-items: flex-start;
   min-width: 0;
 }
 .rt-thumb {
-  width: 64px; height: 64px;
+  width: 88px; height: 88px;
   object-fit: cover;
   border-radius: var(--r-xs);
   flex-shrink: 0;
 }
 .rt-thumb-empty { background: var(--bg-soft); }
-.rt-name-body { min-width: 0; flex: 1; }
+.rt-name-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
 .rt-name-line {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink);
-  line-height: 1.3;
+  line-height: 1.35;
   letter-spacing: -0.005em;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Allow two lines, then ellipsis. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rt-diffs {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 4px;
+}
+.rt-inclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+  margin-top: 2px;
 }
 
 .rt-sleeps {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   align-items: flex-start;
+  padding-top: 4px;
 }
 .rt-sleeps-bar {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 16px;
-  font-weight: 600;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--ink);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
 }
 .rt-sleeps-ico {
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   color: var(--ink-2);
 }
-.rt-sleeps-num { font-variant-numeric: tabular-nums; }
+.rt-sleeps-num { font-variant-numeric: tabular-nums; line-height: 1; }
 .rt-fit {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: -0.005em;
   line-height: 1.3;
+  max-width: 130px;
 }
 .rt-fit.fits { color: var(--good); }
 .rt-fit.nope { color: #b15a3a; }
-
-.rt-inclusions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
 .rt-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: var(--r-pill);
   background: var(--bg-soft);
   color: var(--ink-1);
   border: 1px solid var(--line);
   letter-spacing: -0.005em;
   white-space: nowrap;
+  line-height: 1.4;
 }
 .rt-chip.board-ai {
   background: var(--good-soft);
@@ -6115,15 +6133,16 @@ body.trip-detail-open #status { display: none !important; }
 .rt-price {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   text-align: right;
+  padding-top: 4px;
 }
 .rt-price-total {
   font-family: ui-serif, Georgia, serif;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--ink);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
@@ -6154,9 +6173,12 @@ body.trip-detail-open #status { display: none !important; }
   font-family: inherit;
 }
 .rt-variants-toggle:hover { color: var(--ink); }
+.rt-cta {
+  padding-top: 4px;
+}
 .rt-cta .btn {
   width: 100%;
-  padding: 9px 14px;
+  padding: 10px 14px;
   font-size: 13px;
 }
 
@@ -6164,14 +6186,15 @@ body.trip-detail-open #status { display: none !important; }
   .rooms-table-head { display: none; }
   .rooms-table-row {
     grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 14px;
+    gap: 12px;
+    padding: 16px;
   }
-  .rt-name { gap: 10px; }
-  .rt-thumb { width: 56px; height: 56px; }
-  .rt-sleeps { flex-direction: row; gap: 10px; align-items: center; }
-  .rt-price { text-align: left; align-items: flex-start; }
-  .rt-cta .btn { width: 100%; padding: 11px 14px; }
+  .rt-name { gap: 12px; }
+  .rt-thumb { width: 72px; height: 72px; }
+  .rt-sleeps { flex-direction: row; gap: 10px; align-items: center; padding-top: 0; }
+  .rt-price { text-align: left; align-items: flex-start; padding-top: 0; }
+  .rt-cta { padding-top: 0; }
+  .rt-cta .btn { width: 100%; padding: 12px 14px; font-size: 14px; }
 }
 
 /* Trip-section title row — primary heading + count badge inline */
