@@ -5352,13 +5352,27 @@
     }
 
     const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
+    // If ANY rate in the group was priced for the party (rate.max_occupancy
+    // >= party), the room is bookable for them — supplier wouldn't price
+    // it otherwise. We do NOT gate on catalog max_occupancy: fuzzy_name
+    // matches can attach a smaller catalog room to a larger rate offer,
+    // and gating on catalog would hide a perfectly bookable room.
+    // Catalog max gives the displayed Sleeps number; the rate decides
+    // bookability. Catalog-only groups (no rates) fall back to catalog max.
     const fits = (g) => {
       if (partyTotal === 0) return true;
+      for (const o of g.rates) {
+        const m = Number(o.max_occupancy);
+        if (Number.isFinite(m) && m >= partyTotal) return true;
+      }
+      if (g.rates.length > 0) {
+        // Rates exist but none confirmed to fit — still let it through;
+        // we'd rather show a too-small-priced rate than a blank list.
+        return true;
+      }
       const catMax = Number(g.catalog?.max_occupancy);
       if (Number.isFinite(catMax) && catMax > 0) return catMax >= partyTotal;
-      const rateMax = Number(g.rates[0]?.max_occupancy);
-      if (Number.isFinite(rateMax) && rateMax > 0) return rateMax >= partyTotal;
-      return true; // unknown capacity — let it through rather than hide
+      return true; // unknown — let it through
     };
 
     // Keep all groups that have either a catalog row or at least one
@@ -5503,11 +5517,16 @@
 
     // match_path stamps how the rate↔catalog join happened for this
     // card — surfaced as a data attribute for QA / coverage logging, not
-    // shown to end users. "mapped_id" = trustworthy LiteAPI id join;
-    // "fuzzy_name" = token-overlap, may misattribute; "synthetic" = no
-    // catalog data attached. Defaults to "synthetic" when backend hasn't
-    // emitted it (older versions of get_hotel_offers).
-    const matchPath = g.match_path || (g.catalog ? "fuzzy_name" : "synthetic");
+    // shown to end users. Three rate-side values from the backend:
+    //   "mapped_id"   trustworthy LiteAPI id join
+    //   "fuzzy_name"  token-overlap, may misattribute
+    //   "synthetic"   no catalog data attached
+    // Plus one UI-side value:
+    //   "catalog_only"  catalog row with no rate (the greyed-out
+    //                    unavailable card) — not a rate-to-catalog
+    //                    join attempt, so QA should bucket it apart
+    //                    from fuzzy_name / mapped_id coverage.
+    const matchPath = g.match_path || (g.rates.length === 0 ? "catalog_only" : "synthetic");
     return `
       <article class="room-v2-card${isBookable ? "" : " room-v2-unavailable"}" data-match-path="${escapeHtml(matchPath)}" data-group-key="${escapeHtml(g.key)}">
         <div class="room-v2-photo">
