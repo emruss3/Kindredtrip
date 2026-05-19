@@ -4962,12 +4962,27 @@
       const desc = (resort.liteapi_description || "").trim();
       if (desc.length >= 80) {
         const preview = desc.length > 360 ? desc.slice(0, 360).replace(/\s+\S*$/, "") + "…" : desc;
+        const truncated = desc.length > 360;
         descEl.innerHTML = `
           <h3 class="trip-resort-desc-h">About this resort</h3>
           <p class="trip-resort-desc-p" id="trip-resort-desc-p">${escapeHtml(preview)}</p>
-          ${desc.length > 360 ? `<button type="button" class="trip-resort-desc-more" onclick="(function(b){const p=document.getElementById('trip-resort-desc-p');p.textContent=${JSON.stringify(desc)};b.remove();})(this)">Read more</button>` : ""}
+          ${truncated ? `<button type="button" class="trip-resort-desc-more" id="trip-resort-desc-more">Read more</button>` : ""}
         `;
         descEl.hidden = false;
+        // Inline onclick used JSON.stringify(desc) inside a double-quoted
+        // HTML attribute, which broke as soon as the description had any
+        // double-quote (LiteAPI descriptions routinely do). Attach the
+        // handler programmatically so the text expansion always works.
+        if (truncated) {
+          const btn = document.getElementById("trip-resort-desc-more");
+          const p = document.getElementById("trip-resort-desc-p");
+          if (btn && p) {
+            btn.addEventListener("click", () => {
+              p.textContent = desc;
+              btn.remove();
+            });
+          }
+        }
       } else {
         descEl.hidden = true;
       }

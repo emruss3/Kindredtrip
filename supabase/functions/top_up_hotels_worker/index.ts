@@ -19,7 +19,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v3_room_mapping_flag";
+const VERSION = "top_up_hotels_worker_v4_fit_filter";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -306,15 +306,26 @@ serve(async (req) => {
     const rateOfferRows: any[] = [];
     let upgraded = 0;
 
+    const partySize = adults + olderChildAges.length;
+    const fitsParty = (o: any) =>
+      o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+
     for (const [hotelId, pkgsForHotel] of idToPackages.entries()) {
       const hotelData = hotelDataById.get(hotelId);
       if (!hotelData) continue;
       const offers = extractRateOffers(hotelData, hotelId, nights);
       if (offers.length === 0) continue;
 
+      // Drop rates whose maxOccupancy can't sleep the queried party
+      // in a single room. Skipping this filter would let offers[0]
+      // surface a $X price for a room the family literally can't book.
+      const fitsOffers = offers.filter(fitsParty);
+      if (fitsOffers.length === 0) continue;
+
       offers.sort((a, b) => a.total_price - b.total_price);
-      const aiOffers = offers.filter(o => o.is_all_inclusive);
-      const refOffers = offers.filter(o => o.refundable === true);
+      fitsOffers.sort((a, b) => a.total_price - b.total_price);
+      const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
+      const refOffers = fitsOffers.filter(o => o.refundable === true);
       const cheapestAiOfferId = aiOffers[0]?.offer_id ?? null;
       const cheapestAiTotal = aiOffers[0]?.total_price ?? null;
       const cheapestRefOfferId = refOffers[0]?.offer_id ?? null;
@@ -323,7 +334,7 @@ serve(async (req) => {
       const hasAnyRefundable = refOffers.length > 0;
       const maxOfferOcc = offers.reduce((m, o) => Math.max(m, o.max_occupancy ?? 0), 0) || null;
 
-      const chosen = (search.require_all_inclusive && aiOffers.length > 0) ? aiOffers[0] : offers[0];
+      const chosen = (search.require_all_inclusive && aiOffers.length > 0) ? aiOffers[0] : fitsOffers[0];
       const top = offers.slice(0, MAX_OFFERS_PER_PACKAGE);
       const have = new Set(top.map(o => o.offer_id));
       if (cheapestAiOfferId && !have.has(cheapestAiOfferId)) {

@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v13_offers_count_default";
+const VERSION = "start_pricing_v14_fit_filter";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -543,13 +543,34 @@ serve(async (req) => {
       if (hotelData) {
         const offers = extractRateOffers(hotelData, r.liteapi_hotel_id, nights);
         if (offers.length > 0) {
+          // Only consider rates whose maxOccupancy can sleep the queried
+          // party in a single room. LiteAPI sometimes returns rates with
+          // a maxOccupancy below the queried occupancy (mixed-supplier
+          // responses), and picking offers[0] after a raw price sort
+          // would surface a $X price for a room the family literally
+          // can't book. partySize matches what we sent to /hotels/rates
+          // — adults + non-infant children. max_occupancy === null
+          // (unknown) is accepted to avoid dropping good data.
+          const partySize = adults + olderChildAges.length;
+          const fitsParty = (o: ExtractedRateOffer) =>
+            o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+          const fitsOffers = offers.filter(fitsParty);
+
+          if (fitsOffers.length === 0) {
+            // No bookable room — fall through to mock pricing so the
+            // package doesn't appear with a misleading live price.
+            hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
+            hotelSupplier = "mock";
+            hotelFallback++;
+          } else {
           hotelSupplier = "liteapi";
           hotelLive++;
 
+          fitsOffers.sort((a, b) => a.total_price - b.total_price);
           offers.sort((a, b) => a.total_price - b.total_price);
 
-          const aiOffers = offers.filter(o => o.is_all_inclusive);
-          const refOffers = offers.filter(o => o.refundable === true);
+          const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
+          const refOffers = fitsOffers.filter(o => o.refundable === true);
           cheapestAiTotal = aiOffers[0]?.total_price ?? null;
           cheapestAiOfferId = aiOffers[0]?.offer_id ?? null;
           cheapestRefTotal = refOffers[0]?.total_price ?? null;
@@ -562,7 +583,7 @@ serve(async (req) => {
           if (search.require_all_inclusive && aiOffers.length > 0) {
             chosen = aiOffers[0];
           } else {
-            chosen = offers[0];
+            chosen = fitsOffers[0];
           }
           chosenOfferId = chosen.offer_id;
           hotelTotal = Math.round(chosen.total_price);
@@ -616,6 +637,7 @@ serve(async (req) => {
               remarks: o.remarks,
               raw_offer: o.raw_offer,
             });
+          }
           }
         } else {
           hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
