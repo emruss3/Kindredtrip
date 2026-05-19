@@ -19,7 +19,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v4_fit_filter";
+const VERSION = "top_up_hotels_worker_v5_no_fit_marker";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -260,7 +260,7 @@ serve(async (req) => {
     const liteapiHotelIds = Array.from(idToPackages.keys());
 
     const hotelDataById = new Map<string, any>();
-    const hotelOccupancies = [{ adults, children: olderChildAges }];
+    const hotelOccupancies = [{ adults, children: childAges }];
 
     let batchesAttempted = 0, batchesSucceeded = 0;
     let lastError: string | undefined;
@@ -306,21 +306,38 @@ serve(async (req) => {
     const rateOfferRows: any[] = [];
     let upgraded = 0;
 
-    const partySize = adults + olderChildAges.length;
+    // Fit filter: every person (infants included) must sleep in the
+    // room. Stripping infants previously meant LiteAPI capped rates at
+    // a smaller occupancy and never returned the bigger rooms users
+    // actually needed.
+    const partySize = adults + childAges.length;
     const fitsParty = (o: any) =>
       o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
 
+    // Mark a package as "no_fit" so future chains skip it. Without this
+    // hotel_supplier stays 'mock' and the next chain pulls the same row,
+    // calls /hotels/rates again, gets the same too-small rates, and
+    // burns wall-clock for no progress until depth is exhausted.
+    // 'no_fit' falls out of the strict_live_only filter on the frontend
+    // the same way 'mock' did.
+    const noFitUpdates: any[] = [];
+    const markNoFit = (p: any) => noFitUpdates.push({
+      package_id: p.package_id,
+      hotel_supplier: "no_fit",
+      hotel_priced_at: nowIso,
+    });
+
     for (const [hotelId, pkgsForHotel] of idToPackages.entries()) {
       const hotelData = hotelDataById.get(hotelId);
-      if (!hotelData) continue;
+      if (!hotelData) { for (const p of pkgsForHotel) markNoFit(p); continue; }
       const offers = extractRateOffers(hotelData, hotelId, nights);
-      if (offers.length === 0) continue;
+      if (offers.length === 0) { for (const p of pkgsForHotel) markNoFit(p); continue; }
 
       // Drop rates whose maxOccupancy can't sleep the queried party
       // in a single room. Skipping this filter would let offers[0]
       // surface a $X price for a room the family literally can't book.
       const fitsOffers = offers.filter(fitsParty);
-      if (fitsOffers.length === 0) continue;
+      if (fitsOffers.length === 0) { for (const p of pkgsForHotel) markNoFit(p); continue; }
 
       offers.sort((a, b) => a.total_price - b.total_price);
       fitsOffers.sort((a, b) => a.total_price - b.total_price);
@@ -445,6 +462,19 @@ serve(async (req) => {
           const fp = flightByPkg.get(package_id) ?? 0;
           const total = fp + Number(vals.hotel_price);
           return sb.from("packages").update({ ...vals, total_price: total }).eq("package_id", package_id);
+        }));
+      }
+    }
+
+    // Persist no-fit markers. These packages stay out of strict-live
+    // results and the next chain's mock-supplier filter skips them.
+    if (noFitUpdates.length) {
+      const CHUNK = 50;
+      for (let i = 0; i < noFitUpdates.length; i += CHUNK) {
+        const slice = noFitUpdates.slice(i, i + CHUNK);
+        await Promise.all(slice.map(u => {
+          const { package_id, ...vals } = u;
+          return sb.from("packages").update(vals).eq("package_id", package_id);
         }));
       }
     }

@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v14_fit_filter";
+const VERSION = "start_pricing_v15_full_family_query";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -431,7 +431,7 @@ serve(async (req) => {
     )) as string[];
 
     const hotelDataById = new Map<string, any>();
-    const hotelOccupancies = [{ adults, children: olderChildAges }];
+    const hotelOccupancies = [{ adults, children: childAges }];
 
     let hotelBatchesAttempted = 0, hotelBatchesSucceeded = 0;
     let hotelLastError: string | undefined;
@@ -548,19 +548,29 @@ serve(async (req) => {
           // a maxOccupancy below the queried occupancy (mixed-supplier
           // responses), and picking offers[0] after a raw price sort
           // would surface a $X price for a room the family literally
-          // can't book. partySize matches what we sent to /hotels/rates
-          // — adults + non-infant children. max_occupancy === null
-          // (unknown) is accepted to avoid dropping good data.
-          const partySize = adults + olderChildAges.length;
+          // Fit filter: every person in the search must sleep in the room.
+          // Infants used to be stripped from this calculation (and from
+          // the LiteAPI query above) on the theory that under-2s sleep on
+          // a parent's lap, but LiteAPI then never priced 6-person rooms
+          // for a family of 6 — it capped rates at maxOccupancy=5. That
+          // hid the bigger rooms users actually wanted to book. Now we
+          // pass the full child_ages to LiteAPI and gate rates at the
+          // full family size, with cribs treated as a property-side
+          // detail.
+          const partySize = adults + childAges.length;
           const fitsParty = (o: ExtractedRateOffer) =>
             o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
           const fitsOffers = offers.filter(fitsParty);
 
           if (fitsOffers.length === 0) {
-            // No bookable room — fall through to mock pricing so the
-            // package doesn't appear with a misleading live price.
+            // No bookable room. Mark the package as 'no_fit' rather than
+            // 'mock' so top_up_hotels_worker doesn't immediately re-pull
+            // it, call /hotels/rates again, and re-filter the same too-
+            // small rates — that loop burned wall-clock for no progress.
+            // strict_live_only on the frontend filters 'no_fit' out the
+            // same way it filtered 'mock'.
             hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
-            hotelSupplier = "mock";
+            hotelSupplier = "no_fit";
             hotelFallback++;
           } else {
           hotelSupplier = "liteapi";
