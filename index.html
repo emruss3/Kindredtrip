@@ -3535,16 +3535,23 @@
       if (hasFamilySuite) { score += 3; reasons.push("Family suites available"); }
       else if (has2BR)    { score += 3; reasons.push("Two-bedroom suites available"); }
     } else if (total === 5) {
+      // start_pricing v14+/top_up v6+ only price packages whose rates
+      // can sleep the full party — so by the time a card renders we
+      // already know a fitting rate exists. Surface the specific
+      // configuration when we can recognise it; fall back to a plain
+      // "Sleeps N confirmed" rather than "unclear" / "not listed",
+      // which were leftover from the pre-v14 era when the backend
+      // didn't gate on fit.
       if (hasFamilySuite)         { score += 14; reasons.push(`Family suite fits ${total}`); }
       else if (has2BR)            { score += 14; reasons.push(`Two-bedroom suite fits ${total}`); }
       else if (guaranteedConnecting) { score += 10; reasons.push("Guaranteed connecting rooms"); }
       else if (hasConnecting)     { score += 4; reasons.push("Connecting rooms (not guaranteed)"); }
-      else                         { score -= 14; reasons.push(`Room fit for ${total} not listed`); }
+      else                         { score += 8; reasons.push(`Sleeps ${total}+ confirmed`); }
     } else { // 6+
       if (has2BR)                  { score += 18; reasons.push(`Two-bedroom suite fits ${total}`); }
       else if (guaranteedConnecting) { score += 12; reasons.push("Guaranteed connecting rooms"); }
       else if (hasConnecting)     { score += 5; reasons.push("Connecting rooms (not guaranteed)"); }
-      else                         { score -= 18; reasons.push(`Room fit for ${total} unclear`); }
+      else                         { score += 8; reasons.push(`Sleeps ${total}+ confirmed`); }
     }
 
     // ---- Kids-club fit (only counts if the user has kids) ----
@@ -5206,6 +5213,20 @@
     return p.hd_url || p.url || null;
   }
 
+  // All usable photo URLs from a catalog room — preferred over
+  // catalogPhotoUrl when the caller wants a gallery instead of a single
+  // photo. Order preserved from LiteAPI (their first photo is usually
+  // the marketing hero).
+  function catalogPhotoUrls(room) {
+    if (!room || !Array.isArray(room.photos)) return [];
+    const out = [];
+    for (const p of room.photos) {
+      const u = (p && (p.hd_url || p.url)) || null;
+      if (u) out.push(u);
+    }
+    return out;
+  }
+
   // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by
   async function loadRoomOptions(packageId) {
     const section = document.getElementById("room-options-section");
@@ -5465,6 +5486,24 @@
       <div class="rooms-v2-list">
         ${fitting.map(g => renderRoomGroupCard(g, partyTotal)).join("")}
       </div>`;
+    // Thumb strip: delegate clicks so the main image swaps per card.
+    // Rebound on every rerender because innerHTML wipes prior handlers.
+    if (!grid.dataset.thumbDelegationBound) {
+      grid.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".rv-thumb");
+        if (!btn) return;
+        const strip = btn.closest(".rv-thumbs");
+        if (!strip) return;
+        const mainId = strip.dataset.mainId;
+        const main = mainId ? document.getElementById(mainId) : null;
+        const src = btn.dataset.src;
+        if (!main || !src) return;
+        main.src = src;
+        for (const sib of strip.querySelectorAll(".rv-thumb")) sib.classList.remove("active");
+        btn.classList.add("active");
+      });
+      grid.dataset.thumbDelegationBound = "1";
+    }
   }
 
   // One card per room type. Catalog data drives the left "what is this
@@ -5476,29 +5515,43 @@
 
     // Photo chain. Synthetic groups (no catalog match) end up here a
     // lot — we'd rather show a real resort-room photo from any catalog
-    // entry than a blank card. Order: this room's catalog photo →
+    // entry than a blank card. Order: this room's catalog photos →
     // offer's own photos → any catalog photo on the resort → modal
-    // hero refs → blank.
-    let photo = catalogPhotoUrl(cat);
-    if (!photo) {
-      const offerPhotos = (g.rates[0] && Array.isArray(g.rates[0].photos)) ? g.rates[0].photos : [];
-      const main = offerPhotos.find(p => p && p.is_main) || offerPhotos[0];
-      photo = (main && (main.hd_url || main.url)) || null;
-    }
-    if (!photo) {
-      // Pick from any catalog room on this resort — same building,
-      // similar look — so synthetic cards aren't visually empty.
+    // hero refs → blank. We collect ALL available photos for a thumb
+    // strip; the first is the main image.
+    const groupPhotos = [];
+    const seenPhoto = new Set();
+    const pushPhoto = (u) => {
+      if (u && !seenPhoto.has(u)) { seenPhoto.add(u); groupPhotos.push(u); }
+    };
+    catalogPhotoUrls(cat).forEach(pushPhoto);
+    const offerPhotos = (g.rates[0] && Array.isArray(g.rates[0].photos)) ? g.rates[0].photos : [];
+    for (const p of offerPhotos) pushPhoto(p?.hd_url || p?.url);
+    if (groupPhotos.length === 0) {
+      // Synthetic / no-match fallback: any catalog room photo on the
+      // resort, then the modal hero refs. Single-photo only — we don't
+      // mix room A's photos into room B's strip.
       for (const r of currentModalCatalogRooms) {
         const url = catalogPhotoUrl(r);
-        if (url) { photo = url; break; }
+        if (url) { pushPhoto(url); break; }
+      }
+      if (groupPhotos.length === 0 && Array.isArray(currentModalPhotoRefs) && currentModalPhotoRefs.length > 0) {
+        const ref = currentModalPhotoRefs[0];
+        if (typeof ref === "string") {
+          pushPhoto(/^https?:/.test(ref) ? ref : modalPhotoUrl(ref, 600));
+        }
       }
     }
-    if (!photo && Array.isArray(currentModalPhotoRefs) && currentModalPhotoRefs.length > 0) {
-      const ref = currentModalPhotoRefs[0];
-      if (typeof ref === "string") {
-        photo = /^https?:/.test(ref) ? ref : modalPhotoUrl(ref, 600);
-      }
-    }
+    const photo = groupPhotos[0] || null;
+    const photoStripKey = g.key.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const mainImgId = `rv-main-${photoStripKey}`;
+    const thumbStrip = groupPhotos.length > 1
+      ? `<div class="rv-thumbs" data-main-id="${mainImgId}">${
+          groupPhotos.slice(0, 6).map((u, i) =>
+            `<button type="button" class="rv-thumb${i === 0 ? " active" : ""}" data-src="${escapeHtml(u)}" aria-label="Photo ${i + 1}"><img src="${escapeHtml(u)}" alt="" loading="lazy" /></button>`
+          ).join("")
+        }</div>`
+      : "";
 
     // Sleeps headline + adult/child split. Prefer catalog max — that's
     // the room's true capacity. Otherwise fall back to the rate's
@@ -5595,7 +5648,8 @@
     return `
       <article class="room-v2-card${isBookable ? "" : " room-v2-unavailable"}" data-match-path="${escapeHtml(matchPath)}" data-group-key="${escapeHtml(g.key)}">
         <div class="room-v2-photo">
-          ${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(g.name || "Room")}" loading="lazy" />` : `<div class="room-v2-photo-empty"></div>`}
+          ${photo ? `<img id="${mainImgId}" src="${escapeHtml(photo)}" alt="${escapeHtml(g.name || "Room")}" loading="lazy" />` : `<div class="room-v2-photo-empty"></div>`}
+          ${thumbStrip}
         </div>
         <div class="room-v2-main">
           <h4 class="room-v2-name">${escapeHtml(g.name || "Room")}</h4>
