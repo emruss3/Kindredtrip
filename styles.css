@@ -6905,6 +6905,7 @@ body.trip-detail-open #status { display: none !important; }
   gap: var(--s-3);
   margin-top: var(--s-2);
 }
+.trip-reviews-collapsible[hidden] { display: none; }
 
 .trip-reviews-list {
   display: flex;
