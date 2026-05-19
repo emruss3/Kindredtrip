@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v11_mapped_room_id";
+const VERSION = "start_pricing_v12_room_mapping_flag";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -256,6 +256,7 @@ async function fetchHotelRatesBatch(
       body: JSON.stringify({
         hotelIds, checkin, checkout, currency: "USD", guestNationality: "US", occupancies,
         timeout: LITEAPI_TIMEOUT_S,
+        roomMapping: true,
       }),
     });
     if (!r.ok) {
