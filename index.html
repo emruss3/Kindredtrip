@@ -5104,6 +5104,46 @@
     return parts.join(rel);
   }
 
+  // Bed-config rendered as icon chips. LiteAPI's bed_types is often
+  // incomplete for multi-bedroom villas (e.g. a 2BR villa returns just
+  // the master bed). When the room description mentions "N beds" and N
+  // exceeds the typed total, we surface that as the authoritative count
+  // alongside the chips so the card doesn't claim a 2-bedroom suite has
+  // a single king.
+  function catalogBedsHtml(room) {
+    if (!room || !Array.isArray(room.bed_types) || room.bed_types.length === 0) return "";
+    const bedIcon = `<svg class="rv-bed-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8h7a4 4 0 0 1 4 4v1h6v6h-2v-2H5v2H3V8zm2 5h7v-1a2 2 0 0 0-2-2H5v3z"/></svg>`;
+    let summedQty = 0;
+    const chips = room.bed_types.map((b) => {
+      const q = Number(b?.quantity) || 1;
+      summedQty += q;
+      const t = String(b?.bedType || "bed").trim();
+      const qPrefix = q > 1 ? `${q}× ` : "";
+      return `<span class="rv-bed-chip">${bedIcon}<span class="rv-bed-text">${qPrefix}${escapeHtml(t)}</span></span>`;
+    }).join("");
+    const rel = room.bed_relation === "OR" ? " or " : "";
+    const chipsHtml = rel ? room.bed_types.map((b, i) => {
+      const q = Number(b?.quantity) || 1;
+      const t = String(b?.bedType || "bed").trim();
+      const qPrefix = q > 1 ? `${q}× ` : "";
+      const separator = i < room.bed_types.length - 1 ? `<span class="rv-bed-or">or</span>` : "";
+      return `<span class="rv-bed-chip">${bedIcon}<span class="rv-bed-text">${qPrefix}${escapeHtml(t)}</span></span>${separator}`;
+    }).join("") : chips;
+
+    // Description-derived bed count, surfaced when bed_types undercounts.
+    let totalNote = "";
+    const desc = String(room.description || "");
+    const m =
+      desc.match(/\bunit has\s+(\d+)\s+beds?\b/i) ||
+      desc.match(/(?:comes with|features|featuring|has|with)\s+(\d+)\s+beds?\b/i) ||
+      desc.match(/\b(\d+)\s+beds?\s+total\b/i);
+    const descCount = m ? Number(m[1]) : null;
+    if (Number.isFinite(descCount) && descCount > summedQty) {
+      totalNote = `<span class="rv-bed-total">${descCount} beds total</span>`;
+    }
+    return `<div class="rv-beds">${chipsHtml}${totalNote}</div>`;
+  }
+
   // Inline meta string for a rate row when we have a catalog match:
   // "32 m² · 1× King · Ocean view". Returns "" when nothing useful is
   // available; falls back gracefully on partial data.
@@ -5114,6 +5154,20 @@
     if (Number.isFinite(size) && size > 0) parts.push(`${Math.round(size)} m²`);
     const beds = catalogBedLine(room);
     if (beds) parts.push(beds);
+    const view = (Array.isArray(room.views) ? room.views : [])
+      .map(v => String(v?.view || "").trim())
+      .filter(Boolean)[0];
+    if (view) parts.push(view);
+    return parts.join(" · ");
+  }
+
+  // Same as catalogRowMeta but drops the bed line so cards can render
+  // bed config separately as icon chips.
+  function catalogRowMetaNoBeds(room) {
+    if (!room) return "";
+    const parts = [];
+    const size = Number(room.room_size_sqm);
+    if (Number.isFinite(size) && size > 0) parts.push(`${Math.round(size)} m²`);
     const view = (Array.isArray(room.views) ? room.views : [])
       .map(v => String(v?.view || "").trim())
       .filter(Boolean)[0];
@@ -5432,6 +5486,10 @@
     // Sleeps headline + adult/child split. Prefer catalog max — that's
     // the room's true capacity. Otherwise fall back to the rate's
     // priced occupancy so synthetic cards still show "Sleeps N".
+    // LiteAPI's max_adults/max_children are INDIVIDUAL caps (max
+    // possible of each type), not a partition that sums to max_occupancy
+    // — so a 6/4 room with max=8 means "at most 6 adults OR 4 children,
+    // not summed". " + " framing read as 6+4=10 to users.
     let sleepsHead = "";
     let sleepsSub = "";
     if (cat) {
@@ -5439,17 +5497,22 @@
       if (Number.isFinite(max) && max > 0) {
         sleepsHead = `Sleeps ${max}`;
         const a = Number(cat.max_adults), c = Number(cat.max_children);
-        if (Number.isFinite(a) && a > 0) {
-          const parts = [`${a} adult${a === 1 ? "" : "s"}`];
-          if (Number.isFinite(c) && c > 0) parts.push(`${c} child${c === 1 ? "" : "ren"}`);
-          sleepsSub = parts.join(" + ");
+        const aOk = Number.isFinite(a) && a > 0;
+        const cOk = Number.isFinite(c) && c > 0;
+        if (aOk && cOk) {
+          sleepsSub = `max ${a} adult${a === 1 ? "" : "s"}, max ${c} child${c === 1 ? "" : "ren"}`;
+        } else if (aOk) {
+          sleepsSub = `max ${a} adult${a === 1 ? "" : "s"}`;
+        } else if (cOk) {
+          sleepsSub = `max ${c} child${c === 1 ? "" : "ren"}`;
         }
       }
     } else if (Number(g.rates[0]?.max_occupancy) > 0) {
       sleepsHead = `Sleeps ${Number(g.rates[0].max_occupancy)}`;
     }
 
-    const meta = catalogRowMeta(cat);
+    const meta = catalogRowMetaNoBeds(cat);
+    const bedsHtml = catalogBedsHtml(cat);
     const desc = cat?.description || "";
     const descPreview = desc.length > 0
       ? (desc.length > 200 ? desc.slice(0, 200).replace(/\s+\S*$/, "") + "…" : desc)
@@ -5511,6 +5574,7 @@
           <h4 class="room-v2-name">${escapeHtml(g.name || "Room")}</h4>
           ${sleepsHead ? `<div class="room-v2-sleeps"><b>${escapeHtml(sleepsHead)}</b>${sleepsSub ? ` <span class="rv-sub">(${escapeHtml(sleepsSub)})</span>` : ""}</div>` : ""}
           ${meta ? `<div class="room-v2-meta">${escapeHtml(meta)}</div>` : ""}
+          ${bedsHtml}
           ${descPreview ? `<p class="room-v2-desc">${escapeHtml(descPreview)}</p>` : ""}
           ${amenityChips}
           ${isBookable ? fitTag : ""}
@@ -6067,10 +6131,17 @@
     if (catCap && catCap.max > 0) {
       sleeps = catCap.max;
       sleepsSource = "catalog";
-      if (Number.isFinite(catCap.adults) && catCap.adults > 0) {
-        const parts = [`${catCap.adults} adult${catCap.adults === 1 ? "" : "s"}`];
-        if (Number.isFinite(catCap.children) && catCap.children > 0) parts.push(`${catCap.children} child${catCap.children === 1 ? "" : "ren"}`);
-        sleepsBreakdown = parts.join(" + ");
+      // LiteAPI's max_adults/max_children are individual caps, not
+      // partitioned shares — they don't sum to max_occupancy. Comma
+      // framing avoids the "6 + 4 = 10" misread.
+      const aOk = Number.isFinite(catCap.adults) && catCap.adults > 0;
+      const cOk = Number.isFinite(catCap.children) && catCap.children > 0;
+      if (aOk && cOk) {
+        sleepsBreakdown = `max ${catCap.adults} adult${catCap.adults === 1 ? "" : "s"}, max ${catCap.children} child${catCap.children === 1 ? "" : "ren"}`;
+      } else if (aOk) {
+        sleepsBreakdown = `max ${catCap.adults} adult${catCap.adults === 1 ? "" : "s"}`;
+      } else if (cOk) {
+        sleepsBreakdown = `max ${catCap.children} child${catCap.children === 1 ? "" : "ren"}`;
       }
     } else if (Number(o.max_occupancy) > partyTotal) {
       // Priced for more than our party → at least that many fit.
