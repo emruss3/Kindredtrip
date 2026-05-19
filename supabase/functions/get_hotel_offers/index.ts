@@ -10,7 +10,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_hotel_offers_v4_id_only";
+const VERSION = "get_hotel_offers_v5_hotel_images";
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 24;
 
@@ -111,10 +111,14 @@ serve(async (req) => {
 
     let resort: any = null;
     let catalogRooms: CatalogRoom[] = [];
+    let hotelImages: any[] = [];
     if (pkgRow?.resort_id) {
       const [{ data: resortRow }, { data: rooms }] = await Promise.all([
+        // cap_raw_detail->hotelImages averages 94 photos per LiteAPI hotel —
+        // we surface them here so the trip-detail gallery isn't limited to
+        // the ~8 Google Places photo_refs.
         sb.from("resorts")
-          .select("resort_id, resort_name, liteapi_description, liteapi_important_info, liteapi_checkin_time, liteapi_checkout_time, liteapi_policies")
+          .select("resort_id, resort_name, liteapi_description, liteapi_important_info, liteapi_checkin_time, liteapi_checkout_time, liteapi_policies, cap_raw_detail")
           .eq("resort_id", pkgRow.resort_id)
           .maybeSingle(),
         sb.from("resort_rooms")
@@ -122,6 +126,16 @@ serve(async (req) => {
           .eq("resort_id", pkgRow.resort_id)
           .order("max_occupancy", { ascending: false, nullsFirst: false }),
       ]);
+      if (resortRow) {
+        const raw = resortRow.cap_raw_detail as any;
+        if (Array.isArray(raw?.hotelImages)) {
+          hotelImages = raw.hotelImages
+            .map((img: any) => ({ url: img?.url ?? img?.urlHd ?? null, hd_url: img?.urlHd ?? img?.url ?? null }))
+            .filter((p: any) => p.url || p.hd_url);
+        }
+        // Drop cap_raw_detail before returning — payload-trimming.
+        delete resortRow.cap_raw_detail;
+      }
       resort = resortRow ?? null;
       catalogRooms = (rooms ?? []) as CatalogRoom[];
     }
@@ -181,6 +195,8 @@ serve(async (req) => {
       offers: deduped,
       resort,
       catalog_rooms: catalogRooms,
+      hotel_images: hotelImages,         // up to ~94 LiteAPI photos per resort
+      pricing_settling: deduped.length === 0,  // orphan package signal for UI
       match_stats: matchStats,
     }), { status: 200, headers });
 

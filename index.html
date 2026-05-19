@@ -1972,16 +1972,19 @@
     const fully = Number(summary?.fully_priced) || 0;
     const live = Number(summary?.live_packages) || 0;
 
-    // Progress bar tracks rooms-priced as the primary signal. It reaches
-    // 100% when start_pricing finishes seeding prices (mix of liteapi +
-    // mock fallback). The "fully live" counter and the stage label
-    // ("Upgrading remaining trips to live rates… (X of Y)") carry the
-    // phase-2 progress signal — top-up worker upgrading mock to liteapi.
-    // We tried a composite (rooms+live)/(2*total) but it plateaus
-    // below 100% whenever some hotels can't be priced by LiteAPI,
-    // leaving the bar visibly "stuck".
+    // Two-phase progress: rooms-priced (incl. mock fallback) drives the
+    // first 50%, live-upgrade (top-up worker swapping mock → liteapi)
+    // drives the next 50%. Capped at 99% until live === total to prevent
+    // the bar from hitting 100% while the top-up worker is still running
+    // in the background ("0 of N live" with the bar full was misleading
+    // users into moving on before pricing was actually done).
     const denom = total > 0 ? total : 1;
-    const pct = Math.min(100, Math.round((rooms / denom) * 100));
+    const roomsPct = Math.min(1, rooms / denom);
+    const livePct = Math.min(1, live / denom);
+    const combined = (roomsPct * 0.5) + (livePct * 0.5);
+    let pct = Math.round(combined * 100);
+    if (live < total || total === 0) pct = Math.min(pct, 99);
+    if (total > 0 && live >= total) pct = 100;
 
     // Phase label calls out the eligibility count up front so users see
     // their filters were honored at the seed stage. Stage progression:
@@ -1999,8 +2002,10 @@
       stage = `${total.toLocaleString()} eligible · pricing rooms with our partner network…`;
     } else if (live < total) {
       stage = `${total.toLocaleString()} eligible · upgrading to live rates (${live.toLocaleString()} of ${total.toLocaleString()})…`;
-    } else {
+    } else if (live >= total && total > 0) {
       stage = `${total.toLocaleString()} trips ready · all live rates`;
+    } else {
+      stage = `${total.toLocaleString()} eligible · pricing…`;
     }
 
     const countries = countCountries(allPackages);
@@ -5097,10 +5102,14 @@
     try {
       const data = await callFn(`get_hotel_offers?package_id=${encodeURIComponent(packageId)}&limit=20`, { method: "GET" });
       const offers = Array.isArray(data?.offers) ? data.offers : [];
-      // Top-level hotel_photos from get_hotel_offers — used by the
-      // modal hero gallery and as a fallback when an offer has no
-      // per-room photos of its own.
-      currentModalHotelPhotos = Array.isArray(data?.hotel_photos) ? data.hotel_photos : [];
+      // Hotel gallery: prefer the new hotel_images surfaced from
+      // cap_raw_detail.hotelImages (~94 photos per resort on avg) over
+      // the legacy hotel_photos field. Falls back to the legacy field
+      // when an older backend is still deployed.
+      const hotelImgs = Array.isArray(data?.hotel_images) ? data.hotel_images
+                      : Array.isArray(data?.hotel_photos) ? data.hotel_photos
+                      : [];
+      currentModalHotelPhotos = hotelImgs;
       // Update the hero photo + gallery if LiteAPI gave us a better
       // set than the Google Places refs we started with.
       applyHeroFromHotelPhotos(currentModalHotelPhotos);
@@ -5155,7 +5164,22 @@
         }
       }
       if (offers.length === 0) {
-        section.style.display = "none";
+        // Orphan package: the trip card showed a hotel price but the
+        // rate-offers cache for this package is empty. Most often this
+        // is because the package is mid-migration (recache_room_mapping
+        // worker is rebuilding it). Render a notice in the Rooms
+        // section so users don't see an unexplained gap — DON'T hide
+        // the section entirely, since the user came here for room info.
+        const grid = document.getElementById("room-options-grid");
+        if (grid) {
+          const isSettling = data?.pricing_settling === true;
+          grid.innerHTML = `<div class="rooms-empty-fit">
+            <p><b>${isSettling ? "Live room rates are settling for this hotel." : "No rooms returned for this hotel."}</b></p>
+            <p>${isSettling
+              ? "We're confirming live availability with the booking partner. Refresh in a moment — usually under a minute."
+              : "The hotel returned no bookable rooms for these dates. Try a different resort or adjust dates."}</p>
+          </div>`;
+        }
         return;
       }
       // Sort: rooms that fit the family first (cheapest fit on top),
@@ -5799,8 +5823,11 @@
     if (!urls.length) return;
     const hero = document.getElementById("modal-photo-hero");
     if (hero) hero.src = urls[0];
-    // Plain URL strings — modalPhotoUrl detects http(s) and renders as-is.
-    currentModalPhotoRefs = urls.slice(0, 12);
+    // Take up to 40 photos — LiteAPI's hotelImages averages 94 per resort,
+    // and the hero lightbox is the place to see them. The 5-thumb mosaic
+    // strip still only renders the first 5; the rest are reachable via
+    // the lightbox prev/next controls.
+    currentModalPhotoRefs = urls.slice(0, 40);
     currentModalPhotoIdx = 0;
     const strip = document.getElementById("modal-photo-strip");
     if (strip) strip.innerHTML = renderHeroGridThumbs(currentModalPhotoRefs);
