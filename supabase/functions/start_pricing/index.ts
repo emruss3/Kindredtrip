@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v12_room_mapping_flag";
+const VERSION = "start_pricing_v13_offers_count_default";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -412,6 +412,9 @@ serve(async (req) => {
         departure_date: search.date_start, return_date: search.date_end,
         adults, children, infants,
         status: "pending",
+        offers_count: 0,  // explicit — PostgREST sends NULL for omitted keys
+                          // when batching with rows that DO include them,
+                          // which violates the NOT NULL constraint
       };
     });
 

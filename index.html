@@ -1972,19 +1972,24 @@
     const fully = Number(summary?.fully_priced) || 0;
     const live = Number(summary?.live_packages) || 0;
 
-    // Two-phase progress: rooms-priced (incl. mock fallback) drives the
-    // first 50%, live-upgrade (top-up worker swapping mock → liteapi)
-    // drives the next 50%. Capped at 99% until live === total to prevent
-    // the bar from hitting 100% while the top-up worker is still running
-    // in the background ("0 of N live" with the bar full was misleading
-    // users into moving on before pricing was actually done).
+    // Continuous live progress across three parallel pipeline phases:
+    //   rooms-priced (start_pricing seeds, includes mock fallback)  — 25%
+    //   flights-priced (price_flights_worker chains through routes)  — 25%
+    //   live-upgrade (top-up swaps mock → liteapi)                   — 50%
+    // The bar advances smoothly as each independent worker reports
+    // progress; users see meaningful motion instead of 0 → 50 → 100
+    // step jumps. Capped at 99% until live === total AND flights are
+    // done, so a user can't bail thinking pricing is finished while
+    // workers are still upgrading rates in the background.
     const denom = total > 0 ? total : 1;
-    const roomsPct = Math.min(1, rooms / denom);
-    const livePct = Math.min(1, live / denom);
-    const combined = (roomsPct * 0.5) + (livePct * 0.5);
+    const roomsPct   = Math.min(1, rooms   / denom);
+    const flightsPct = Math.min(1, flights / denom);
+    const livePct    = Math.min(1, live    / denom);
+    const combined   = (roomsPct * 0.25) + (flightsPct * 0.25) + (livePct * 0.50);
     let pct = Math.round(combined * 100);
-    if (live < total || total === 0) pct = Math.min(pct, 99);
-    if (total > 0 && live >= total) pct = 100;
+    const allDone = total > 0 && live >= total && flights >= total;
+    if (!allDone) pct = Math.min(pct, 99);
+    if (allDone) pct = 100;
 
     // Phase label calls out the eligibility count up front so users see
     // their filters were honored at the seed stage. Stage progression:
