@@ -3618,12 +3618,16 @@
 
     // ---- Total travel time (flight + stops + airport transfer) ----
     // Travel days are the part of a trip families dread most — and the
-    // signal scales hard with kid age. Total = flight duration +
-    // stop overhead (1h per stop ≈ layover + airport friction) +
-    // airport-to-resort transfer. Brackets: <=5h easy, 5-7h fine,
-    // 7-10h long, >10h brutal. Young kids amplify the penalty.
-    const flightHrs = Number(pkg.duration_hours) || 0;
-    const stops = Number(pkg.stops) || 0;
+    // signal scales hard with kid age. One travel day = the longer of
+    // the two legs (outbound vs return), since outbound and return are
+    // separate days; summing them double-counted the hardship and
+    // mislabeled fine trips as "long travel day". Day = flight duration
+    // on worst leg + stop overhead on worst leg (1h per stop ≈ layover
+    // + airport friction) + airport-to-resort transfer. Brackets: <=5h
+    // easy, 5-7h fine, 7-10h long, >10h brutal. Young kids amplify the
+    // penalty.
+    const flightHrs = Number(flightLegHours(pkg)) || 0;
+    const stops = Number(flightLegStops(pkg)) || 0;
     const stopOverhead = stops * 1.0;
     // Prefer the numeric airport_transfer_minutes column; fall back
     // to parsing the legacy text notes when missing.
@@ -3773,7 +3777,8 @@
     const adults = lastSearchSummary?.adults || 2;
     const kids = lastSearchSummary?.child_ages?.length || 0;
 
-    if (pkg.stops === 0) good.push("Direct flight");
+    const legStopsForGood = flightLegStops(pkg);
+    if (Number.isFinite(legStopsForGood) && legStopsForGood === 0) good.push("Direct flight");
     if (r.on_beach || t.rooms.includes("Beach Front Rooms") || t.highlights.includes("Great Beach")) good.push("On the beach");
     if (r.kids_club_available || t.amenities.includes("Kids Club") || t.amenities.includes("Kids Club for Under 4")) good.push("Kids club available");
     if (r.babysitting_available || t.amenities.includes("Babysitting")) good.push("Babysitting available");
@@ -3786,7 +3791,8 @@
     const r5 = ratingTo5(r.avg_user_rating);
     if (r5 != null && r5 >= 4.3) good.push(`Highly rated (${r5.toFixed(1)}/5)`);
 
-    if (pkg.stops != null && pkg.stops >= 2) watch.push("Long travel day — 2+ stops");
+    const legStopsForWatch = flightLegStops(pkg);
+    if (Number.isFinite(legStopsForWatch) && legStopsForWatch >= 2) watch.push("Long travel day — 2+ stops");
     if (r.country === "Cuba") watch.push("U.S. travel rules apply");
     if (!r.kids_club_available && !t.amenities.includes("Kids Club") && !t.amenities.includes("Kids Club for Under 4")) {
       if (kids > 0) watch.push("No kids club listed");
@@ -3815,9 +3821,19 @@
       .filter((p) => familyFitFn(p) > familyFitInfo(here).score)
       .sort((a, b) => familyFitFn(b) - familyFitFn(a))[0];
 
+    // Compare on worst-leg metrics (same source as the ✈ chip and
+    // family-fit pill) so "shorter travel" doesn't get triggered by
+    // an outbound+return sum that no traveller actually experiences
+    // as one day.
+    const hereLegStops = flightLegStops(here);
+    const hereLegHours = flightLegHours(here);
     const shorterTravel = [...others]
-      .filter((p) => p.stops != null && (num(p.stops) < num(here.stops) || (num(p.stops) === num(here.stops) && num(p.duration_hours) < num(here.duration_hours))))
-      .sort((a, b) => (num(a.stops) - num(b.stops)) || (num(a.duration_hours) - num(b.duration_hours)))[0];
+      .filter((p) => {
+        const s = flightLegStops(p), h = flightLegHours(p);
+        if (!Number.isFinite(s)) return false;
+        return (num(s) < num(hereLegStops)) || (num(s) === num(hereLegStops) && num(h) < num(hereLegHours));
+      })
+      .sort((a, b) => (num(flightLegStops(a)) - num(flightLegStops(b))) || (num(flightLegHours(a)) - num(flightLegHours(b))))[0];
 
     const higherRatedUnder = budget != null
       ? [...others].filter((p) => p.total_price != null && p.total_price <= budget)

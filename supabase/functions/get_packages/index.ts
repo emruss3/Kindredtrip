@@ -1,8 +1,17 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v13_leg_durations";
+const VERSION = "get_packages_v14_require_rooms";
 
+// v14 (2026-05-19):
+//   Drop packages with no rows in hotel_rate_offers — `cheapest_offer_id`
+//   and `hotel_offer_count` can be stale (offers got evicted/never
+//   persisted while the package summary fields were retained), which
+//   produced ghost cards: price visible on the search row, but the
+//   trip-detail Rooms section was empty. The frontend gate said
+//   "pricing settling" but the package wasn't going to recover, so we
+//   exclude it from results entirely.
+//
 // v13 (2026-05-18):
 //   Attach per-leg flight durations + stops from flight_offers so the
 //   frontend can treat outbound and inbound as two separate travel days
@@ -94,15 +103,37 @@ serve(async (req) => {
 
     const { data: stats } = await sb
       .from("packages")
-      .select("flight_price, hotel_price, total_price, flight_supplier, hotel_supplier", { count: "exact" })
+      .select("package_id, flight_price, hotel_price, total_price, flight_supplier, hotel_supplier", { count: "exact" })
       .eq("search_id", search_id);
+
+    // Build the set of package_ids in this search that have at least
+    // one row in hotel_rate_offers. Used as the authoritative "has
+    // bookable rooms" gate for both summary counts and the main filter.
+    const allPkgIds = (stats ?? []).map((s: any) => s.package_id);
+    const pkgIdsWithOffers = new Set<string>();
+    if (allPkgIds.length > 0) {
+      // PostgREST's `.in()` chokes if the URL gets too long; chunk to
+      // keep each request under ~200 ids.
+      const CHUNK = 200;
+      for (let i = 0; i < allPkgIds.length; i += CHUNK) {
+        const slice = allPkgIds.slice(i, i + CHUNK);
+        const { data: offerRows } = await sb
+          .from("hotel_rate_offers")
+          .select("package_id")
+          .in("package_id", slice);
+        for (const r of (offerRows ?? [])) pkgIdsWithOffers.add(r.package_id);
+      }
+    }
 
     const total = stats?.length ?? 0;
     const with_flight = stats?.filter((p: any) => p.flight_price != null).length ?? 0;
     const with_hotel = stats?.filter((p: any) => p.hotel_price != null).length ?? 0;
-    const fully_priced = stats?.filter((p: any) => p.total_price != null).length ?? 0;
+    const fully_priced = stats?.filter((p: any) =>
+      p.total_price != null && pkgIdsWithOffers.has(p.package_id)
+    ).length ?? 0;
     const live_packages = stats?.filter((p: any) =>
       p.hotel_supplier === "liteapi" && p.flight_supplier === "liteapi"
+      && pkgIdsWithOffers.has(p.package_id)
     ).length ?? 0;
     const mock_packages = total - live_packages;
 
@@ -215,6 +246,16 @@ serve(async (req) => {
     }
     if (effective_live_only) {
       q = q.eq("hotel_supplier", "liteapi").eq("flight_supplier", "liteapi");
+    }
+    // Require at least one bookable room offer. Without this filter,
+    // packages with stale cheapest_offer_id (but no offer rows) leak
+    // through and produce price-visible-but-no-rooms ghost cards.
+    if (pkgIdsWithOffers.size > 0) {
+      q = q.in("package_id", Array.from(pkgIdsWithOffers));
+    } else {
+      // No package in this search has any offer rows yet — return empty
+      // results rather than mock/stale rows.
+      q = q.eq("package_id", "00000000-0000-0000-0000-000000000000");
     }
     if (sort_by === "price_asc") {
       q = q.order("total_price", { ascending: true, nullsFirst: false });
