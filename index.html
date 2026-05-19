@@ -5051,70 +5051,6 @@
     el.hidden = false;
   }
 
-  // Normalize a LiteAPI room name for fuzzy join. The rate-offer side
-  // often appends a trailing supplier code like " - DXDGV" or repeats
-  // the bed-config in parens; the catalog name is cleaner. Strip both,
-  // lowercase, collapse whitespace.
-  // Token set for fuzzy name matching. Drops short tokens, stopwords, and
-  // pure-number bits like "6" / "1 King Bed" descriptors so they don't
-  // dominate the comparison.
-  const ROOM_NAME_STOPWORDS = new Set([
-    "with", "and", "the", "of", "a", "an", "for", "or",
-    "guests", "guest", "bed", "beds", "size", "type", "no",
-  ]);
-  function tokenizeRoomName(name) {
-    return new Set(
-      String(name || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9 ]+/g, " ")
-        .split(/\s+/)
-        .filter(w => w.length > 1 && !/^\d+$/.test(w) && !ROOM_NAME_STOPWORDS.has(w))
-    );
-  }
-  function roomNameSimilarity(a, b) {
-    const A = tokenizeRoomName(a);
-    const B = tokenizeRoomName(b);
-    if (A.size === 0 || B.size === 0) return 0;
-    let inter = 0;
-    for (const x of A) if (B.has(x)) inter++;
-    return inter / (A.size + B.size - inter);
-  }
-
-  // Best fuzzy match from a list of catalog rooms. Threshold tuned on
-  // real LiteAPI room names — 0.5 catches "Preferred Club family ocean
-  // front" ↔ "Preferred Club Family Room Ocean Front" without crossing
-  // "Family Room Ocean Front" ↔ "Family Room Ocean View".
-  const FUZZY_MATCH_THRESHOLD = 0.5;
-  function fuzzyCatalogMatch(rateName, catalogRooms) {
-    if (!rateName || !Array.isArray(catalogRooms) || catalogRooms.length === 0) return null;
-    let best = null, bestScore = 0;
-    for (const c of catalogRooms) {
-      const s = roomNameSimilarity(rateName, c.room_name);
-      if (s > bestScore) { bestScore = s; best = c; }
-    }
-    return bestScore >= FUZZY_MATCH_THRESHOLD ? best : null;
-  }
-
-  function normalizeRoomName(name) {
-    if (!name) return "";
-    let s = String(name);
-    // Run a few cleanups repeatedly: a name like
-    // "Suite Ocean Front (FMDPO) - DXDGV , 1 King Bed" can have a code
-    // in parens, a dash code, AND a trailing bed-config — strip in any
-    // order until the tail stops shrinking.
-    for (let i = 0; i < 3; i++) {
-      const before = s;
-      // Trailing parens content: "(FMDPO)", "(2 Double Beds and 1 King Bed)"
-      s = s.replace(/\s*\([^()]*\)\s*$/, "");
-      // Trailing supplier code after dash: " - DXDGV"
-      s = s.replace(/\s*[-–]\s*[A-Z0-9 ]{2,}\s*$/, "");
-      // Trailing comma + descriptor: ", 1 King Bed", ", Oceanfront, Balcony"
-      s = s.replace(/\s*,[^,]*$/, "");
-      if (s === before) break;
-    }
-    return s.replace(/\s+/g, " ").trim().toLowerCase();
-  }
-
   // "1× King + 2× Twins" style bed-config line from a catalog row.
   function catalogBedLine(room) {
     if (!room || !Array.isArray(room.bed_types) || room.bed_types.length === 0) return "";
@@ -5150,27 +5086,6 @@
     const p = room.photos[0];
     if (!p) return null;
     return p.hd_url || p.url || null;
-  }
-
-  // hotel_rate_offers.max_occupancy is the priced party size, not the
-  // room's real max — so a 3-bedroom suite and a 2-bedroom suite both
-  // show "Sleeps 6" for a family-of-6 search. Where the offer's name
-  // matches a row in resort_rooms (catalog), we can recover the true
-  // max (and the adult/child split). Returns { max, adults, children }
-  // or null when no confident match exists.
-  function catalogCapacityFor(offerRoomName, catalogByName) {
-    if (!catalogByName) return null;
-    const key = normalizeRoomName(offerRoomName);
-    if (!key) return null;
-    const row = catalogByName.get(key);
-    if (!row) return null;
-    const max = Number(row.max_occupancy);
-    if (!Number.isFinite(max) || max <= 0) return null;
-    return {
-      max,
-      adults: Number.isFinite(Number(row.max_adults)) ? Number(row.max_adults) : null,
-      children: Number.isFinite(Number(row.max_children)) ? Number(row.max_children) : null,
-    };
   }
 
   // Map<roomTypeId, [photoUrl, ...]> from LiteAPI's hotel detail. Used by

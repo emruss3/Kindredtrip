@@ -1,34 +1,31 @@
-// get_hotel_offers
+// get_hotel_offers v4
 //
 // Returns the stored hotel_rate_offers for a single package_id, sorted by
-// total_price ascending. Used by the detail-modal "Room options" section so
-// users can see the actual room/board variants behind a result card instead
-// of just a count.
+// total_price ascending. Used by the detail-modal "Room options" section.
 //
 // GET /functions/v1/get_hotel_offers?package_id=<uuid>&limit=10
 // Body shape:
-//   { package_id, offers: [{...trimmed columns...}], count, resort, catalog_rooms }
+//   { package_id, offers, count, resort, catalog_rooms, match_stats }
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_hotel_offers_v3_group_key";
+const VERSION = "get_hotel_offers_v4_id_only";
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 24;
 
-// v3 (2026-05-19):
-//   Server now computes the rate ↔ catalog-room join and emits a
-//   group_key + match_path per offer:
-//     - "mapped_id"  : LiteAPI mappedRoomId ↔ resort_rooms.room_id direct
-//     - "fuzzy_name" : exact-normalize then Jaccard token-overlap
-//     - "synthetic"  : no catalog match, keyed on rate's own room_name
-//   group_key collapses rate variants belonging to the same room into one
-//   card on the client. Clients should group strictly on this key — no
-//   client-side name normalization.
+// v4 (2026-05-19):
+//   Fuzzy matching removed. Grouping is now strictly two-tier:
+//     - "mapped_id"   LiteAPI rate.mappedRoomId resolves to a
+//                      resort_rooms.room_id row  →  group_key cat:<id>
+//     - "synthetic"   no mapped_room_id or no matching resort_rooms row
+//                      →  group_key synth:<normalized_name>
+//   No fuzzy/Jaccard tier. Pre-flag cached offers render sparse honest
+//   cards (rate name + price) until they re-cache naturally.
 //
-// v2 (2026-05-18):
-//   Surface the LiteAPI hotel-level content + the standalone room catalog
-//   we backfilled into resorts (liteapi_*) and resort_rooms.
+// v3: introduced server-side join (mapped_id → fuzzy_name → synthetic).
+//   Fuzzy was a bridge while roomMapping:true wasn't on all paths;
+//   that's now resolved, so fuzzy is gone.
 
 function corsHeaders() {
   return {
@@ -38,16 +35,12 @@ function corsHeaders() {
   };
 }
 
-const ROOM_NAME_STOPWORDS = new Set([
-  "with", "and", "the", "of", "a", "an", "for", "or",
-  "guests", "guest", "bed", "beds", "size", "type", "no",
-]);
-
+// Normalization is used ONLY to key synthetic groups, not to match
+// against catalog rooms. Strict id-only join means a rate without a
+// mapped_room_id never inherits catalog content from a "similar" name.
 function normalizeRoomName(name: string | null | undefined): string {
   if (!name) return "";
   let s = String(name);
-  // Iterate until stable: trailing parens "(FMDPO)", trailing supplier
-  // code after dash " - DXDGV", trailing comma + descriptor ", 1 King".
   for (let i = 0; i < 3; i++) {
     const before = s;
     s = s.replace(/\s*\([^()]*\)\s*$/, "");
@@ -58,42 +51,11 @@ function normalizeRoomName(name: string | null | undefined): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function tokenizeRoomName(name: string | null | undefined): Set<string> {
-  const out = new Set<string>();
-  if (!name) return out;
-  for (const w of String(name).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)) {
-    if (w.length > 1 && !/^\d+$/.test(w) && !ROOM_NAME_STOPWORDS.has(w)) out.add(w);
-  }
-  return out;
-}
-
-function roomNameSimilarity(a: string | null | undefined, b: string | null | undefined): number {
-  const A = tokenizeRoomName(a);
-  const B = tokenizeRoomName(b);
-  if (A.size === 0 || B.size === 0) return 0;
-  let inter = 0;
-  for (const x of A) if (B.has(x)) inter++;
-  return inter / (A.size + B.size - inter);
-}
-
-const FUZZY_MATCH_THRESHOLD = 0.5;
-
 type CatalogRoom = {
   room_id: string;
   room_name: string | null;
   [k: string]: any;
 };
-
-function fuzzyCatalogMatch(rateName: string | null, rooms: CatalogRoom[]): CatalogRoom | null {
-  if (!rateName || rooms.length === 0) return null;
-  let best: CatalogRoom | null = null;
-  let bestScore = 0;
-  for (const c of rooms) {
-    const s = roomNameSimilarity(rateName, c.room_name);
-    if (s > bestScore) { bestScore = s; best = c; }
-  }
-  return bestScore >= FUZZY_MATCH_THRESHOLD ? best : null;
-}
 
 serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
@@ -125,10 +87,6 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
-    // v3: include mapped_room_id on each rate offer so we can attempt the
-    // id-based join. Will be NULL for the 330k legacy rows we've already
-    // persisted; new rows from start_pricing v11 / top_up_hotels_worker v2
-    // will carry it.
     const offersP = sb
       .from("hotel_rate_offers")
       .select(`
@@ -168,20 +126,14 @@ serve(async (req) => {
       catalogRooms = (rooms ?? []) as CatalogRoom[];
     }
 
-    // Build catalog lookups for the join: by room_id (mapped_id path) and
-    // by normalized name (fuzzy_name path). Catalog room_id is text so
-    // string-compare both sides.
+    // Catalog lookup is id-only now. We do NOT build a normalized-name
+    // index against the catalog — that was the fuzzy fallback path and
+    // it's gone.
     const catalogById = new Map<string, CatalogRoom>();
-    const catalogByNorm = new Map<string, CatalogRoom>();
     for (const c of catalogRooms) {
       if (c.room_id != null) catalogById.set(String(c.room_id), c);
-      const n = normalizeRoomName(c.room_name);
-      if (n && !catalogByNorm.has(n)) catalogByNorm.set(n, c);
     }
 
-    // De-dupe near-identical offers (same room name + board + refundable +
-    // occupancy at the same price) so the UI doesn't show three copies of
-    // "Standard 1 King" varying only by cancellation date.
     const seen = new Set<string>();
     const deduped: any[] = [];
     for (const o of data ?? []) {
@@ -198,48 +150,28 @@ serve(async (req) => {
       if (deduped.length >= limit) break;
     }
 
-    // v3: compute group_key + match_path per offer. Precedence:
-    //   1. mapped_room_id (string) lookup against resort_rooms.room_id
-    //   2. exact-normalize, then Jaccard token overlap (≥ 0.5)
-    //   3. synthetic — keyed on the rate's own normalized name
-    // The client groups strictly on group_key and stamps match_path as a
-    // data attribute for QA. Card content gracefully degrades when match
-    // is "synthetic" (no catalog data attached).
-    const matchStats: Record<string, number> = { mapped_id: 0, fuzzy_name: 0, synthetic: 0 };
+    // Two-tier grouping. Strict precedence:
+    //   1. mapped_room_id is non-null AND resolves to a resort_rooms row
+    //      → match_path "mapped_id", group_key "cat:<room_id>"
+    //   2. otherwise → match_path "synthetic", group_key "synth:<normalized_name>"
+    // An offer with a mapped_room_id that DOESN'T resolve also goes
+    // synthetic — we don't infer; we either have the id or we don't.
+    const matchStats: Record<string, number> = { mapped_id: 0, synthetic: 0 };
     for (const o of deduped) {
-      let matchedCatalog: CatalogRoom | null = null;
-      let matchPath: "mapped_id" | "fuzzy_name" | "synthetic" = "synthetic";
-
       const mapped = o.mapped_room_id != null ? String(o.mapped_room_id) : null;
-      if (mapped && catalogById.has(mapped)) {
-        matchedCatalog = catalogById.get(mapped)!;
-        matchPath = "mapped_id";
-      } else {
-        const exactKey = normalizeRoomName(o.room_name);
-        const exact = exactKey ? catalogByNorm.get(exactKey) : null;
-        if (exact) {
-          matchedCatalog = exact;
-          matchPath = "fuzzy_name";
-        } else {
-          const fuzzy = fuzzyCatalogMatch(o.room_name, catalogRooms);
-          if (fuzzy) {
-            matchedCatalog = fuzzy;
-            matchPath = "fuzzy_name";
-          }
-        }
-      }
-
-      if (matchedCatalog) {
-        o.group_key = `cat:${matchedCatalog.room_id}`;
-        o.match_path = matchPath;
-        o.matched_room_id = String(matchedCatalog.room_id);
+      const matched = mapped ? catalogById.get(mapped) : null;
+      if (matched) {
+        o.group_key = `cat:${matched.room_id}`;
+        o.match_path = "mapped_id";
+        o.matched_room_id = String(matched.room_id);
+        matchStats.mapped_id++;
       } else {
         const nk = normalizeRoomName(o.room_name);
         o.group_key = `synth:${nk || "unknown"}`;
-        o.match_path = matchPath;
+        o.match_path = "synthetic";
         o.matched_room_id = null;
+        matchStats.synthetic++;
       }
-      matchStats[matchPath]++;
     }
 
     return new Response(JSON.stringify({
@@ -249,7 +181,7 @@ serve(async (req) => {
       offers: deduped,
       resort,
       catalog_rooms: catalogRooms,
-      match_stats: matchStats,  // {mapped_id, fuzzy_name, synthetic} for QA
+      match_stats: matchStats,
     }), { status: 200, headers });
 
   } catch (e) {
