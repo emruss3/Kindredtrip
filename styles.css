@@ -7820,6 +7820,14 @@ body.trip-detail-open #status { display: none !important; }
   margin-top: auto;
   padding-top: 6px;
 }
+.rv-fit.rv-infant,
+.rt-fit.rt-infant {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-top: 2px;
+  padding-top: 0;
+}
 .room-v2-rates {
   display: flex;
   flex-direction: column;
