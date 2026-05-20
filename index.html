@@ -1866,6 +1866,12 @@
           updateResultStatus(data);
         }
 
+        // get_packages v15 reports `pricing_settled` once the hotel
+        // pipeline has terminal-stamped every package (live, no_fit, or
+        // permanently-mock) AND flights are priced. Exit immediately
+        // when that flips — no need for the stagnation timer.
+        if (data?.summary?.pricing_settled) return;
+
         const total = allPackages.length;
         if (total === 0) continue;
         // With strict_live_only=true every returned package is fully
@@ -1873,9 +1879,9 @@
         // growing as the top-up worker upgrades mock packages.
         const live = total;
 
-        // No progress for two consecutive polls (after a 30s grace
-        // period) — background workers have settled. Stop polling but
-        // leave the widget visible at its final state.
+        // Fallback stagnation: in case pricing_settled never flips (a
+        // stuck top_up chain, an API error mid-stream), bail when live
+        // count hasn't grown for two consecutive polls after the grace.
         if (live === lastLiveCount) {
           stagnantChecks++;
           if (stagnantChecks >= 2 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
@@ -2004,36 +2010,40 @@
     // step jumps. Capped at 99% until live === total AND flights are
     // done, so a user can't bail thinking pricing is finished while
     // workers are still upgrading rates in the background.
+    // Denominator for the "live" share is the live-eligible total, NOT
+    // total_packages: many resorts have no LiteAPI integration or their
+    // /hotels/rates response had no rate that could sleep the party
+    // (hotel_supplier='no_fit'). Those packages can never go live and
+    // would pin live/total below 1.0 indefinitely. summary.hotel_terminal
+    // counts packages whose hotel state is settled (live, no_fit, or
+    // permanently-mock); when it reaches total, hotel work is done.
+    const terminal = Number(summary?.hotel_terminal) || 0;
+    const settled = Boolean(summary?.pricing_settled);
     const denom = total > 0 ? total : 1;
-    const roomsPct   = Math.min(1, rooms   / denom);
-    const flightsPct = Math.min(1, flights / denom);
-    const livePct    = Math.min(1, live    / denom);
-    const combined   = (roomsPct * 0.25) + (flightsPct * 0.25) + (livePct * 0.50);
+    const roomsPct    = Math.min(1, rooms    / denom);
+    const flightsPct  = Math.min(1, flights  / denom);
+    const terminalPct = Math.min(1, terminal / denom);
+    const combined    = (roomsPct * 0.20) + (flightsPct * 0.30) + (terminalPct * 0.50);
     let pct = Math.round(combined * 100);
-    const allDone = total > 0 && live >= total && flights >= total;
-    if (!allDone) pct = Math.min(pct, 99);
-    if (allDone) pct = 100;
+    if (!settled) pct = Math.min(pct, 99);
+    if (settled) pct = 100;
 
-    // Phase label calls out the eligibility count up front so users see
-    // their filters were honored at the seed stage. Stage progression:
-    //   - Stage 0: no packages yet (still seeding eligibility list)
-    //   - Stage A: packages seeded, no LiteAPI calls yet
-    //   - Stage B: LiteAPI hotel rates landing
-    //   - Stage C: top-up worker upgrading remaining trips to fully live
-    //   - Stage D: all done, finalizing
+    // Phase label uses pricing_settled / hotel_terminal so we don't
+    // claim "upgrading to live rates" indefinitely when the rest of
+    // the population is no_fit or has no LiteAPI integration. Once
+    // hotel_terminal reaches total, we report the live-room count
+    // honestly instead of pretending more are coming.
     let stage;
     if (total === 0) {
       stage = "Finding eligible resorts across 35 Caribbean countries…";
     } else if (rooms === 0) {
       stage = `${total.toLocaleString()} trips eligible for your filters · pricing rooms…`;
-    } else if (rooms < total) {
-      stage = `${total.toLocaleString()} eligible · pricing rooms with our partner network…`;
-    } else if (live < total) {
-      stage = `${total.toLocaleString()} eligible · upgrading to live rates (${live.toLocaleString()} of ${total.toLocaleString()})…`;
-    } else if (live >= total && total > 0) {
-      stage = `${total.toLocaleString()} trips ready · all live rates`;
+    } else if (terminal < total) {
+      stage = `${total.toLocaleString()} eligible · pricing rooms with our partner network (${terminal.toLocaleString()} of ${total.toLocaleString()} done)…`;
+    } else if (settled) {
+      stage = `${live.toLocaleString()} live trip${live === 1 ? "" : "s"} ready`;
     } else {
-      stage = `${total.toLocaleString()} eligible · pricing…`;
+      stage = `${total.toLocaleString()} eligible · finalizing flights…`;
     }
 
     const countries = countCountries(allPackages);

@@ -1,16 +1,19 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v14_require_rooms";
+const VERSION = "get_packages_v15_pricing_settled";
 
+// v15 (2026-05-19):
+//   Add `pricing_settled` flag + `terminal_packages` count to summary so
+//   the frontend progress widget knows when work is actually done. A
+//   package is terminal when it can't transition further: hotel_supplier
+//   in ('liteapi', 'no_fit'), or 'mock' with no resorts.liteapi_hotel_id
+//   (the worker has nothing to call /hotels/rates with). live_packages
+//   capped at ~25-40% of total_packages on family-of-6 searches because
+//   most resorts had no fitting rates, so the prior allDone check
+//   (live >= total) hung at 99% indefinitely.
+//
 // v14 (2026-05-19):
-//   Drop packages with no rows in hotel_rate_offers — `cheapest_offer_id`
-//   and `hotel_offer_count` can be stale (offers got evicted/never
-//   persisted while the package summary fields were retained), which
-//   produced ghost cards: price visible on the search row, but the
-//   trip-detail Rooms section was empty. The frontend gate said
-//   "pricing settling" but the package wasn't going to recover, so we
-//   exclude it from results entirely.
 //
 // v13 (2026-05-18):
 //   Attach per-leg flight durations + stops from flight_offers so the
@@ -101,9 +104,13 @@ serve(async (req) => {
       .from("search_jobs").select("status, flights_done, error")
       .eq("search_id", search_id).maybeSingle();
 
+    // Inner-join resorts so we can tell whether a 'mock' package can
+    // still be upgraded — without resorts.liteapi_hotel_id, top_up has
+    // nothing to call /hotels/rates with, and the package stays mock
+    // forever. The frontend uses this to decide when pricing is done.
     const { data: stats } = await sb
       .from("packages")
-      .select("package_id, flight_price, hotel_price, total_price, flight_supplier, hotel_supplier", { count: "exact" })
+      .select("package_id, flight_price, hotel_price, total_price, flight_supplier, hotel_supplier, resort_id, resorts!inner(liteapi_hotel_id)", { count: "exact" })
       .eq("search_id", search_id);
 
     // Build the set of package_ids in this search that have at least
@@ -136,6 +143,24 @@ serve(async (req) => {
       && pkgIdsWithOffers.has(p.package_id)
     ).length ?? 0;
     const mock_packages = total - live_packages;
+
+    // Terminal = no further hotel-side transitions possible:
+    //   - hotel_supplier 'liteapi' (already live)
+    //   - hotel_supplier 'no_fit'  (top_up explicitly skipped — rates
+    //                                returned but none could sleep the party)
+    //   - hotel_supplier 'mock' with NO resorts.liteapi_hotel_id (top_up
+    //                                won't process; package is mock forever)
+    // Flight side: hotels finishing is the bottleneck for our progress
+    // widget — flights converge in ~30s while hotel top-up was the long
+    // tail. Once hotel-side is terminal for every package, the search
+    // can stop polling.
+    const hotel_terminal = stats?.filter((p: any) => {
+      if (p.hotel_supplier === "liteapi" || p.hotel_supplier === "no_fit") return true;
+      if (p.hotel_supplier === "mock" && !p.resorts?.liteapi_hotel_id) return true;
+      return false;
+    }).length ?? 0;
+    const pricing_active_packages = total - hotel_terminal;
+    const pricing_settled = pricing_active_packages === 0 && with_flight >= total;
 
     let effective_live_only = live_only;
     let is_warming_up = false;
@@ -315,6 +340,9 @@ serve(async (req) => {
           fully_priced,
           live_packages,
           mock_packages,
+          hotel_terminal,           // v15: packages whose hotel state won't change
+          pricing_active_packages,  // v15: total - hotel_terminal
+          pricing_settled,          // v15: true when no further work pending
           pricing_complete_pct: total > 0 ? Math.round((fully_priced / total) * 100) : 0,
           live_pct: total > 0 ? Math.round((live_packages / total) * 100) : 0,
         },
