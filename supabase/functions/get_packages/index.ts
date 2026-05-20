@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v15_pricing_settled";
+const VERSION = "get_packages_v16_family_signal_attach";
 
 // v15 (2026-05-19):
 //   Add `pricing_settled` flag + `terminal_packages` count to summary so
@@ -293,6 +293,31 @@ serve(async (req) => {
 
     const { data: packages, error: pErr, count } = await q;
     if (pErr) throw pErr;
+
+    // Attach the resort's family-review signal so the frontend's
+    // compositeScore can give a small ~5% bump (or penalty) when guests
+    // who travelled as a family rated this property differently than
+    // the headline rating. Coverage is partial (only resorts whose
+    // LiteAPI review feed has been pulled and analyzed), so the
+    // frontend treats absent values as "no signal" and folds that
+    // weight back into the family-fit input.
+    const resortIds = Array.from(new Set((packages ?? []).map((p: any) => p.resort_id).filter(Boolean)));
+    if (resortIds.length > 0) {
+      const { data: fams } = await sb
+        .from("resort_family_signals")
+        .select("resort_id, family_avg_score, family_review_count, signal_confidence")
+        .in("resort_id", resortIds);
+      const famByResort = new Map<string, any>();
+      for (const f of (fams ?? [])) famByResort.set(f.resort_id, f);
+      for (const p of (packages ?? [])) {
+        const f = famByResort.get(p.resort_id);
+        if (f) {
+          p.family_avg_score = f.family_avg_score;
+          p.family_review_count = f.family_review_count;
+          p.family_signal_confidence = f.signal_confidence;
+        }
+      }
+    }
 
     // Attach per-leg flight durations / stops from flight_offers so the
     // frontend can treat outbound and inbound as separate travel days.

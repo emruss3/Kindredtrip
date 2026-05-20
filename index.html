@@ -3195,6 +3195,17 @@
   // Composite default ranking. Server pre-orders by a resort-only score that
   // can't see flights, family fit, or star-relative price — so we re-rank
   // here using the same signals the cards already display.
+  //
+  // Weights (May 2026 retune to lean into family-fit differentiation):
+  //   30% family-fit score   (party-aware room/kids-club/infant signal)
+  //   25% resort rating      (Booking aggregate)
+  //   15% star bonus         (5★→100, 4★→70, 3★→40 — premium thumb on scale)
+  //   15% flight ease        (100 − friction)
+  //   10% value vs peers     (cheaper-than-median for same star bucket)
+  //    5% review family-fit  (resort_family_signals.family_avg_score, 0-10
+  //                           normalized to 0-100; falls back into family-
+  //                           fit weight when absent so resorts without a
+  //                           review sentiment row still score honestly)
   function compositeScore(pkg, pool) {
     const rating  = Math.max(0, Math.min(100, Number(pkg?.resorts?.avg_user_rating ?? pkg?.highlights?.rating ?? 0)));
     const fit     = (typeof familyFitScore === "function") ? familyFitScore(pkg) : 50;
@@ -3203,7 +3214,25 @@
     const value   = valueVsStarScore(pkg, pool);
     const stars   = Math.round(Number(pkg?.resorts?.cap_star_rating ?? pkg?.highlights?.star_rating ?? 0));
     const starBonus = stars >= 5 ? 100 : stars === 4 ? 70 : stars === 3 ? 40 : 0;
-    return 0.30 * rating + 0.20 * fit + 0.20 * flight + 0.20 * value + 0.10 * starBonus;
+
+    // Review-based family signal. family_avg_score is 0-10 from the
+    // LiteAPI feed analysis. Require min sample so a single tetchy
+    // family doesn't tank a resort. When unavailable, the 5% folds
+    // back into family-fit (effectively 35% fit) — accomplished by
+    // shifting the weight rather than substituting a default value.
+    const famScoreRaw = Number(pkg?.family_avg_score);
+    const famCount    = Number(pkg?.family_review_count) || 0;
+    const haveFamSig  = Number.isFinite(famScoreRaw) && famCount >= 3;
+    const famSig      = haveFamSig ? Math.max(0, Math.min(100, famScoreRaw * 10)) : 0;
+    const fitWeight   = haveFamSig ? 0.30 : 0.35;
+    const famWeight   = haveFamSig ? 0.05 : 0.00;
+
+    return 0.25 * rating
+         + fitWeight * fit
+         + famWeight * famSig
+         + 0.15 * flight
+         + 0.10 * value
+         + 0.15 * starBonus;
   }
 
   // Bucket a composite 0-100 into a qualitative trip-score label.
