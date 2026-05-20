@@ -5872,20 +5872,6 @@
 
   function renderReviewSummary(s) {
     const family5 = reviewScoreTo5(s.family_avg_score);
-    const overall5 = (() => {
-      // Reverse-derive overall by weighting family + non-family by count.
-      // If we only have one side, use it.
-      const fc = Number(s.family_review_count) || 0;
-      const tc = Number(s.total_reviews) || 0;
-      const fas = Number(s.family_avg_score);
-      const nfs = Number(s.non_family_avg_score);
-      if (tc <= 0) return null;
-      if (fc > 0 && (tc - fc) > 0 && Number.isFinite(fas) && Number.isFinite(nfs)) {
-        return ((fas * fc) + (nfs * (tc - fc))) / tc;
-      }
-      return Number.isFinite(fas) ? fas : (Number.isFinite(nfs) ? nfs : null);
-    })();
-    const overall5n = reviewScoreTo5(overall5);
 
     const familyLabel = reviewScoreLabel(s.family_avg_score);
     const delta = Number(s.family_score_delta);
@@ -5910,7 +5896,6 @@
       const sig = Number(s[`${t.key}_signal`]);
       const mentions = Number(s[`${t.key}_mentions`]) || 0;
       if (!Number.isFinite(sig) || mentions < 2) return "";
-      // Signal is 0-1: 1 = positive, 0 = negative. Noise inverts (high = noisy = bad).
       const effective = t.invert ? 1 - sig : sig;
       let cls;
       if (effective >= 0.65) cls = "topic-pos";
@@ -5931,14 +5916,21 @@
       ? `<span class="trip-review-confidence trip-review-confidence-${escapeHtml(String(s.signal_confidence))}">${escapeHtml(String(s.signal_confidence))} confidence</span>`
       : "";
 
+    // Sample size for the family-fit analysis. This is the LiteAPI
+    // review feed (typically ~100-1000 reviews) — a strict subset of
+    // the resort's full review count shown in the card header. We
+    // surface it as "based on N reviews" rather than as a competing
+    // total so the same property doesn't look like it has "4.5 (11k)"
+    // in the header and "4.4 (100)" right below.
+    const sampleSize = Number(s.total_reviews) || 0;
+    const familyCount = Number(s.family_review_count) || 0;
+    const sampleLine = sampleSize > 0
+      ? `Family-fit analysis from <b>${sampleSize.toLocaleString()}</b> guest review${sampleSize === 1 ? "" : "s"}${familyCount > 0 ? ` · <b>${familyCount.toLocaleString()}</b> from families` : ""}`
+      : "";
+
     return `
       <div class="trip-reviews-summary">
         <div class="trip-reviews-summary-head">
-          <div class="trip-review-score-block">
-            <div class="trip-review-score-num">${overall5n != null ? overall5n.toFixed(1) : "—"}<span class="trip-review-score-suffix">/ 5</span></div>
-            <div class="trip-review-score-label">${escapeHtml(reviewScoreLabel(overall5))}</div>
-            <div class="trip-review-score-meta">${Number(s.total_reviews) || 0} reviews${s.family_review_count ? ` · ${s.family_review_count} from families` : ""}</div>
-          </div>
           <div class="trip-review-family-block">
             <div class="trip-review-family-head">
               <span class="trip-review-family-label">Family score</span>
@@ -5950,6 +5942,7 @@
             ${deltaStr ? `<div class="trip-review-family-delta">${deltaStr}</div>` : ""}
           </div>
         </div>
+        ${sampleLine ? `<p class="trip-review-sample">${sampleLine}</p>` : ""}
         ${topicChips ? `<div class="trip-review-topics">${topicChips}</div>` : ""}
         ${(pros.length || cons.length) ? `
         <div class="trip-review-procon">
