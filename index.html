@@ -5838,9 +5838,12 @@
     // toggle so the section doesn't eat the whole modal.
     const summary = signals ? renderReviewSummary(signals) : "";
 
-    const tc = Number(signals?.total_reviews) || reviews.length;
-    const fc = Number(signals?.family_review_count) || 0;
-    const listLabel = `${tc.toLocaleString()} review${tc === 1 ? "" : "s"}${fc > 0 ? ` · ${fc.toLocaleString()} from families` : ""}`;
+    // Label counts the rows we're actually about to render (≤20 from
+    // get_resort_reviews). We deliberately do NOT show signals.total_reviews
+    // here — that's the LiteAPI feed total, which is a subset of the
+    // resort's full review count shown in the card header, and surfacing
+    // it next to the header total reads as a contradiction.
+    const listLabel = `${reviews.length.toLocaleString()} excerpt${reviews.length === 1 ? "" : "s"}`;
     const list = reviews.length > 0
       ? `
         <button type="button" class="trip-reviews-list-toggle" aria-expanded="false" aria-controls="trip-reviews-list" onclick="toggleReviewsBlock(this)">
@@ -5916,16 +5919,16 @@
       ? `<span class="trip-review-confidence trip-review-confidence-${escapeHtml(String(s.signal_confidence))}">${escapeHtml(String(s.signal_confidence))} confidence</span>`
       : "";
 
-    // Sample size for the family-fit analysis. This is the LiteAPI
-    // review feed (typically ~100-1000 reviews) — a strict subset of
-    // the resort's full review count shown in the card header. We
-    // surface it as "based on N reviews" rather than as a competing
-    // total so the same property doesn't look like it has "4.5 (11k)"
-    // in the header and "4.4 (100)" right below.
-    const sampleSize = Number(s.total_reviews) || 0;
+    // Sample size for the family-side score. We surface this attached to
+    // the Family score block (not as a separate overall total) so the
+    // numbers on the page have exactly one "total reviews" — the
+    // Booking aggregate already shown in the card header. The LiteAPI
+    // review feed (typically ~100-1000) is a strict subset of that
+    // pool; displaying its count as a competing total read as
+    // contradictory ("4.5 / 11k" vs "4.4 / 100").
     const familyCount = Number(s.family_review_count) || 0;
-    const sampleLine = sampleSize > 0
-      ? `Family-fit analysis from <b>${sampleSize.toLocaleString()}</b> guest review${sampleSize === 1 ? "" : "s"}${familyCount > 0 ? ` · <b>${familyCount.toLocaleString()}</b> from families` : ""}`
+    const familySampleLine = familyCount > 0
+      ? `from <b>${familyCount.toLocaleString()}</b> family-tagged review${familyCount === 1 ? "" : "s"}`
       : "";
 
     return `
@@ -5939,10 +5942,10 @@
             <div class="trip-review-family-num">${family5 != null ? family5.toFixed(1) : "—"}<span class="trip-review-score-suffix">/ 5</span>
               <span class="trip-review-family-tag">${escapeHtml(familyLabel)}</span>
             </div>
+            ${familySampleLine ? `<div class="trip-review-family-sample">${familySampleLine}</div>` : ""}
             ${deltaStr ? `<div class="trip-review-family-delta">${deltaStr}</div>` : ""}
           </div>
         </div>
-        ${sampleLine ? `<p class="trip-review-sample">${sampleLine}</p>` : ""}
         ${topicChips ? `<div class="trip-review-topics">${topicChips}</div>` : ""}
         ${(pros.length || cons.length) ? `
         <div class="trip-review-procon">

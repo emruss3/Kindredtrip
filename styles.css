@@ -6772,13 +6772,13 @@ body.trip-detail-open #status { display: none !important; }
 }
 .trip-review-family-delta b { font-weight: 700; }
 
-.trip-review-sample {
-  font-size: 12.5px;
+.trip-review-family-sample {
+  font-size: 12px;
   color: var(--ink-2);
-  margin: var(--s-2) 0 0;
+  margin-top: 2px;
   line-height: 1.4;
 }
-.trip-review-sample b { font-weight: 600; color: var(--ink-1); }
+.trip-review-family-sample b { font-weight: 600; color: var(--ink-1); }
 
 .trip-review-topics {
   display: flex;
