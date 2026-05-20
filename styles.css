@@ -6899,6 +6899,29 @@ body.trip-detail-open #status { display: none !important; }
   flex-shrink: 0;
 }
 .trip-reviews-toggle[aria-expanded="true"] .trip-reviews-toggle-chev { transform: rotate(180deg); }
+.trip-reviews-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  margin-top: var(--s-3);
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink-1);
+}
+.trip-reviews-list-toggle:hover { background: var(--bg-base); border-color: var(--ink-3); }
+.trip-reviews-list-toggle[aria-expanded="true"] .trip-reviews-toggle-chev { transform: rotate(180deg); }
+.trip-reviews-toggle-count {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin-left: auto;
+  margin-right: var(--s-2);
+}
 .trip-reviews-collapsible {
   display: flex;
   flex-direction: column;

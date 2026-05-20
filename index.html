@@ -5822,60 +5822,41 @@
   }
 
   function renderReviewsBlock(signals, reviews) {
-    // The whole Reviews block is collapsed by default — score + count
-    // teaser line up top, click to reveal the family-fit summary
-    // (pros/cons/topic chips) and the individual review rows. Earlier
-    // the summary stayed open and ate a full screen of trip-detail
-    // real estate before the user ever scrolled to Rooms or Flights.
+    // Summary (overall + family score, topic chips, pros/cons) stays
+    // visible — that's the part families come to the reviews tab for.
+    // Only the long list of individual review rows collapses behind a
+    // toggle so the section doesn't eat the whole modal.
     const summary = signals ? renderReviewSummary(signals) : "";
-    const list = reviews.length > 0
-      ? `<div class="trip-reviews-list">${reviews.map(renderReviewRow).join("")}</div>`
-      : `<p class="trip-reviews-empty-sub">No individual reviews to display.</p>`;
 
-    // Teaser line: overall score + total count + family-rated count.
-    const overall5 = (() => {
-      if (!signals) return null;
-      const fc = Number(signals.family_review_count) || 0;
-      const tc = Number(signals.total_reviews) || 0;
-      const fas = Number(signals.family_avg_score);
-      const nfs = Number(signals.non_family_avg_score);
-      if (tc <= 0) return null;
-      if (fc > 0 && (tc - fc) > 0 && Number.isFinite(fas) && Number.isFinite(nfs)) {
-        return ((fas * fc) + (nfs * (tc - fc))) / tc;
-      }
-      return Number.isFinite(fas) ? fas : (Number.isFinite(nfs) ? nfs : null);
-    })();
-    const overall5n = reviewScoreTo5(overall5);
     const tc = Number(signals?.total_reviews) || reviews.length;
     const fc = Number(signals?.family_review_count) || 0;
-    const teaserScore = overall5n != null ? `<b>${overall5n.toFixed(1)}</b><span class="trip-reviews-teaser-suffix"> / 5</span>` : "";
-    const teaserMeta = `${tc.toLocaleString()} review${tc === 1 ? "" : "s"}${fc > 0 ? ` · ${fc.toLocaleString()} from families` : ""}`;
+    const listLabel = `${tc.toLocaleString()} review${tc === 1 ? "" : "s"}${fc > 0 ? ` · ${fc.toLocaleString()} from families` : ""}`;
+    const list = reviews.length > 0
+      ? `
+        <button type="button" class="trip-reviews-list-toggle" aria-expanded="false" aria-controls="trip-reviews-list" onclick="toggleReviewsBlock(this)">
+          <span class="trip-reviews-toggle-label">Show individual reviews</span>
+          <span class="trip-reviews-toggle-count">${escapeHtml(listLabel)}</span>
+          <svg class="trip-reviews-toggle-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="trip-reviews-list" class="trip-reviews-collapsible" hidden>
+          <div class="trip-reviews-list">${reviews.map(renderReviewRow).join("")}</div>
+        </div>`
+      : (signals ? "" : `<p class="trip-reviews-empty-sub">No individual reviews to display.</p>`);
 
     return `
-      <button type="button" class="trip-reviews-toggle" aria-expanded="false" aria-controls="trip-reviews-collapsible" onclick="toggleReviewsBlock(this)">
-        <span class="trip-reviews-teaser">
-          ${teaserScore ? `<span class="trip-reviews-teaser-score">${teaserScore}</span>` : ""}
-          <span class="trip-reviews-teaser-meta">${escapeHtml(teaserMeta)}</span>
-        </span>
-        <span class="trip-reviews-toggle-label">Show reviews</span>
-        <svg class="trip-reviews-toggle-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div id="trip-reviews-collapsible" class="trip-reviews-collapsible" hidden>
-        ${summary}
-        ${list}
-      </div>`;
+      ${summary}
+      ${list}`;
   }
 
-  // Single toggle for the whole Reviews section (summary + list). The
-  // older toggleReviewsList that opened only the per-review rows is
-  // gone — one expand for everything keeps the layout predictable.
+  // Toggle for the individual-reviews list only. Summary stays open.
   function toggleReviewsBlock(btn) {
     const open = btn.getAttribute("aria-expanded") === "true";
     btn.setAttribute("aria-expanded", open ? "false" : "true");
-    const body = btn.parentElement?.querySelector(".trip-reviews-collapsible");
+    const targetId = btn.getAttribute("aria-controls");
+    const body = targetId ? document.getElementById(targetId) : btn.parentElement?.querySelector(".trip-reviews-collapsible");
     if (body) body.hidden = open;
     const labelEl = btn.querySelector(".trip-reviews-toggle-label");
-    if (labelEl) labelEl.textContent = open ? "Show reviews" : "Hide reviews";
+    if (labelEl) labelEl.textContent = open ? "Show individual reviews" : "Hide individual reviews";
   }
   window.toggleReviewsBlock = toggleReviewsBlock;
 
