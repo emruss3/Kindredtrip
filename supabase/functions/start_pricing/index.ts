@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v15_full_family_query";
+const VERSION = "start_pricing_v16_pkg_scoped_offer_id";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -581,10 +581,16 @@ serve(async (req) => {
 
           const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
           const refOffers = fitsOffers.filter(o => o.refundable === true);
+          // offer_id from extractRateOffers is hotel-scoped, so two
+          // searches pricing the same hotel collide on PK and the later
+          // upsert overwrites the earlier search's rows. We re-scope by
+          // package_id here so each search owns its own offer rows.
+          const pkgScope = p.package_id.slice(0, 8);
+          const scopeId = (id: string) => `${pkgScope}_${id}`;
           cheapestAiTotal = aiOffers[0]?.total_price ?? null;
-          cheapestAiOfferId = aiOffers[0]?.offer_id ?? null;
+          cheapestAiOfferId = aiOffers[0] ? scopeId(aiOffers[0].offer_id) : null;
           cheapestRefTotal = refOffers[0]?.total_price ?? null;
-          cheapestRefOfferId = refOffers[0]?.offer_id ?? null;
+          cheapestRefOfferId = refOffers[0] ? scopeId(refOffers[0].offer_id) : null;
           hasAnyAi = aiOffers.length > 0;
           hasAnyRefundable = refOffers.length > 0;
           maxOfferOcc = offers.reduce((m, o) => Math.max(m, o.max_occupancy ?? 0), 0) || null;
@@ -595,24 +601,26 @@ serve(async (req) => {
           } else {
             chosen = fitsOffers[0];
           }
-          chosenOfferId = chosen.offer_id;
+          chosenOfferId = scopeId(chosen.offer_id);
           hotelTotal = Math.round(chosen.total_price);
           offerCount = offers.length;
 
           const top = offers.slice(0, MAX_OFFERS_PER_PACKAGE);
           const have = new Set(top.map(o => o.offer_id));
-          if (cheapestAiOfferId && !have.has(cheapestAiOfferId)) {
-            const found = offers.find(o => o.offer_id === cheapestAiOfferId);
+          const cheapestAiRawId = aiOffers[0]?.offer_id ?? null;
+          const cheapestRefRawId = refOffers[0]?.offer_id ?? null;
+          if (cheapestAiRawId && !have.has(cheapestAiRawId)) {
+            const found = offers.find(o => o.offer_id === cheapestAiRawId);
             if (found) top.push(found);
           }
-          if (cheapestRefOfferId && !have.has(cheapestRefOfferId)) {
-            const found = offers.find(o => o.offer_id === cheapestRefOfferId);
+          if (cheapestRefRawId && !have.has(cheapestRefRawId)) {
+            const found = offers.find(o => o.offer_id === cheapestRefRawId);
             if (found) top.push(found);
           }
 
           for (const o of top) {
             rateOfferRows.push({
-              offer_id: o.offer_id,
+              offer_id: scopeId(o.offer_id),
               package_id: p.package_id,
               resort_id: p.resort_id,
               liteapi_hotel_id: r.liteapi_hotel_id,
