@@ -17,7 +17,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v10_dispatch_topup";
+const VERSION = "start_pricing_v16_pkg_scoped_offer_id";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -97,6 +97,7 @@ type ExtractedRateOffer = {
   offer_id: string;
   raw_offer_id_full: string;  // for storing the full liteapi offer id in raw_offer
   room_type_id: string | null;
+  mapped_room_id: string | null;  // LiteAPI rate.mappedRoomId → joins to resort_rooms.room_id
   room_name: string | null;
   rate_id: string | null;
   max_occupancy: number | null;
@@ -140,6 +141,10 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
     const paymentTypes: string[] = Array.isArray(rt?.paymentTypes) ? rt.paymentTypes : [];
     const supplier = rt?.supplier ?? null;
     const roomTypeId = rt?.roomTypeId ?? null;
+    // mappedRoomId is the documented crosswalk to /data/hotel rooms[].id
+    // (resort_rooms.room_id). Per LiteAPI it can sit on the roomType
+    // wrapper; per-rate is preferred when present (see loop below).
+    const wrapperMappedRoomId = rt?.mappedRoomId ?? null;
 
     const rates: any[] = Array.isArray(rt?.rates) ? rt.rates : [];
     for (const rate of rates) {
@@ -170,6 +175,11 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
       // Stable short id from hotel+rate identifiers. 16 hex chars guaranteed unique.
       const rateId = String(rate?.rateId ?? "r0");
       const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
+      // Per-rate mappedRoomId wins; fall back to the roomType wrapper.
+      // Coerce to string so the join against resort_rooms.room_id (text)
+      // doesn't get tripped up by a numeric LiteAPI id.
+      const mappedRoomIdRaw = rate?.mappedRoomId ?? wrapperMappedRoomId ?? null;
+      const mappedRoomId = mappedRoomIdRaw != null ? String(mappedRoomIdRaw) : null;
 
       // v5: trimmed raw_offer. We only need enough to replay or prebook later;
       // the full LiteAPI rate JSON is large and not used downstream. Store just
@@ -179,6 +189,7 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
         _liteapi_offer_id: liteOfferId,
         _liteapi_room_type_id: roomTypeId,
         _liteapi_rate_id: rateId,
+        _liteapi_mapped_room_id: mappedRoomId,
         board_type: boardType,
         board_name: boardName,
         refundable_tag: refundableTag,
@@ -188,6 +199,7 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
         offer_id: offerId,
         raw_offer_id_full: liteOfferId,
         room_type_id: roomTypeId,
+        mapped_room_id: mappedRoomId,
         room_name: rate?.name ?? null,
         rate_id: rateId,
         max_occupancy: rate?.maxOccupancy ?? null,
@@ -244,6 +256,7 @@ async function fetchHotelRatesBatch(
       body: JSON.stringify({
         hotelIds, checkin, checkout, currency: "USD", guestNationality: "US", occupancies,
         timeout: LITEAPI_TIMEOUT_S,
+        roomMapping: true,
       }),
     });
     if (!r.ok) {
@@ -399,6 +412,9 @@ serve(async (req) => {
         departure_date: search.date_start, return_date: search.date_end,
         adults, children, infants,
         status: "pending",
+        offers_count: 0,  // explicit — PostgREST sends NULL for omitted keys
+                          // when batching with rows that DO include them,
+                          // which violates the NOT NULL constraint
       };
     });
 
@@ -415,7 +431,7 @@ serve(async (req) => {
     )) as string[];
 
     const hotelDataById = new Map<string, any>();
-    const hotelOccupancies = [{ adults, children: olderChildAges }];
+    const hotelOccupancies = [{ adults, children: childAges }];
 
     let hotelBatchesAttempted = 0, hotelBatchesSucceeded = 0;
     let hotelLastError: string | undefined;
@@ -527,17 +543,54 @@ serve(async (req) => {
       if (hotelData) {
         const offers = extractRateOffers(hotelData, r.liteapi_hotel_id, nights);
         if (offers.length > 0) {
+          // Only consider rates whose maxOccupancy can sleep the queried
+          // party in a single room. LiteAPI sometimes returns rates with
+          // a maxOccupancy below the queried occupancy (mixed-supplier
+          // responses), and picking offers[0] after a raw price sort
+          // would surface a $X price for a room the family literally
+          // Fit filter: every person in the search must sleep in the room.
+          // Infants used to be stripped from this calculation (and from
+          // the LiteAPI query above) on the theory that under-2s sleep on
+          // a parent's lap, but LiteAPI then never priced 6-person rooms
+          // for a family of 6 — it capped rates at maxOccupancy=5. That
+          // hid the bigger rooms users actually wanted to book. Now we
+          // pass the full child_ages to LiteAPI and gate rates at the
+          // full family size, with cribs treated as a property-side
+          // detail.
+          const partySize = adults + childAges.length;
+          const fitsParty = (o: ExtractedRateOffer) =>
+            o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+          const fitsOffers = offers.filter(fitsParty);
+
+          if (fitsOffers.length === 0) {
+            // No bookable room. Mark the package as 'no_fit' rather than
+            // 'mock' so top_up_hotels_worker doesn't immediately re-pull
+            // it, call /hotels/rates again, and re-filter the same too-
+            // small rates — that loop burned wall-clock for no progress.
+            // strict_live_only on the frontend filters 'no_fit' out the
+            // same way it filtered 'mock'.
+            hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
+            hotelSupplier = "no_fit";
+            hotelFallback++;
+          } else {
           hotelSupplier = "liteapi";
           hotelLive++;
 
+          fitsOffers.sort((a, b) => a.total_price - b.total_price);
           offers.sort((a, b) => a.total_price - b.total_price);
 
-          const aiOffers = offers.filter(o => o.is_all_inclusive);
-          const refOffers = offers.filter(o => o.refundable === true);
+          const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
+          const refOffers = fitsOffers.filter(o => o.refundable === true);
+          // offer_id from extractRateOffers is hotel-scoped, so two
+          // searches pricing the same hotel collide on PK and the later
+          // upsert overwrites the earlier search's rows. We re-scope by
+          // package_id here so each search owns its own offer rows.
+          const pkgScope = p.package_id.slice(0, 8);
+          const scopeId = (id: string) => `${pkgScope}_${id}`;
           cheapestAiTotal = aiOffers[0]?.total_price ?? null;
-          cheapestAiOfferId = aiOffers[0]?.offer_id ?? null;
+          cheapestAiOfferId = aiOffers[0] ? scopeId(aiOffers[0].offer_id) : null;
           cheapestRefTotal = refOffers[0]?.total_price ?? null;
-          cheapestRefOfferId = refOffers[0]?.offer_id ?? null;
+          cheapestRefOfferId = refOffers[0] ? scopeId(refOffers[0].offer_id) : null;
           hasAnyAi = aiOffers.length > 0;
           hasAnyRefundable = refOffers.length > 0;
           maxOfferOcc = offers.reduce((m, o) => Math.max(m, o.max_occupancy ?? 0), 0) || null;
@@ -546,30 +599,33 @@ serve(async (req) => {
           if (search.require_all_inclusive && aiOffers.length > 0) {
             chosen = aiOffers[0];
           } else {
-            chosen = offers[0];
+            chosen = fitsOffers[0];
           }
-          chosenOfferId = chosen.offer_id;
+          chosenOfferId = scopeId(chosen.offer_id);
           hotelTotal = Math.round(chosen.total_price);
           offerCount = offers.length;
 
           const top = offers.slice(0, MAX_OFFERS_PER_PACKAGE);
           const have = new Set(top.map(o => o.offer_id));
-          if (cheapestAiOfferId && !have.has(cheapestAiOfferId)) {
-            const found = offers.find(o => o.offer_id === cheapestAiOfferId);
+          const cheapestAiRawId = aiOffers[0]?.offer_id ?? null;
+          const cheapestRefRawId = refOffers[0]?.offer_id ?? null;
+          if (cheapestAiRawId && !have.has(cheapestAiRawId)) {
+            const found = offers.find(o => o.offer_id === cheapestAiRawId);
             if (found) top.push(found);
           }
-          if (cheapestRefOfferId && !have.has(cheapestRefOfferId)) {
-            const found = offers.find(o => o.offer_id === cheapestRefOfferId);
+          if (cheapestRefRawId && !have.has(cheapestRefRawId)) {
+            const found = offers.find(o => o.offer_id === cheapestRefRawId);
             if (found) top.push(found);
           }
 
           for (const o of top) {
             rateOfferRows.push({
-              offer_id: o.offer_id,
+              offer_id: scopeId(o.offer_id),
               package_id: p.package_id,
               resort_id: p.resort_id,
               liteapi_hotel_id: r.liteapi_hotel_id,
               room_type_id: o.room_type_id,
+              mapped_room_id: o.mapped_room_id,
               room_name: o.room_name,
               rate_id: o.rate_id,
               max_occupancy: o.max_occupancy,
@@ -599,6 +655,7 @@ serve(async (req) => {
               remarks: o.remarks,
               raw_offer: o.raw_offer,
             });
+          }
           }
         } else {
           hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);

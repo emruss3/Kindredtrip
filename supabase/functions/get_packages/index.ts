@@ -1,8 +1,31 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v11_cap_star_rating";
+const VERSION = "get_packages_v16_family_signal_attach";
 
+// v15 (2026-05-19):
+//   Add `pricing_settled` flag + `terminal_packages` count to summary so
+//   the frontend progress widget knows when work is actually done. A
+//   package is terminal when it can't transition further: hotel_supplier
+//   in ('liteapi', 'no_fit'), or 'mock' with no resorts.liteapi_hotel_id
+//   (the worker has nothing to call /hotels/rates with). live_packages
+//   capped at ~25-40% of total_packages on family-of-6 searches because
+//   most resorts had no fitting rates, so the prior allDone check
+//   (live >= total) hung at 99% indefinitely.
+//
+// v14 (2026-05-19):
+//
+// v13 (2026-05-18):
+//   Attach per-leg flight durations + stops from flight_offers so the
+//   frontend can treat outbound and inbound as two separate travel days
+//   instead of summing them. Falls back silently for mock packages where
+//   no flight_offers row exists.
+//
+// v12 (2026-05-19):
+//   Include resorts.airport_transfer_minutes so the frontend's flight
+//   friction score can use real numeric transfer time instead of the
+//   text-only airport_transfer_notes.
+//
 // v10 (2026-05-14):
 //   Added the package-level fields the frontend filter / modal relies
 //   on but that were missing from the SELECT in v9:
@@ -81,19 +104,63 @@ serve(async (req) => {
       .from("search_jobs").select("status, flights_done, error")
       .eq("search_id", search_id).maybeSingle();
 
+    // Inner-join resorts so we can tell whether a 'mock' package can
+    // still be upgraded — without resorts.liteapi_hotel_id, top_up has
+    // nothing to call /hotels/rates with, and the package stays mock
+    // forever. The frontend uses this to decide when pricing is done.
     const { data: stats } = await sb
       .from("packages")
-      .select("flight_price, hotel_price, total_price, flight_supplier, hotel_supplier", { count: "exact" })
+      .select("package_id, flight_price, hotel_price, total_price, flight_supplier, hotel_supplier, resort_id, resorts!inner(liteapi_hotel_id)", { count: "exact" })
       .eq("search_id", search_id);
+
+    // Build the set of package_ids in this search that have at least
+    // one row in hotel_rate_offers. Used as the authoritative "has
+    // bookable rooms" gate for both summary counts and the main filter.
+    const allPkgIds = (stats ?? []).map((s: any) => s.package_id);
+    const pkgIdsWithOffers = new Set<string>();
+    if (allPkgIds.length > 0) {
+      // PostgREST's `.in()` chokes if the URL gets too long; chunk to
+      // keep each request under ~200 ids.
+      const CHUNK = 200;
+      for (let i = 0; i < allPkgIds.length; i += CHUNK) {
+        const slice = allPkgIds.slice(i, i + CHUNK);
+        const { data: offerRows } = await sb
+          .from("hotel_rate_offers")
+          .select("package_id")
+          .in("package_id", slice);
+        for (const r of (offerRows ?? [])) pkgIdsWithOffers.add(r.package_id);
+      }
+    }
 
     const total = stats?.length ?? 0;
     const with_flight = stats?.filter((p: any) => p.flight_price != null).length ?? 0;
     const with_hotel = stats?.filter((p: any) => p.hotel_price != null).length ?? 0;
-    const fully_priced = stats?.filter((p: any) => p.total_price != null).length ?? 0;
+    const fully_priced = stats?.filter((p: any) =>
+      p.total_price != null && pkgIdsWithOffers.has(p.package_id)
+    ).length ?? 0;
     const live_packages = stats?.filter((p: any) =>
       p.hotel_supplier === "liteapi" && p.flight_supplier === "liteapi"
+      && pkgIdsWithOffers.has(p.package_id)
     ).length ?? 0;
     const mock_packages = total - live_packages;
+
+    // Terminal = no further hotel-side transitions possible:
+    //   - hotel_supplier 'liteapi' (already live)
+    //   - hotel_supplier 'no_fit'  (top_up explicitly skipped — rates
+    //                                returned but none could sleep the party)
+    //   - hotel_supplier 'mock' with NO resorts.liteapi_hotel_id (top_up
+    //                                won't process; package is mock forever)
+    // Flight side: hotels finishing is the bottleneck for our progress
+    // widget — flights converge in ~30s while hotel top-up was the long
+    // tail. Once hotel-side is terminal for every package, the search
+    // can stop polling.
+    const hotel_terminal = stats?.filter((p: any) => {
+      if (p.hotel_supplier === "liteapi" || p.hotel_supplier === "no_fit") return true;
+      if (p.hotel_supplier === "mock" && !p.resorts?.liteapi_hotel_id) return true;
+      return false;
+    }).length ?? 0;
+    const pricing_active_packages = total - hotel_terminal;
+    const pricing_settled = pricing_active_packages === 0 && with_flight >= total;
 
     let effective_live_only = live_only;
     let is_warming_up = false;
@@ -163,6 +230,7 @@ serve(async (req) => {
           year_renovated,
           floors,
           airport_transfer_notes,
+          airport_transfer_minutes,
           beach_quality_score,
           on_beach,
           accepts_infants,
@@ -204,6 +272,16 @@ serve(async (req) => {
     if (effective_live_only) {
       q = q.eq("hotel_supplier", "liteapi").eq("flight_supplier", "liteapi");
     }
+    // Require at least one bookable room offer. Without this filter,
+    // packages with stale cheapest_offer_id (but no offer rows) leak
+    // through and produce price-visible-but-no-rooms ghost cards.
+    if (pkgIdsWithOffers.size > 0) {
+      q = q.in("package_id", Array.from(pkgIdsWithOffers));
+    } else {
+      // No package in this search has any offer rows yet — return empty
+      // results rather than mock/stale rows.
+      q = q.eq("package_id", "00000000-0000-0000-0000-000000000000");
+    }
     if (sort_by === "price_asc") {
       q = q.order("total_price", { ascending: true, nullsFirst: false });
     } else if (sort_by === "price_desc") {
@@ -215,6 +293,56 @@ serve(async (req) => {
 
     const { data: packages, error: pErr, count } = await q;
     if (pErr) throw pErr;
+
+    // Attach the resort's family-review signal so the frontend's
+    // compositeScore can give a small ~5% bump (or penalty) when guests
+    // who travelled as a family rated this property differently than
+    // the headline rating. Coverage is partial (only resorts whose
+    // LiteAPI review feed has been pulled and analyzed), so the
+    // frontend treats absent values as "no signal" and folds that
+    // weight back into the family-fit input.
+    const resortIds = Array.from(new Set((packages ?? []).map((p: any) => p.resort_id).filter(Boolean)));
+    if (resortIds.length > 0) {
+      const { data: fams } = await sb
+        .from("resort_family_signals")
+        .select("resort_id, family_avg_score, family_review_count, signal_confidence")
+        .in("resort_id", resortIds);
+      const famByResort = new Map<string, any>();
+      for (const f of (fams ?? [])) famByResort.set(f.resort_id, f);
+      for (const p of (packages ?? [])) {
+        const f = famByResort.get(p.resort_id);
+        if (f) {
+          p.family_avg_score = f.family_avg_score;
+          p.family_review_count = f.family_review_count;
+          p.family_signal_confidence = f.signal_confidence;
+        }
+      }
+    }
+
+    // Attach per-leg flight durations / stops from flight_offers so the
+    // frontend can treat outbound and inbound as separate travel days.
+    // packages.flight_offer_id has no FK to flight_offers so we do this
+    // as a batched secondary fetch instead of a PostgREST nested select.
+    const offerIds = (packages ?? [])
+      .map((p: any) => p.flight_offer_id)
+      .filter((id: any) => typeof id === "string" && id.length > 0);
+    if (offerIds.length > 0) {
+      const { data: offers } = await sb
+        .from("flight_offers")
+        .select("offer_id, outbound_duration_minutes, return_duration_minutes, outbound_stops, return_stops")
+        .in("offer_id", offerIds);
+      const offerMap = new Map<string, any>();
+      for (const o of (offers ?? [])) offerMap.set(o.offer_id, o);
+      for (const p of (packages ?? [])) {
+        const fo = offerMap.get(p.flight_offer_id);
+        if (fo) {
+          p.outbound_minutes = fo.outbound_duration_minutes ?? null;
+          p.return_minutes   = fo.return_duration_minutes ?? null;
+          p.outbound_stops   = fo.outbound_stops ?? null;
+          p.return_stops     = fo.return_stops ?? null;
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({
@@ -237,6 +365,9 @@ serve(async (req) => {
           fully_priced,
           live_packages,
           mock_packages,
+          hotel_terminal,           // v15: packages whose hotel state won't change
+          pricing_active_packages,  // v15: total - hotel_terminal
+          pricing_settled,          // v15: true when no further work pending
           pricing_complete_pct: total > 0 ? Math.round((fully_priced / total) * 100) : 0,
           live_pct: total > 0 ? Math.round((live_packages / total) * 100) : 0,
         },
