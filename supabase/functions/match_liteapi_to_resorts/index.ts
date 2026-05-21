@@ -24,7 +24,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "match_liteapi_to_resorts_v1";
+const VERSION = "match_liteapi_to_resorts_v2_airport_anchor";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const PER_REQUEST_DELAY_MS = 250;
 const WALL_CLOCK_BUDGET_MS = 45_000;
@@ -153,13 +153,39 @@ serve(async (req) => {
     for (const c of countries) {
       if (Date.now() - startedAt > WALL_CLOCK_BUDGET_MS) { summary.wall_time_budget_hit = true; break; }
 
-      // Our unmatched rows for this country
+      // Our unmatched rows for this country — keep coord-less rows
+      // (most of them, in fact). v1 dropped them silently via a geo
+      // gate, which is why DR+JM linked only 5/119.
       const { data: ours } = await sb.from("resorts")
-        .select("resort_id, resort_name, country, latitude, longitude")
+        .select("resort_id, resort_name, country, latitude, longitude, airport_code")
         .eq("country", c.name)
         .is("liteapi_hotel_id", null);
-      const unmatched = (ours ?? []).filter((r: any) => Number.isFinite(Number(r.latitude)) && Number.isFinite(Number(r.longitude)));
+      const unmatched = (ours ?? []);
       summary.unmatched_input += unmatched.length;
+
+      // Airport centroid lookup for the country, derived from our own
+      // already-coord'd resorts. Lets us anchor coord-less rows in a
+      // ~25 km radius of their airport when comparing to LiteAPI's
+      // (always-coord'd) candidates.
+      const airportCentroids = new Map<string, { lat: number; lng: number }>();
+      const { data: airportRows } = await sb.from("resorts")
+        .select("airport_code, latitude, longitude")
+        .eq("country", c.name)
+        .not("airport_code", "is", null)
+        .not("latitude", "is", null)
+        .not("longitude", "is", null);
+      const tally = new Map<string, { latSum: number; lngSum: number; n: number }>();
+      for (const r of (airportRows ?? [])) {
+        const code = String(r.airport_code).trim();
+        const lat = Number(r.latitude), lng = Number(r.longitude);
+        if (!code || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const e = tally.get(code) ?? { latSum: 0, lngSum: 0, n: 0 };
+        e.latSum += lat; e.lngSum += lng; e.n += 1;
+        tally.set(code, e);
+      }
+      for (const [code, e] of tally.entries()) {
+        airportCentroids.set(code, { lat: e.latSum / e.n, lng: e.lngSum / e.n });
+      }
 
       if (unmatched.length === 0) { summary.processed_countries.push(c.code); continue; }
 
@@ -196,18 +222,42 @@ serve(async (req) => {
         const ourTokens = tokenize(ours_row.resort_name);
         const ourLat = Number(ours_row.latitude);
         const ourLng = Number(ours_row.longitude);
+        const hasOurCoords = Number.isFinite(ourLat) && Number.isFinite(ourLng);
+        // Coord-less rows: anchor to airport centroid so we can still
+        // require the candidate be in the right region (not just the
+        // right country — DR alone has Punta Cana + Puerto Plata +
+        // Samaná zones >100 km apart).
+        const apt = ours_row.airport_code ? airportCentroids.get(String(ours_row.airport_code).trim()) : null;
+        const anchorLat = hasOurCoords ? ourLat : (apt?.lat ?? null);
+        const anchorLng = hasOurCoords ? ourLng : (apt?.lng ?? null);
+        // Geo radius is 8 km for own-coords (precise), 25 km for
+        // airport-anchor (regional only).
+        const geoRadiusKm = hasOurCoords ? 8 : 25;
 
         let best: any = null;
         let bestScore = 0;
         for (const cand of liteTok) {
-          const dKm = distanceKm(ourLat, ourLng, cand.lat, cand.lng);
-          if (dKm > 8) continue;     // hard geo gate
+          let dKm = Infinity;
+          if (anchorLat != null && anchorLng != null) {
+            dKm = distanceKm(anchorLat as number, anchorLng as number, cand.lat, cand.lng);
+            if (dKm > geoRadiusKm) continue;
+          }
+          // else: no anchor available, accept any geo and rely entirely on name
           const sim = jaccard(ourTokens, cand.tokens);
-          // Accept name-strict (>=0.55 within 3km) OR name-loose (>=0.80 within 8km)
-          const acceptable = (sim >= 0.55 && dKm <= 3) || (sim >= 0.80 && dKm <= 8);
+          // Tiered acceptance:
+          //   - own-coord precise: sim >= 0.55 within 3 km OR sim >= 0.80 within 8 km
+          //   - airport-anchored:  sim >= 0.80 within 25 km
+          //   - no anchor at all:  sim >= 0.90 (very strict, name-only fallback)
+          let acceptable = false;
+          if (hasOurCoords) {
+            acceptable = (sim >= 0.55 && dKm <= 3) || (sim >= 0.80 && dKm <= 8);
+          } else if (anchorLat != null) {
+            acceptable = sim >= 0.80 && dKm <= 25;
+          } else {
+            acceptable = sim >= 0.90;
+          }
           if (!acceptable) continue;
-          // Combined score for tiebreaking
-          const score = sim * 100 - dKm * 0.5;
+          const score = sim * 100 - (Number.isFinite(dKm) ? dKm * 0.5 : 0);
           if (score > bestScore) { bestScore = score; best = { cand, sim, dKm }; }
         }
 
