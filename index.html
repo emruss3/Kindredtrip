@@ -1349,8 +1349,12 @@
   // Party-fit helpers. LiteAPI's /hotels/rates is queried with infants
   // OMITTED from the children array (we filter `age < 2`) — so the
   // returned rate's maxOccupancy doesn't have to accommodate them.
-  // Frontend fit checks need to match: count adults + non-infant kids,
-  // and surface the infant separately as a "verify with hotel" tag.
+  // Frontend fit checks must match the backend: start_pricing v14+ /
+  // top_up_hotels_worker v6+ query LiteAPI with `children: childAges`
+  // (full child list, infants included) and only accept rates whose
+  // maxOccupancy >= adults + childAges.length. We mirror that here so
+  // a "Sleeps 5" room never renders as "Fits your family" for a party
+  // of 6 (2A + 3K + 1 infant).
   function partyAdults() {
     return Number(lastSearchSummary?.adults) || 2;
   }
@@ -1361,11 +1365,13 @@
     return partyChildAges().filter(a => a < 2).length;
   }
   function partyTotalForFit() {
-    // Excludes infants (LiteAPI doesn't count them toward room capacity).
-    return partyAdults() + partyChildAges().filter(a => a >= 2).length;
+    // Every person — infants included. Matches what the backend asks
+    // LiteAPI to price.
+    return partyAdults() + partyChildAges().length;
   }
   function partyTotalPeople() {
-    // Every human, infants included — for display ("family of 5").
+    // Alias kept for display strings ("family of N") that already
+    // include the full count.
     return partyAdults() + partyChildAges().length;
   }
 
@@ -5587,18 +5593,8 @@
       ? `<ul class="rv-amenities">${amenityNames.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>`
       : "";
 
-    // Infants don't count toward room max_occupancy on LiteAPI's
-    // /hotels/rates response (the query omits ages < 2), so a room
-    // that "fits" a family of 2A+2K+1I really means a room for 4 with
-    // the infant on a parent's lap or in a crib. Each property's
-    // infant policy varies — call it out so the user verifies before
-    // booking.
-    const infantCount = partyInfantCount();
-    const infantTag = infantCount > 0
-      ? `<div class="rv-fit rv-infant">+ ${infantCount} infant${infantCount === 1 ? "" : "s"} on lap · verify with hotel</div>`
-      : "";
     const fitTag = partyTotal > 0
-      ? `<div class="rv-fit fits">✓ Fits your family</div>${infantTag}`
+      ? `<div class="rv-fit fits">✓ Fits your family</div>`
       : "";
 
     const isBookable = g.rates.length > 0;
@@ -6202,12 +6198,8 @@
     // Just a small ✓ Fits — the room's actual max is the headline
     // ("Sleeps N"), and showing "Fits your family of 5" right next to it
     // was getting read as the room's capacity.
-    const infantCountForOffer = partyInfantCount();
-    const infantNoteForOffer = infantCountForOffer > 0
-      ? `<div class="rt-fit rt-infant">+ ${infantCountForOffer} infant${infantCountForOffer === 1 ? "" : "s"} on lap · verify with hotel</div>`
-      : "";
     const fitNote = partyTotal > 0
-      ? `<div class="rt-fit fits">✓ Fits your family</div>${infantNoteForOffer}`
+      ? `<div class="rt-fit fits">✓ Fits your family</div>`
       : "";
 
     // Small photo thumb — Booking shows a tiny inline photo. Priority:
