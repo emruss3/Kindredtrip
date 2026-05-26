@@ -8046,3 +8046,187 @@ body.trip-detail-open #status { display: none !important; }
   margin: 6px 0 0;
   line-height: 1.45;
 }
+
+/* ---------- AI semantic search (beta) ---------- */
+.ai-search-card {
+  background: linear-gradient(180deg, #FFF8EC 0%, #FFFCF4 100%);
+  border: 1px solid #E8DCCB;
+  border-radius: var(--r-lg);
+  padding: 12px 14px 14px;
+  max-width: 920px;
+  margin: 0 0 12px;
+  box-shadow: 0 8px 24px -16px rgba(10, 23, 33, 0.18);
+  color: var(--ink);
+}
+.ai-search-form { margin: 0; }
+.ai-search-label-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+}
+.ai-search-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: #FBEFD8;
+  border: 1px solid #E8DCCB;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.ai-search-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #C97C4A 0%, #8E5A39 100%);
+  box-shadow: 0 0 0 2px rgba(201, 124, 74, 0.18);
+}
+.ai-search-help {
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+.ai-search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+@media (max-width: 540px) {
+  .ai-search-row { grid-template-columns: 1fr; }
+}
+#ai-search-input {
+  background: #fff;
+  border: 1px solid #E8DCCB;
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--ink);
+  min-height: 46px;
+}
+#ai-search-input:focus {
+  outline: none;
+  border-color: #C97C4A;
+  box-shadow: 0 0 0 3px rgba(201, 124, 74, 0.15);
+}
+.ai-search-submit {
+  background: var(--ink, #0A1721);
+  color: #fff;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 0 22px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 46px;
+  transition: background 0.15s, transform 0.05s;
+}
+.ai-search-submit:hover { background: #1c2a36; }
+.ai-search-submit:active { transform: translateY(1px); }
+.ai-search-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ai-search-status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.ai-search-status.is-error { color: #B6433A; }
+.ai-search-results {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.ai-result {
+  background: #fff;
+  border: 1px solid #EADFCE;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  transition: border-color 0.12s, transform 0.08s, box-shadow 0.12s;
+  cursor: default;
+}
+.ai-result:hover {
+  border-color: #C97C4A;
+  box-shadow: 0 6px 18px -12px rgba(10, 23, 33, 0.22);
+}
+.ai-result-photo {
+  aspect-ratio: 16 / 10;
+  width: 100%;
+  object-fit: cover;
+  background: #F2E8DA;
+  display: block;
+}
+.ai-result-photo-fallback {
+  aspect-ratio: 16 / 10;
+  background: #F2E8DA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.ai-result-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.ai-result-name {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ai-result-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.ai-result-meta .dot { opacity: 0.5; }
+.ai-result-score {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8E5A39;
+  background: #FBEFD8;
+  border: 1px solid #E8DCCB;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.ai-result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ai-result-tag {
+  font-size: 11px;
+  color: var(--ink-2);
+  background: #F7EFE0;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.ai-result-tag.is-warn {
+  background: #FFF2EB;
+  color: #B6433A;
+}

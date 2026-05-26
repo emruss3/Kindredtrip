@@ -208,6 +208,32 @@
       <p class="lede fade-in delay-2">Enter your airport, dates, and kids' ages. KindredTrips compares curated family-friendly resorts across Caribbean destinations and ranks the best trips by total cost, travel time, and family fit.</p>
     </div>
 
+    <div class="ai-search-card fade-in delay-2" id="ai-search-card">
+      <form class="ai-search-form" onsubmit="event.preventDefault(); runSemanticSearch();">
+        <div class="ai-search-label-row">
+          <span class="ai-search-eyebrow">
+            <span class="ai-search-eyebrow-dot" aria-hidden="true"></span>
+            AI search · beta
+          </span>
+          <span class="ai-search-help">Describe the vibe — we'll find matching resorts across all 974 in the catalogue.</span>
+        </div>
+        <div class="ai-search-row">
+          <input
+            id="ai-search-input"
+            type="text"
+            autocomplete="off"
+            maxlength="500"
+            placeholder='e.g. "quiet beachfront with toddler kids club and connecting rooms in Turks and Caicos"'
+          />
+          <button type="submit" class="ai-search-submit" id="ai-search-submit">
+            Search
+          </button>
+        </div>
+      </form>
+      <div class="ai-search-status" id="ai-search-status" hidden></div>
+      <div class="ai-search-results" id="ai-search-results" hidden></div>
+    </div>
+
     <form id="search-form" class="search-card" onsubmit="event.preventDefault(); runSearch();">
       <div class="search-card-grid">
         <div class="search-field" onclick="this.querySelector('input').focus()">
@@ -1695,6 +1721,125 @@
     ];
     line.innerHTML = parts.join(" · ");
     document.getElementById("topbar").classList.add("has-search");
+  }
+
+  // ---------- AI semantic search (beta) ----------
+  function escapeHTML(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]),
+    );
+  }
+
+  function aiResultPhotoSrc(photoRefs) {
+    // photo_refs is a jsonb array of Google Places refs; pick the first.
+    try {
+      const refs =
+        Array.isArray(photoRefs)
+          ? photoRefs
+          : typeof photoRefs === "string"
+            ? JSON.parse(photoRefs)
+            : null;
+      if (!refs || !refs.length) return null;
+      const first = refs[0];
+      const ref = typeof first === "string" ? first : first?.ref ?? first?.photo_reference ?? null;
+      if (!ref) return null;
+      return `/photo?ref=${encodeURIComponent(ref)}&w=480`;
+    } catch {
+      return null;
+    }
+  }
+
+  function aiResultTags(r) {
+    const tags = [];
+    if (r.kids_club_available) {
+      const ages =
+        r.kids_club_min_age != null && r.kids_club_max_age != null
+          ? ` ${r.kids_club_min_age}–${r.kids_club_max_age}`
+          : "";
+      tags.push(`Kids club${ages}`);
+    }
+    if (r.on_beach) tags.push("Beachfront");
+    if (r.water_park) tags.push("Water park");
+    if (r.liteapi_match_status !== "matched") {
+      tags.push({ label: "Browse-only · no live pricing", warn: true });
+    }
+    return tags;
+  }
+
+  function renderAiResults(results) {
+    const wrap = document.getElementById("ai-search-results");
+    if (!results.length) {
+      wrap.innerHTML =
+        '<div class="ai-search-status">No matches in the catalogue for that description. Try fewer constraints.</div>';
+      wrap.hidden = false;
+      return;
+    }
+    const cards = results
+      .map((r) => {
+        const photo = aiResultPhotoSrc(r.photo_refs);
+        const photoHtml = photo
+          ? `<img class="ai-result-photo" src="${photo}" alt="${escapeHTML(r.resort_name ?? "")}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ai-result-photo-fallback',textContent:'No photo'}))" />`
+          : `<div class="ai-result-photo-fallback">No photo</div>`;
+        const meta = [r.area, r.country, r.airport_iata ? `✈ ${r.airport_iata}` : null]
+          .filter(Boolean)
+          .map(escapeHTML)
+          .join(' <span class="dot">·</span> ');
+        const score = `${Math.round((r.similarity ?? 0) * 100)}% match`;
+        const tags = aiResultTags(r);
+        const tagsHtml = tags.length
+          ? `<div class="ai-result-tags">${tags
+              .map((t) => {
+                if (typeof t === "string")
+                  return `<span class="ai-result-tag">${escapeHTML(t)}</span>`;
+                return `<span class="ai-result-tag is-warn">${escapeHTML(t.label)}</span>`;
+              })
+              .join("")}</div>`
+          : "";
+        return `
+          <div class="ai-result" data-resort-id="${escapeHTML(r.resort_id)}">
+            ${photoHtml}
+            <div class="ai-result-body">
+              <div class="ai-result-name">${escapeHTML(r.resort_name ?? "Unnamed resort")}</div>
+              <div class="ai-result-meta">${meta || "&nbsp;"}</div>
+              <div class="ai-result-score">${score}</div>
+              ${tagsHtml}
+            </div>
+          </div>`;
+      })
+      .join("");
+    wrap.innerHTML = cards;
+    wrap.hidden = false;
+  }
+
+  async function runSemanticSearch() {
+    const input = document.getElementById("ai-search-input");
+    const btn = document.getElementById("ai-search-submit");
+    const status = document.getElementById("ai-search-status");
+    const results = document.getElementById("ai-search-results");
+    const query = (input.value ?? "").trim();
+    if (!query) return;
+    btn.disabled = true;
+    btn.textContent = "Searching…";
+    status.hidden = false;
+    status.classList.remove("is-error");
+    status.textContent = "Ranking 974 resorts by semantic match…";
+    results.hidden = true;
+    results.innerHTML = "";
+    try {
+      const json = await callFn("semantic_search_resorts", {
+        method: "POST",
+        body: JSON.stringify({ query, limit: 12 }),
+      });
+      status.hidden = true;
+      renderAiResults(json.results ?? []);
+    } catch (err) {
+      status.classList.add("is-error");
+      status.textContent = `Search failed: ${err?.message ?? "Unknown error"}`;
+      results.hidden = true;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Search";
+    }
   }
 
   async function runSearch() {
