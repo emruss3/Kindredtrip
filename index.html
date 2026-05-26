@@ -116,7 +116,7 @@
       "name": "Can I filter Caribbean resorts for young kids or infants?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. KindredTrips offers filters for kids-club minimum age (some resorts accept children as young as 3), accepts-infants under 12 months, connecting rooms guaranteed, family room maximum occupancy, on-the-beach, lazy river, waterpark for little kids, and more. These are the details that determine whether a resort works for a family with young children."
+        "text": "Yes. KindredTrips offers filters for kids-club minimum age (some resorts accept children as young as 3), accepts-infants under 12 months, family room maximum occupancy, on-the-beach, lazy river, waterpark for little kids, and more. These are the details that determine whether a resort works for a family with young children."
       }
     },
     {
@@ -194,7 +194,6 @@
       <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
       <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
       <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
-      <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
     </div>
   </form>
 </div>
@@ -335,7 +334,6 @@
         <label class="toggle"><input type="checkbox" data-flag="require_kids_club" checked />Kids club</label>
         <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
         <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights</label>
-        <label class="toggle"><input type="checkbox" data-flag="require_connecting_rooms" />Connecting rooms</label>
         <label class="toggle toggle-select" for="max_flight_hours">
           <span class="toggle-select-label">Max travel time:</span>
           <select id="max_flight_hours" aria-label="Max travel time">
@@ -437,7 +435,7 @@
     <div class="feature">
       <div class="feature-icon">✦</div>
       <h3>Family filters the big OTAs don't have</h3>
-      <p>Kids club minimum age. On the beach. Accepts infants. Connecting rooms. Lazy river. Waterpark for little kids. The details that decide whether an all-inclusive Caribbean resort actually works for your kids — surfaced, not buried six clicks deep.</p>
+      <p>Kids club minimum age. On the beach. Accepts infants. Lazy river. Waterpark for little kids. The details that decide whether an all-inclusive Caribbean resort actually works for your kids — surfaced, not buried six clicks deep.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">$</div>
@@ -465,8 +463,8 @@
       <div class="family-decision-icon" aria-hidden="true">②</div>
       <h3>Family-of-5 room occupancy</h3>
       <p class="family-decision-headline">"Sleeps 4" + a kid on the floor = two rooms or a different resort.</p>
-      <p>Most Caribbean resorts cap a standard room at 4 occupants. A family of 5 needs a suite, a connecting room, or a villa — usually 40-70% more. We pre-filter resorts to those that have the room type your family actually fits in, and tell you which configuration matches.</p>
-      <a href="#search-form" class="family-decision-cta" data-preset="connecting-rooms">See resorts with connecting rooms or family suites →</a>
+      <p>Most Caribbean resorts cap a standard room at 4 occupants. A family of 5 needs a suite or a villa — usually 40-70% more. We pre-filter resorts to those that have a single room your family actually fits in, and tell you which configuration matches.</p>
+      <a href="#search-form" class="family-decision-cta" data-preset="family-suite">See resorts with family suites →</a>
     </article>
     <article class="family-decision">
       <div class="family-decision-icon" aria-hidden="true">③</div>
@@ -507,7 +505,7 @@
       <span class="step-circle">3</span>
       <div class="step-num">Step 03</div>
       <h3>You pick the trip</h3>
-      <p>Filter by what matters for your kids — kids-club minimum age, lazy river, waterpark, connecting rooms. Click through to a trusted partner to book.</p>
+      <p>Filter by what matters for your kids — kids-club minimum age, lazy river, waterpark, accepts infants. Click through to a trusted partner to book.</p>
     </div>
   </div>
 </section>
@@ -523,12 +521,6 @@
       <a href="#search-form" class="explore-link" data-preset="kids-club" title="Caribbean resorts with a kids club that matches your kids' ages">
         <span class="explore-link-title">Caribbean resorts with a kids club</span>
         <span class="explore-link-sub">Filters to family resorts with verified kids-club minimum age. We surface the floor age (3, 4, 5, or 6+) on every card so you know which work for your kids.</span>
-      </a>
-    </li>
-    <li>
-      <a href="#search-form" class="explore-link" data-preset="connecting-rooms" title="Family resorts with connecting rooms guaranteed">
-        <span class="explore-link-title">Family resorts with connecting rooms</span>
-        <span class="explore-link-sub">For families of 5+ who don't want a sleeper sofa: resorts where two rooms with a connecting door can actually be guaranteed at booking — not "request only."</span>
       </a>
     </li>
     <li>
@@ -585,7 +577,7 @@
     <details class="faq-item">
       <summary>Can I filter Caribbean resorts for young kids or infants?</summary>
       <div class="faq-answer">
-        <p>Yes. KindredTrips offers filters for kids-club minimum age (some resorts accept children as young as 3), accepts-infants under 12 months, connecting rooms guaranteed, family room maximum occupancy, on-the-beach, lazy river, waterpark for little kids, and more. These are the details that determine whether a resort works for a family with young children.</p>
+        <p>Yes. KindredTrips offers filters for kids-club minimum age (some resorts accept children as young as 3), accepts-infants under 12 months, family room maximum occupancy, on-the-beach, lazy river, waterpark for little kids, and more. These are the details that determine whether a resort works for a family with young children.</p>
       </div>
     </details>
     <details class="faq-item">
@@ -2224,7 +2216,6 @@
     const familyFit = (p) => kidScore(p)
       + (p._tags.rooms.includes("Family Suite") ? 2 : 0)
       + (p._tags.rooms.includes("2 Bedroom Suites") ? 2 : 0)
-      + (p._tags.rooms.includes("Connecting Rooms") || p.resorts?.guaranteed_connecting_rooms ? 1 : 0)
       + (p._tags.styles.includes("Family Resort") || p._tags.styles.includes("Family") ? 1 : 0);
 
     // Best kid amenities — most KIDS_AMENITY tags (require >= 3)
@@ -2416,9 +2407,6 @@
     }
     if (summary.require_direct_flight) {
       fixes.push({ label: "Allow 1-stop flights", onclick: "loosenSearchFlag('require_direct_flight')" });
-    }
-    if (summary.require_connecting_rooms) {
-      fixes.push({ label: "Drop connecting-rooms requirement", onclick: "loosenSearchFlag('require_connecting_rooms')" });
     }
     if (summary.max_flight_hours) {
       fixes.push({ label: "Increase max travel time", onclick: "loosenSearchFlag('max_flight_hours')" });
@@ -2741,7 +2729,6 @@
       { key: "require_kids_club",        label: "Kids club" },
       { key: "require_all_inclusive",    label: "All-inclusive" },
       { key: "require_direct_flight",    label: "Direct flights only" },
-      { key: "require_connecting_rooms", label: "Connecting rooms" },
     ];
     const rows = flags.map(f => {
       const active = !!s[f.key];
@@ -3564,32 +3551,25 @@
     const reasons = [];
 
     // ---- Room fit (the dominant factor for larger families) ----
+    // start_pricing v14+/top_up v6+ only price packages whose rates can
+    // sleep the full party in a single room — so by the time a card
+    // renders, a fitting rate is guaranteed. We don't reward connecting-
+    // room availability because LiteAPI / OTA channels can't actually
+    // guarantee adjacency, and we won't promise something the booking
+    // partner won't.
     const has2BR = t.rooms.includes("2 Bedroom Suites");
     const hasFamilySuite = t.rooms.includes("Family Suite");
-    const hasConnecting = t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms;
-    const guaranteedConnecting = !!r.guaranteed_connecting_rooms;
 
     if (total <= 4) {
       score += 8;
       if (hasFamilySuite) { score += 3; reasons.push("Family suites available"); }
       else if (has2BR)    { score += 3; reasons.push("Two-bedroom suites available"); }
     } else if (total === 5) {
-      // start_pricing v14+/top_up v6+ only price packages whose rates
-      // can sleep the full party — so by the time a card renders we
-      // already know a fitting rate exists. Surface the specific
-      // configuration when we can recognise it; fall back to a plain
-      // "Sleeps N confirmed" rather than "unclear" / "not listed",
-      // which were leftover from the pre-v14 era when the backend
-      // didn't gate on fit.
       if (hasFamilySuite)         { score += 14; reasons.push(`Family suite fits ${total}`); }
       else if (has2BR)            { score += 14; reasons.push(`Two-bedroom suite fits ${total}`); }
-      else if (guaranteedConnecting) { score += 10; reasons.push("Guaranteed connecting rooms"); }
-      else if (hasConnecting)     { score += 4; reasons.push("Connecting rooms (not guaranteed)"); }
       else                         { score += 8; reasons.push(`Sleeps ${total}+ confirmed`); }
     } else { // 6+
-      if (has2BR)                  { score += 18; reasons.push(`Two-bedroom suite fits ${total}`); }
-      else if (guaranteedConnecting) { score += 12; reasons.push("Guaranteed connecting rooms"); }
-      else if (hasConnecting)     { score += 5; reasons.push("Connecting rooms (not guaranteed)"); }
+      if (has2BR)                 { score += 18; reasons.push(`Two-bedroom suite fits ${total}`); }
       else                         { score += 8; reasons.push(`Sleeps ${total}+ confirmed`); }
     }
 
@@ -3777,8 +3757,6 @@
     const total = adults + kids;
     const has2Bdrm = t.rooms.includes("2 Bedroom Suites");
     const hasFamilySuite = t.rooms.includes("Family Suite");
-    const hasConnecting = t.rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms;
-    const guaranteedConnecting = !!r.guaranteed_connecting_rooms;
     const maxOcc = r.family_room_max_occupancy;
 
     if (total <= 4) {
@@ -3798,42 +3776,26 @@
           family: total,
         };
       }
-      if (hasConnecting) {
-        return {
-          headline: "Connecting rooms recommended",
-          detail: guaranteedConnecting ? "Guaranteed connecting rooms — works well for five." : "Connecting rooms are listed but not guaranteed.",
-          check: guaranteedConnecting ? "Confirm at booking." : "Ask for guaranteed connecting rooms — not 'on request'.",
-          family: total,
-        };
-      }
       return {
-        headline: "Verify before booking",
-        detail: "Family-of-five room options aren't clearly listed.",
-        check: "Room fit should be verified before booking.",
+        headline: "Single-room fit confirmed",
+        detail: `A room that sleeps ${total} is available for your dates.`,
+        check: "Room shown below — verify the bed configuration matches what you need.",
         family: total,
       };
     }
     // 6+ people
     if (has2Bdrm) {
       return {
-        headline: "Two-bedroom suite or two rooms",
+        headline: "Two-bedroom suite available",
         detail: "Two-bedroom suites are listed — usually most comfortable for a larger family.",
-        check: "Ask for a two-bedroom layout or two connecting rooms.",
-        family: total,
-      };
-    }
-    if (hasConnecting) {
-      return {
-        headline: "Two connecting rooms recommended",
-        detail: "Larger families typically need two connecting rooms here.",
-        check: guaranteedConnecting ? "Connecting rooms are guaranteed — confirm at booking." : "Confirm guaranteed connecting rooms before booking.",
+        check: "Ask for a two-bedroom layout when booking.",
         family: total,
       };
     }
     return {
-      headline: "Verify before booking",
-      detail: "Room layouts for larger families aren't clearly listed.",
-      check: "Room fit should be verified before booking.",
+      headline: "Single-room fit confirmed",
+      detail: `A room that sleeps ${total} is available for your dates.`,
+      check: "Room shown below — verify the bed configuration matches what you need.",
       family: total,
     };
   }
@@ -3855,7 +3817,6 @@
     if (r.water_park || t.amenities.includes("Waterpark For Little Kids") || t.amenities.includes("Waterpark For Big Kids")) good.push("Water park");
     if (t.styles.includes("All-Inclusive") || t.highlights.includes("Great Food")) good.push("Strong food/AI signal");
     if (t.rooms.includes("Family Suite")) good.push("Family suites");
-    if (r.guaranteed_connecting_rooms) good.push("Guaranteed connecting rooms");
     if (r.accepts_infants) good.push("Accepts infants");
     const r5 = ratingTo5(r.avg_user_rating);
     if (r5 != null && r5 >= 4.3) good.push(`Highly rated (${r5.toFixed(1)}/5)`);
@@ -3866,8 +3827,8 @@
     if (!r.kids_club_available && !t.amenities.includes("Kids Club") && !t.amenities.includes("Kids Club for Under 4")) {
       if (kids > 0) watch.push("No kids club listed");
     }
-    if ((adults + kids) >= 5 && !t.rooms.includes("Family Suite") && !t.rooms.includes("2 Bedroom Suites") && !r.guaranteed_connecting_rooms) {
-      watch.push("Room fit for 5+ not clearly listed");
+    if ((adults + kids) >= 5 && !t.rooms.includes("Family Suite") && !t.rooms.includes("2 Bedroom Suites")) {
+      watch.push("No family suite or two-bedroom listed — verify single-room layout");
     }
     if (pkg.warnings) watch.push(String(pkg.warnings));
 
@@ -4475,9 +4436,8 @@
     currentModalExpandedRooms = new Set();
     currentModalResortConnecting = (() => {
       const rooms = tags.rooms || [];
-      const connecting = rooms.includes("Connecting Rooms") || r.guaranteed_connecting_rooms === true;
       const familySuite = rooms.includes("Family Suite") || rooms.includes("2 Bedroom Suites");
-      return { connecting, familySuite };
+      return { familySuite };
     })();
     if (liveHotel) loadRoomOptions(pkg.package_id);
     if (liveHotel && r.liteapi_hotel_id) loadRoomPhotosAndDetails(r.liteapi_hotel_id);
@@ -4993,7 +4953,7 @@
   // shape the empty-state copy when zero rooms fit the searched
   // family — pointing the user at connecting rooms or family suites
   // only if the resort actually offers them.
-  let currentModalResortConnecting = { connecting: false, familySuite: false };
+  let currentModalResortConnecting = { familySuite: false };
   // Maps from get_room_photos: per-room photo arrays + descriptive
   // metadata (description, beds, amenities, size, occupancy split,
   // view). Both keyed by LiteAPI roomTypeId. Loaded async after the
@@ -5503,20 +5463,13 @@
     const fitting = [...fittingBookable, ...fittingUnavailable];
     if (fitting.length === 0) {
       const cap = currentModalResortConnecting;
-      let body;
-      if (cap.connecting) {
-        body = `
-          <p><b>No single room here sleeps ${partyTotal}, but this resort guarantees connecting rooms.</b></p>
-          <p>Booking two connecting rooms is the family-friendly path — we can't price that combo automatically yet, so contact the resort or use the partner site to confirm availability for your dates.</p>`;
-      } else if (cap.familySuite) {
-        body = `
+      const body = cap.familySuite
+        ? `
           <p><b>No standard room sleeps ${partyTotal}, but this resort offers family suites.</b></p>
-          <p>Try filtering search results for "Family Suite" or "2 Bedroom Suites" — those room types fit your party.</p>`;
-      } else {
-        body = `
-          <p><b>No room at this resort sleeps a family of ${partyTotal}.</b></p>
-          <p>This resort doesn't offer connecting rooms or family suites in our data. Try a different resort, or filter the search for "Connecting rooms" or "Family Suite".</p>`;
-      }
+          <p>Try filtering search results for "Family Suite" or "2 Bedroom Suites" — those room types fit your party.</p>`
+        : `
+          <p><b>No single room at this resort sleeps a family of ${partyTotal}.</b></p>
+          <p>Try a different resort, a different party size, or look for resorts with family suites or two-bedroom layouts.</p>`;
       grid.innerHTML = `<div class="rooms-empty-fit">${body}</div>`;
       return;
     }
@@ -6896,10 +6849,6 @@
   const PRESETS = {
     "kids-club": (f) => {
       const cb = document.querySelector('input[data-flag="require_kids_club"]');
-      if (cb) cb.checked = true;
-    },
-    "connecting-rooms": (f) => {
-      const cb = document.querySelector('input[data-flag="require_connecting_rooms"]');
       if (cb) cb.checked = true;
     },
     "direct": (f) => {
