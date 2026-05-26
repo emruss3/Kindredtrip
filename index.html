@@ -5424,27 +5424,44 @@
     }
 
     const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
-    // If ANY rate in the group was priced for the party (rate.max_occupancy
-    // >= party), the room is bookable for them — supplier wouldn't price
-    // it otherwise. We do NOT gate on catalog max_occupancy: fuzzy_name
-    // matches can attach a smaller catalog room to a larger rate offer,
-    // and gating on catalog would hide a perfectly bookable room.
-    // Catalog max gives the displayed Sleeps number; the rate decides
-    // bookability. Catalog-only groups (no rates) fall back to catalog max.
+    // Strict fit on the CATALOG's headline capacity. A rate priced with
+    // an extra bed / sofa bed for a higher occupancy doesn't redeem a
+    // catalog room labelled "Sleeps 5" — users read the headline and
+    // expect everyone in a real bed. We only fall back to the rate
+    // max_occupancy when the room has no catalog row at all.
+    //
+    // Infant relaxation: when the search has an infant AND a room
+    // catalog max is exactly partyTotal − infantCount, allow it with
+    // a clear "infant on lap" tag at render. That tag is only added
+    // on the card when needsInfantRelax(g) === true.
+    const infCount = partyInfantCount();
     const fits = (g) => {
       if (partyTotal === 0) return true;
+      const catMax = Number(g.catalog?.max_occupancy);
+      if (Number.isFinite(catMax) && catMax > 0) {
+        if (catMax >= partyTotal) return true;
+        if (infCount > 0 && catMax >= (partyTotal - infCount)) return true;
+        return false;
+      }
+      // No catalog row — fall back to rate-priced max occupancy.
       for (const o of g.rates) {
         const m = Number(o.max_occupancy);
         if (Number.isFinite(m) && m >= partyTotal) return true;
+        if (infCount > 0 && Number.isFinite(m) && m >= (partyTotal - infCount)) return true;
       }
-      if (g.rates.length > 0) {
-        // Rates exist but none confirmed to fit — still let it through;
-        // we'd rather show a too-small-priced rate than a blank list.
-        return true;
-      }
+      return false;
+    };
+    const needsInfantRelax = (g) => {
+      if (infCount === 0 || partyTotal === 0) return false;
       const catMax = Number(g.catalog?.max_occupancy);
-      if (Number.isFinite(catMax) && catMax > 0) return catMax >= partyTotal;
-      return true; // unknown — let it through
+      if (Number.isFinite(catMax) && catMax > 0) {
+        return catMax < partyTotal && catMax >= (partyTotal - infCount);
+      }
+      for (const o of g.rates) {
+        const m = Number(o.max_occupancy);
+        if (Number.isFinite(m) && m < partyTotal && m >= (partyTotal - infCount)) return true;
+      }
+      return false;
     };
 
     // Keep all groups that have either a catalog row or at least one
@@ -5482,7 +5499,7 @@
 
     grid.innerHTML = `
       <div class="rooms-v2-list">
-        ${fitting.map(g => renderRoomGroupCard(g, partyTotal)).join("")}
+        ${fitting.map(g => renderRoomGroupCard(g, partyTotal, needsInfantRelax(g))).join("")}
       </div>`;
     // Thumb strip: delegate clicks so the main image swaps per card.
     // Rebound on every rerender because innerHTML wipes prior handlers.
@@ -5508,7 +5525,7 @@
   // room" column (photo / size / beds / view / description / amenities);
   // each matching rate offer becomes a bookable row in the right column
   // (board + refundable + price + Select).
-  function renderRoomGroupCard(g, partyTotal) {
+  function renderRoomGroupCard(g, partyTotal, infantRelaxed = false) {
     const cat = g.catalog;
 
     // Photo chain. Synthetic groups (no catalog match) end up here a
@@ -5593,8 +5610,16 @@
       ? `<ul class="rv-amenities">${amenityNames.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>`
       : "";
 
+    // Infant-relaxed: room's catalog max is short by exactly the number
+    // of infants in the search. We show it but call out that the only
+    // reason it fits is the infant doesn't need their own bed — and
+    // the user should confirm crib / co-sleep with the hotel before
+    // booking. No relax tag fires when the search has no infant.
+    const infCountForCard = partyInfantCount();
     const fitTag = partyTotal > 0
-      ? `<div class="rv-fit fits">✓ Fits your family</div>`
+      ? (infantRelaxed
+          ? `<div class="rv-fit rv-infant-relax">⚠ Sleeps ${partyTotal - infCountForCard} in beds — ${infCountForCard} infant${infCountForCard === 1 ? "" : "s"} on lap or in a crib. Verify with hotel before booking.</div>`
+          : `<div class="rv-fit fits">✓ Fits your family</div>`)
       : "";
 
     const isBookable = g.rates.length > 0;
