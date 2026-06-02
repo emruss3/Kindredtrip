@@ -114,10 +114,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Hotel Riu Lupita</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Cancun and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Mexico" /><input type="hidden" name="resort_id" value="0b82125b-4393-450d-a1e5-2d7260864ffb" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Cancun and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/hotel-riu-lupita" method="GET">
+    <input type="hidden" name="country" value="Mexico" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -172,5 +172,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"0b82125b-4393-450d-a1e5-2d7260864ffb","resort_name":"Hotel Riu Lupita","country":"Mexico","airport_iata":"Cancun"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

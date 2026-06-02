@@ -117,10 +117,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Hotel Posada Real</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Mexico and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Mexico" /><input type="hidden" name="resort_id" value="4862c80f-0ca3-4864-91b5-5facf244ce5e" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Mexico and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/hotel-posada-real" method="GET">
+    <input type="hidden" name="country" value="Mexico" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -175,5 +175,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"4862c80f-0ca3-4864-91b5-5facf244ce5e","resort_name":"Hotel Posada Real","country":"Mexico","airport_iata":null};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

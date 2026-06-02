@@ -114,10 +114,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Amanyara - (Beverages not included)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Providenciales and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Turks and Caicos" /><input type="hidden" name="resort_id" value="f9487fd9-ba07-4bb9-98d7-1bc990948738" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Providenciales and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/amanyara" method="GET">
+    <input type="hidden" name="country" value="Turks and Caicos" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -172,5 +172,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"f9487fd9-ba07-4bb9-98d7-1bc990948738","resort_name":"Amanyara - (Beverages not included)","country":"Turks and Caicos","airport_iata":"Providenciales"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

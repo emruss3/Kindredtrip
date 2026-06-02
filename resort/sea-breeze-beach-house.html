@@ -128,10 +128,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Sea Breeze Beach House</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Grantley Adams and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Barbados" /><input type="hidden" name="resort_id" value="e86decf8-5591-42cf-81e4-950638e37fea" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Grantley Adams and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/sea-breeze-beach-house" method="GET">
+    <input type="hidden" name="country" value="Barbados" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -186,5 +186,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"e86decf8-5591-42cf-81e4-950638e37fea","resort_name":"Sea Breeze Beach House","country":"Barbados","airport_iata":"Grantley Adams"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

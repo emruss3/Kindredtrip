@@ -100,10 +100,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Hotel Playa Grande</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Dominican Republic and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Dominican Republic" /><input type="hidden" name="resort_id" value="a6fc9045-8c2a-4d96-bdfb-ec75d720719c" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Dominican Republic and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/hotel-playa-grande" method="GET">
+    <input type="hidden" name="country" value="Dominican Republic" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -158,5 +158,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"a6fc9045-8c2a-4d96-bdfb-ec75d720719c","resort_name":"Hotel Playa Grande","country":"Dominican Republic","airport_iata":null};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

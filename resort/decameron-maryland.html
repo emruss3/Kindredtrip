@@ -123,10 +123,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Decameron Maryland</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to San Andres Island and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Colombia" /><input type="hidden" name="resort_id" value="ce4d25ed-541d-4e87-a024-2537436af0d8" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to San Andres Island and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/decameron-maryland" method="GET">
+    <input type="hidden" name="country" value="Colombia" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -181,5 +181,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"ce4d25ed-541d-4e87-a024-2537436af0d8","resort_name":"Decameron Maryland","country":"Colombia","airport_iata":"San Andres Island"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

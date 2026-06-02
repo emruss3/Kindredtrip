@@ -101,10 +101,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Ladera Resort (Contact after booking to add all inclusive package)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to George F. L. Charles and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Saint Lucia" /><input type="hidden" name="resort_id" value="d4352d9d-29a6-4acc-8f28-ee41f90deacb" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to George F. L. Charles and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/ladera-resort" method="GET">
+    <input type="hidden" name="country" value="Saint Lucia" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -159,5 +159,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"d4352d9d-29a6-4acc-8f28-ee41f90deacb","resort_name":"Ladera Resort (Contact after booking to add all inclusive package)","country":"Saint Lucia","airport_iata":"George F. L. Charles"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

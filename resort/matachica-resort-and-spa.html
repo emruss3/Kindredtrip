@@ -108,10 +108,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Matachica Resort and Spa (16+ Allowed, Alcohol not included)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to San Pedro and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Belize" /><input type="hidden" name="resort_id" value="f5b22956-5a61-42cc-b1c4-86c5db00c3b0" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to San Pedro and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/matachica-resort-and-spa" method="GET">
+    <input type="hidden" name="country" value="Belize" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -166,5 +166,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"f5b22956-5a61-42cc-b1c4-86c5db00c3b0","resort_name":"Matachica Resort and Spa (16+ Allowed, Alcohol not included)","country":"Belize","airport_iata":"San Pedro"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

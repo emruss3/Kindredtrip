@@ -107,10 +107,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Tribe Resorts</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Punta Cana and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Dominican Republic" /><input type="hidden" name="resort_id" value="48f95981-cc11-4167-a5a0-9b0d02c6edde" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Punta Cana and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/tribe-resorts" method="GET">
+    <input type="hidden" name="country" value="Dominican Republic" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -165,5 +165,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"48f95981-cc11-4167-a5a0-9b0d02c6edde","resort_name":"Tribe Resorts","country":"Dominican Republic","airport_iata":"Punta Cana"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

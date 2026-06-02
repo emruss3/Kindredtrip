@@ -138,10 +138,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for The Westin Playa Vallarta, an All-Inclusive Resort</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Ordaz and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Mexico" /><input type="hidden" name="resort_id" value="2851f45a-ab0e-4fa7-8b40-c4e1efad9fe0" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Ordaz and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/the-westin-playa-vallarta-an-all-inclusive-resort" method="GET">
+    <input type="hidden" name="country" value="Mexico" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -196,5 +196,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"2851f45a-ab0e-4fa7-8b40-c4e1efad9fe0","resort_name":"The Westin Playa Vallarta, an All-Inclusive Resort","country":"Mexico","airport_iata":"Ordaz"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

@@ -75,24 +75,31 @@ function defaultDates() {
   return { date_start: fmt(start), date_end: fmt(end) };
 }
 
-// Embedded search wizard. Submits to "/" with a deep-link query string;
-// the homepage's hydrateFromDeepLink IIFE picks up every field, fills
-// the wizard, auto-runs the search scoped to `country`, and (when
-// resortId is set) auto-opens that resort's trip modal on results land.
-function searchWidget({ country, resortId, headline, sub }) {
+// Embedded search wizard. On resort pages, resort-booking.js intercepts
+// the form submit and runs the full Search → pricing → live offers flow
+// in-page so the user never leaves /resort/<slug>. On country hubs the
+// form falls back to GET / for now, and the homepage's hydrate IIFE picks
+// up the params (no inline booking on country hubs yet).
+function searchWidget({ country, resortId, headline, sub, selfPath }) {
   const { date_start, date_end } = defaultDates();
   const opts = ORIGIN_AIRPORTS
     .map(([c, n]) => `<option value="${c}">${esc(n)} (${c})</option>`).join("");
   const hiddenCountry = country ? `<input type="hidden" name="country" value="${esc(country)}" />` : "";
-  const hiddenResort = resortId ? `<input type="hidden" name="resort_id" value="${esc(resortId)}" />` : "";
-  // No JS framework on these pages — the form submits as GET and the
-  // homepage handles param hydration on load.
+  // Resort pages: form points at its own URL so resort-booking.js can
+  // intercept and orchestrate everything in-page. JS-disabled visitors
+  // get a graceful fallback (URL just gets ?origin=… appended).
+  // Country pages: hand off to "/" with autostart so the homepage
+  // picks up the country and runs the catalogue-wide search there.
+  const action = resortId ? (selfPath || "/") : "/";
+  const autostartHidden = resortId
+    ? ""
+    : `<input type="hidden" name="autostart" value="1" />`;
   return `<aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">${esc(headline)}</h2>
   ${sub ? `<p class="seo-wizard-sub">${esc(sub)}</p>` : ""}
-  <form class="seo-wizard-form" action="/" method="GET">
-    ${hiddenCountry}${hiddenResort}
-    <input type="hidden" name="autostart" value="1" />
+  <form class="seo-wizard-form" action="${esc(action)}" method="GET">
+    ${hiddenCountry}
+    ${autostartHidden}
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -156,7 +163,7 @@ for (const r of resorts) {
 const countries = [...byCountry.keys()].sort((a, b) => a.localeCompare(b));
 
 // ---------- shared shell ----------
-function shell({ title, description, canonical, image, jsonld, body, breadcrumbTrail }) {
+function shell({ title, description, canonical, image, jsonld, body, breadcrumbTrail, bodyScripts }) {
   const img = image || `${ORIGIN}/og-image.jpg`;
   const ld = (Array.isArray(jsonld) ? jsonld : [jsonld]).filter(Boolean);
   const crumbs = (breadcrumbTrail || [])
@@ -224,6 +231,7 @@ ${body}
     </p>
   </div>
 </footer>
+${bodyScripts || ""}
 </body>
 </html>`;
 }
@@ -338,8 +346,9 @@ ${sig.length ? `<ul class="seo-badges">${sig.map((s) => `<li>${esc(s)}</li>`).jo
 ${searchWidget({
   country: r.country,
   resortId: r.resort_id,
+  selfPath: resortPath(r),
   headline: `See live prices for ${r.resort_name}`,
-  sub: `Enter your airport, dates, and family. We'll find live flights to ${r.airport_iata || r.country} and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.`,
+  sub: `Enter your airport, dates, and family. We'll find live flights to ${r.airport_iata || r.country} and live hotel rates for this resort, right here on this page.`,
 })}
 
 <h2>Family-fit at a glance</h2>
@@ -370,6 +379,15 @@ ${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(s.resort_name)}</a>$
       { name: r.resort_name, url: url },
     ],
     body,
+    bodyScripts: `<script>
+window.__RESORT_BOOKING__ = ${JSON.stringify({
+  resort_id: r.resort_id,
+  resort_name: r.resort_name,
+  country: r.country,
+  airport_iata: r.airport_iata || null,
+}).replace(/</g, "\\u003C")};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>`,
   });
 }
 

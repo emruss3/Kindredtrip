@@ -123,10 +123,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Jolly Beach Antigua</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to V.C. Bird and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Antigua" /><input type="hidden" name="resort_id" value="e1d5fc4f-370d-4f54-a99f-ddea6bed74db" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to V.C. Bird and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/jolly-beach-antigua" method="GET">
+    <input type="hidden" name="country" value="Antigua" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -181,5 +181,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"e1d5fc4f-370d-4f54-a99f-ddea6bed74db","resort_name":"Jolly Beach Antigua","country":"Antigua","airport_iata":"V.C. Bird"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

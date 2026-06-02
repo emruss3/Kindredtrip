@@ -123,10 +123,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Decameron Galeón</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Simon Bolivar and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Colombia" /><input type="hidden" name="resort_id" value="7f35a3c9-0db6-4607-9aa3-2e00539bdf84" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Simon Bolivar and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/decameron-galeon" method="GET">
+    <input type="hidden" name="country" value="Colombia" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -181,5 +181,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"7f35a3c9-0db6-4607-9aa3-2e00539bdf84","resort_name":"Decameron Galeón","country":"Colombia","airport_iata":"Simon Bolivar"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>
