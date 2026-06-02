@@ -2457,7 +2457,12 @@
   function isPricesPending(p) {
     return p?.prices_pending === true
       || p?.is_live === false
-      || (p?.total_price == null && p?.flight_supplier !== "liteapi");
+      || (p?.total_price == null && p?.flight_supplier !== "liteapi")
+      // Outbound-only basis means the return fare isn't priced yet, so
+      // total_price is just one leg. A trip with only one flight isn't a
+      // complete trip — hold it in the pending state until both legs
+      // confirm rather than ranking it on a half-priced total.
+      || p?.flight_price_basis === "oneway_outbound";
   }
 
   function renderResults() {
@@ -3460,6 +3465,11 @@
     if (stars >= 3) signals.push(`<span class="signal signal-class">${"★".repeat(stars)}<span class="signal-sub">${stars}-star</span></span>`);
     const loc = r.area && r.country ? `${r.area}, ${r.country}` : (r.country || "");
     if (loc) signals.push(`<span class="signal signal-loc">${escapeHtml(loc)}</span>`);
+    // Basis-aware note: when only the outbound leg has priced, say so
+    // explicitly rather than the generic "finding live prices".
+    const pendingNote = p?.flight_price_basis === "oneway_outbound"
+      ? "Pricing the return flight — full trip total appears once both legs confirm…"
+      : "Finding live prices from carriers for your dates…";
     return `
       <article class="card card-pending" aria-busy="true">
         <div class="card-photo">
@@ -3471,7 +3481,7 @@
             <h3>${escapeHtml(r.resort_name || "Unknown resort")}</h3>
           </div>
           <div class="card-signals">${signals.join("")}</div>
-          <p class="card-pending-note">Finding live prices from carriers for your dates…</p>
+          <p class="card-pending-note">${pendingNote}</p>
         </div>
         <div class="card-price">
           <div class="price-from live">Live price</div>
@@ -5290,13 +5300,25 @@
   // exceeds the typed total, we surface that as the authoritative count
   // alongside the chips so the card doesn't claim a 2-bedroom suite has
   // a single king.
+  // Sleeping capacity of a single bed by its type label. Twins/singles
+  // sleep one; everything else (king, queen, double, super-king, sofa
+  // bed, bunk) sleeps two. Used to detect when a supplier's bed list
+  // can't physically account for the room's stated occupancy.
+  function bedSleepCapacity(typeStr) {
+    const t = String(typeStr || "").toLowerCase();
+    if (/\btwin\b|\bsingle\b|\bcot\b|\bchild/.test(t)) return 1;
+    return 2;
+  }
+
   function catalogBedsHtml(room) {
     if (!room || !Array.isArray(room.bed_types) || room.bed_types.length === 0) return "";
     const bedIcon = `<svg class="rv-bed-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8h7a4 4 0 0 1 4 4v1h6v6h-2v-2H5v2H3V8zm2 5h7v-1a2 2 0 0 0-2-2H5v3z"/></svg>`;
     let summedQty = 0;
+    let sleepCap = 0;
     const chips = room.bed_types.map((b) => {
       const q = Number(b?.quantity) || 1;
       summedQty += q;
+      sleepCap += q * bedSleepCapacity(b?.bedType);
       const t = String(b?.bedType || "bed").trim();
       const qPrefix = q > 1 ? `${q}× ` : "";
       return `<span class="rv-bed-chip">${bedIcon}<span class="rv-bed-text">${qPrefix}${escapeHtml(t)}</span></span>`;
@@ -5311,15 +5333,41 @@
     }).join("") : chips;
 
     // Description-derived bed count, surfaced when bed_types undercounts.
-    let totalNote = "";
+    // LiteAPI villas/suites routinely return only the master bed, so we
+    // mine the description for a fuller count, in order of trust:
+    //   1. explicit totals — "the unit has 6 beds", "6 beds total"
+    //   2. summed "<N> <type> bed" mentions — "1 King Bed and 2 Twin Beds"
+    //      (often inside a "<strong>…</strong>" header on Expedia-sourced
+    //      rooms), which Windjammer's richer room types carry.
     const desc = String(room.description || "");
-    const m =
+    let descCount = null;
+    const explicit =
       desc.match(/\bunit has\s+(\d+)\s+beds?\b/i) ||
       desc.match(/(?:comes with|features|featuring|has|with)\s+(\d+)\s+beds?\b/i) ||
       desc.match(/\b(\d+)\s+beds?\s+total\b/i);
-    const descCount = m ? Number(m[1]) : null;
+    if (explicit) {
+      descCount = Number(explicit[1]);
+    } else {
+      let sum = 0, found = false;
+      const re = /(\d+)\s+(?:king|queen|double|super[- ]?king|twin|single|sofa|bunk|full)[A-Za-z- ]*?beds?\b/gi;
+      let mm;
+      while ((mm = re.exec(desc)) !== null) { sum += Number(mm[1]); found = true; }
+      if (found && sum > 0) descCount = sum;
+    }
+
+    let totalNote = "";
+    const maxOcc = Number(room.max_occupancy);
     if (Number.isFinite(descCount) && descCount > summedQty) {
       totalNote = `<span class="rv-bed-total">${descCount} beds total</span>`;
+    } else if (
+      // Safety net: the beds we can show don't sleep the stated capacity
+      // and we couldn't recover a fuller count from the description. Don't
+      // let a lone super-king imply it sleeps a family of six — flag it
+      // so the "Fits your family" headline isn't taken at face value.
+      Number.isFinite(maxOcc) && maxOcc >= 3 &&
+      sleepCap > 0 && (maxOcc - sleepCap) >= 2
+    ) {
+      totalNote = `<span class="rv-bed-incomplete" title="The supplier listed beds that sleep about ${sleepCap}, but this room is sold for up to ${maxOcc}. The full bed layout (extra bedrooms, sofa beds, or rollaways) may not be itemised here — confirm with the hotel before booking.">⚠ Bed layout may be incomplete — confirm for ${maxOcc}</span>`;
     }
     return `<div class="rv-beds">${chipsHtml}${totalNote}</div>`;
   }
