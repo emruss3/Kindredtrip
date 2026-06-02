@@ -1,0 +1,506 @@
+#!/usr/bin/env node
+// generate-seo-pages.mjs
+//
+// Static SEO/LLM page generator for KindredTrips.
+//
+// Reads data/resorts-seo.json (a snapshot of the catalogue produced from
+// Supabase) and emits crawlable, content-rich pages so search engines and
+// AI answer engines can index the 974-resort catalogue that otherwise
+// lives behind JS-rendered search:
+//
+//   /resort/<slug>            one page per resort        (Hotel + Breadcrumb JSON-LD)
+//   /caribbean/<country>      one hub per destination    (CollectionPage + FAQ + Breadcrumb)
+//   /caribbean               destinations index          (CollectionPage)
+//   /sitemap.xml             regenerated with every URL
+//
+// Prose is generated from structured family-fit signals — unique per page,
+// factual, and non-duplicative of partner marketing copy. No network calls;
+// run it any time the snapshot is refreshed:
+//
+//   node scripts/generate-seo-pages.mjs
+//
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, "..");
+const ORIGIN = "https://kindredtrips.com";
+const TODAY = new Date().toISOString().slice(0, 10);
+
+const resorts = JSON.parse(readFileSync(join(ROOT, "data/resorts-seo.json"), "utf8"));
+
+// ---------- helpers ----------
+const esc = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function slugify(s) {
+  return String(s ?? "")
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .replace(/\([^)]*\)/g, " ")          // drop parentheticals (date/age notes)
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 80) || "resort";
+}
+
+// Clip to <=n chars on a word boundary, adding an ellipsis when cut.
+const clip = (s, n = 155) => {
+  s = String(s ?? "").trim();
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1).replace(/\s+\S*$/, "").trim() + "…";
+};
+const fmtInt = (n) => Number(n).toLocaleString("en-US");
+const ratingTo5 = (r) => (r == null ? null : Math.round((Number(r) / 20) * 10) / 10);
+
+// Cap photo url through the existing edge proxy (Vercel-cached).
+const photoUrl = (ref, w = 1200) =>
+  ref ? `/photo?ref=${encodeURIComponent(ref)}&w=${w}` : null;
+
+// Assign stable, unique slugs (suffix the short id on collision).
+const slugById = new Map();
+const usedSlugs = new Set();
+for (const r of resorts) {
+  let base = slugify(r.resort_name);
+  let slug = base;
+  if (usedSlugs.has(slug)) slug = `${base}-${String(r.resort_id).slice(0, 4)}`;
+  while (usedSlugs.has(slug)) slug = `${base}-${Math.random().toString(36).slice(2, 6)}`;
+  usedSlugs.add(slug);
+  slugById.set(r.resort_id, slug);
+}
+const resortPath = (r) => `/resort/${slugById.get(r.resort_id)}`;
+const countryPath = (c) => `/caribbean/${slugify(c)}`;
+
+// Group by country
+const byCountry = new Map();
+for (const r of resorts) {
+  if (!byCountry.has(r.country)) byCountry.set(r.country, []);
+  byCountry.get(r.country).push(r);
+}
+const countries = [...byCountry.keys()].sort((a, b) => a.localeCompare(b));
+
+// ---------- shared shell ----------
+function shell({ title, description, canonical, image, jsonld, body, breadcrumbTrail }) {
+  const img = image || `${ORIGIN}/og-image.jpg`;
+  const ld = (Array.isArray(jsonld) ? jsonld : [jsonld]).filter(Boolean);
+  const crumbs = (breadcrumbTrail || [])
+    .map((c, i, arr) =>
+      i === arr.length - 1
+        ? `<span aria-current="page">${esc(c.name)}</span>`
+        : `<a href="${c.url}">${esc(c.name)}</a>`)
+    .join('<span class="seo-crumb-sep" aria-hidden="true">›</span>');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0D2B45" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}" />
+<link rel="canonical" href="${canonical}" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="author" content="KindredTrips" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="KindredTrips" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(description)}" />
+<meta property="og:url" content="${canonical}" />
+<meta property="og:image" content="${img}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(description)}" />
+<meta name="twitter:image" content="${img}" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css?v=20260520-score-retune" />
+${ld.map((o) => `<script type="application/ld+json">\n${JSON.stringify(o, null, 2)}\n</script>`).join("\n")}
+</head>
+<body class="seo-page">
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="logo" aria-label="KindredTrips home"><img src="/logo.png" alt="KindredTrips" class="logo-img" /></a>
+    <nav class="topbar-nav" aria-label="Primary">
+      <a href="/caribbean" class="nav-link">Destinations</a>
+      <a href="/about.html" class="nav-link">About</a>
+      <a href="/contact.html" class="nav-link">Contact</a>
+      <a href="/#search-form" class="topbar-cta">Search trips</a>
+    </nav>
+  </div>
+</header>
+${crumbs ? `<nav class="seo-breadcrumb" aria-label="Breadcrumb"><div class="seo-wrap">${crumbs}</div></nav>` : ""}
+<main class="seo-main">
+<div class="seo-wrap">
+${body}
+</div>
+</main>
+<footer class="seo-footer">
+  <div class="seo-wrap">
+    <p><strong>KindredTrips</strong> — Caribbean family vacations, ranked by total trip cost. We compare ${fmtInt(resorts.length)} family-friendly resorts across ${countries.length} Caribbean destinations.</p>
+    <p class="seo-footer-links">
+      <a href="/">Search trips</a> ·
+      <a href="/caribbean">All destinations</a> ·
+      <a href="/about.html">About</a> ·
+      <a href="/contact.html">Contact</a> ·
+      <a href="/privacy.html">Privacy</a>
+    </p>
+  </div>
+</footer>
+</body>
+</html>`;
+}
+
+// ---------- prose ----------
+function familySignals(r) {
+  const out = [];
+  if (r.kids_club) {
+    const ages = r.kc_min != null && r.kc_max != null ? ` (ages ${r.kc_min}–${r.kc_max})` : "";
+    out.push(`a kids club${ages}`);
+  }
+  if (r.on_beach) out.push("direct beach access");
+  if (r.water_park) out.push("a water park");
+  else if (r.pool) out.push("pools");
+  if (r.connecting) out.push("connecting rooms");
+  if (r.family_max && r.family_max >= 5) out.push(`family rooms that sleep up to ${r.family_max}`);
+  if (r.infants) out.push("infant-friendly facilities");
+  if (r.spa) out.push("a spa");
+  return out;
+}
+
+function resortIntro(r) {
+  const star = r.stars ? `${r.stars}-star ` : "";
+  const where = r.area && r.area !== r.country ? `${r.area}, ${r.country}` : r.country;
+  const transfer = r.transfer_min ? `, about ${r.transfer_min} minutes from ${r.airport_iata || "the nearest airport"}` : "";
+  let p = `${r.resort_name} is a ${star}family-friendly resort in ${where}${transfer}. `;
+  const sig = familySignals(r);
+  if (sig.length) {
+    const list = sig.length === 1 ? sig[0] : `${sig.slice(0, -1).join(", ")} and ${sig.at(-1)}`;
+    p += `For families, it offers ${list}. `;
+  }
+  const r5 = ratingTo5(r.rating);
+  if (r5 != null && r.reviews) p += `Guests rate it ${r5}/5 across ${fmtInt(r.reviews)} reviews. `;
+  p += `KindredTrips ranks complete trips here — flights plus hotel — by total cost for your exact family and dates.`;
+  return p;
+}
+
+function factList(r) {
+  const facts = [];
+  if (r.stars) facts.push(["Class", `${r.stars}-star`]);
+  const r5 = ratingTo5(r.rating);
+  if (r5 != null) facts.push(["Guest rating", `${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}`]);
+  if (r.area) facts.push(["Location", `${r.area}, ${r.country}`]);
+  else facts.push(["Country", r.country]);
+  if (r.airport_iata) facts.push(["Nearest airport", r.airport_iata + (r.transfer_min ? ` (~${r.transfer_min} min)` : "")]);
+  if (r.kids_club) facts.push(["Kids club", r.kc_min != null && r.kc_max != null ? `Yes, ages ${r.kc_min}–${r.kc_max}` : "Yes"]);
+  if (r.family_max) facts.push(["Family rooms sleep", `up to ${r.family_max}`]);
+  if (r.on_beach) facts.push(["Beachfront", "Yes"]);
+  if (r.water_park) facts.push(["Water park", "Yes"]);
+  if (r.connecting) facts.push(["Connecting rooms", "Available"]);
+  if (r.infants) facts.push(["Infant-friendly", "Yes"]);
+  return facts;
+}
+
+function badges(r) {
+  const b = [];
+  if (r.kids_club) b.push("Kids club");
+  if (r.on_beach) b.push("Beachfront");
+  if (r.water_park) b.push("Water park");
+  if (r.pool && !r.water_park) b.push("Pools");
+  if (r.connecting) b.push("Connecting rooms");
+  if (r.family_max >= 5) b.push(`Sleeps ${r.family_max}`);
+  if (r.infants) b.push("Infant-friendly");
+  if (r.spa) b.push("Spa");
+  return b;
+}
+
+// ---------- resort page ----------
+function resortPage(r) {
+  const slug = slugById.get(r.resort_id);
+  const url = `${ORIGIN}${resortPath(r)}`;
+  const hero = photoUrl(r.photo_ref, 1200);
+  const r5 = ratingTo5(r.rating);
+  const sig = badges(r);
+  const facts = factList(r);
+
+  const hotelLd = {
+    "@context": "https://schema.org",
+    "@type": "Resort",
+    name: r.resort_name,
+    url,
+    address: { "@type": "PostalAddress", addressCountry: r.country, ...(r.area ? { addressLocality: r.area } : {}) },
+    ...(r.lat && r.lng ? { geo: { "@type": "GeoCoordinates", latitude: r.lat, longitude: r.lng } } : {}),
+    ...(r.stars ? { starRating: { "@type": "Rating", ratingValue: r.stars } } : {}),
+    ...(r5 != null && r.reviews ? { aggregateRating: { "@type": "AggregateRating", ratingValue: r5, bestRating: 5, reviewCount: r.reviews } } : {}),
+    ...(hero ? { image: `${ORIGIN}${hero}` } : {}),
+    ...(sig.length ? { amenityFeature: sig.map((n) => ({ "@type": "LocationFeatureSpecification", name: n, value: true })) } : {}),
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: r.country, item: `${ORIGIN}${countryPath(r.country)}` },
+      { "@type": "ListItem", position: 4, name: r.resort_name, item: url },
+    ],
+  };
+
+  // Sibling resorts in the same country for internal linking.
+  const siblings = (byCountry.get(r.country) || [])
+    .filter((s) => s.resort_id !== r.resort_id)
+    .slice(0, 8);
+
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(r.resort_name)} — family resort in ${esc(r.country)}" loading="eager" /></div>` : ""}
+<h1>${esc(r.resort_name)}</h1>
+<p class="seo-sub">${esc(r.area ? `${r.area}, ${r.country}` : r.country)}${r.stars ? ` · ${r.stars}-star` : ""}${r5 != null ? ` · ${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}` : ""}</p>
+${sig.length ? `<ul class="seo-badges">${sig.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+<p class="seo-lede">${esc(resortIntro(r))}</p>
+<a class="seo-cta" href="/#search-form">Compare trips to ${esc(r.country)} →</a>
+
+<h2>Family-fit at a glance</h2>
+<table class="seo-facts"><tbody>
+${facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}
+</tbody></table>
+
+<h2>Planning a family trip to ${esc(r.resort_name)}</h2>
+<p>${esc(`${r.resort_name} sits in ${r.area ? `${r.area}, ` : ""}${r.country}. KindredTrips doesn't make you pick a destination first — enter your home airport, dates, and your kids' ages, and we compare the total cost of flying your family here against every other Caribbean resort we track, ranked together. Prices are live flight + hotel rates for your exact party, so the number you see is the trip you'd actually book.`)}</p>
+
+${siblings.length ? `<h2>More family resorts in ${esc(r.country)}</h2>
+<ul class="seo-link-grid">
+${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(s.resort_name)}</a>${s.stars ? `<span class="seo-link-meta">${s.stars}★</span>` : ""}</li>`).join("")}
+</ul>
+<p><a href="${countryPath(r.country)}">See all family resorts in ${esc(r.country)} →</a></p>` : ""}
+`;
+
+  return shell({
+    title: `${r.resort_name} — Family Resort in ${r.country} | KindredTrips`,
+    description: clip(resortIntro(r), 155),
+    canonical: url,
+    image: hero ? `${ORIGIN}${hero}` : null,
+    jsonld: [hotelLd, crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: r.country, url: countryPath(r.country) },
+      { name: r.resort_name, url: url },
+    ],
+    body,
+  });
+}
+
+// ---------- country hub ----------
+function countryFaq(country, list) {
+  const total = list.length;
+  const kc = list.filter((r) => r.kids_club).length;
+  const beach = list.filter((r) => r.on_beach).length;
+  const wp = list.filter((r) => r.water_park).length;
+  const infant = list.filter((r) => r.infants).length;
+  const qa = [
+    [`How many family-friendly resorts are in ${country}?`,
+     `KindredTrips tracks ${total} family-friendly resort${total === 1 ? "" : "s"} in ${country}, and ranks complete trips (flights plus hotel) to each by total cost for your family.`],
+    [`Which ${country} resorts have a kids club?`,
+     `${kc} of the ${total} ${country} resorts we track offer a kids club. You can require a kids club — and set its minimum age — in the KindredTrips search.`],
+    [`Are there beachfront family resorts in ${country}?`,
+     `Yes — ${beach} of the ${country} resorts in our catalogue are directly on the beach${wp ? `, and ${wp} have a water park for kids` : ""}.`],
+    [`Is ${country} good for a family with a toddler or infant?`,
+     `${infant} ${country} resorts we track flag infant-friendly facilities. KindredTrips lets you filter by kids-club minimum age, connecting rooms, and family-room occupancy so a resort actually works for young children.`],
+  ];
+  return qa;
+}
+
+function countryPage(country) {
+  const list = byCountry.get(country).slice().sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  const url = `${ORIGIN}${countryPath(country)}`;
+  const total = list.length;
+  const kc = list.filter((r) => r.kids_club).length;
+  const beach = list.filter((r) => r.on_beach).length;
+  const wp = list.filter((r) => r.water_park).length;
+  const heroResort = list.find((r) => r.photo_ref);
+  const hero = heroResort ? photoUrl(heroResort.photo_ref, 1200) : null;
+
+  const intro = `Planning a family vacation to ${country}? KindredTrips tracks ${total} family-friendly resort${total === 1 ? "" : "s"} here — ${kc} with a kids club, ${beach} directly on the beach${wp ? `, and ${wp} with a water park` : ""}. Instead of picking ${country} first and hoping the price works, compare the total cost of flying your family here against every other Caribbean destination, ranked together by flights plus hotel for your exact party and dates.`;
+
+  const faq = countryFaq(country, list);
+  const collectionLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: `Family Resorts in ${country}`,
+    description: intro.slice(0, 200),
+    url,
+    about: { "@type": "TouristDestination", name: country },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: total,
+      itemListElement: list.slice(0, 50).map((r, i) => ({
+        "@type": "ListItem", position: i + 1, name: r.resort_name, url: `${ORIGIN}${resortPath(r)}`,
+      })),
+    },
+  };
+  const faqLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: country, item: url },
+    ],
+  };
+
+  const card = (r) => {
+    const ph = photoUrl(r.photo_ref, 600);
+    const r5 = ratingTo5(r.rating);
+    const bs = badges(r).slice(0, 3);
+    return `<li class="seo-card">
+  <a href="${resortPath(r)}" class="seo-card-link">
+    ${ph ? `<img class="seo-card-img" src="${ph}" alt="${esc(r.resort_name)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
+    <span class="seo-card-body">
+      <span class="seo-card-name">${esc(r.resort_name)}</span>
+      <span class="seo-card-meta">${esc(r.area || r.country)}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
+      ${bs.length ? `<span class="seo-card-tags">${bs.map((b) => `<span>${esc(b)}</span>`).join("")}</span>` : ""}
+    </span>
+  </a>
+</li>`;
+  };
+
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="Family resorts in ${esc(country)}" loading="eager" /></div>` : ""}
+<h1>Family Resorts in ${esc(country)}</h1>
+<p class="seo-sub">${total} family-friendly resort${total === 1 ? "" : "s"} tracked by KindredTrips</p>
+<p class="seo-lede">${esc(intro)}</p>
+<a class="seo-cta" href="/#search-form">Compare trips to ${esc(country)} →</a>
+
+<h2>All ${esc(country)} family resorts</h2>
+<ul class="seo-grid">
+${list.map(card).join("\n")}
+</ul>
+
+<h2>${esc(country)} family vacation FAQ</h2>
+<div class="seo-faq">
+${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("\n")}
+</div>
+
+<p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
+`;
+
+  return shell({
+    title: `Family Resorts in ${country} (${total}) — Ranked by Trip Cost | KindredTrips`,
+    description: clip(intro, 155),
+    canonical: url,
+    image: hero ? `${ORIGIN}${hero}` : null,
+    jsonld: [collectionLd, faqLd, crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: country, url },
+    ],
+    body,
+  });
+}
+
+// ---------- destinations index ----------
+function destinationsIndex() {
+  const url = `${ORIGIN}/caribbean`;
+  const rows = countries.map((c) => {
+    const list = byCountry.get(c);
+    const hero = list.find((r) => r.photo_ref);
+    return { c, n: list.length, ph: hero ? photoUrl(hero.photo_ref, 600) : null };
+  });
+  const total = resorts.length;
+  const intro = `KindredTrips tracks ${fmtInt(total)} family-friendly resorts across ${countries.length} Caribbean destinations. Browse by country below, or skip straight to search — enter your airport, dates, and kids' ages and we'll rank complete trips (flights plus hotel) across every destination at once, by total cost for your family.`;
+  const collectionLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Caribbean Family Vacation Destinations",
+    description: intro.slice(0, 200),
+    url,
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: countries.length,
+      itemListElement: countries.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c, url: `${ORIGIN}${countryPath(c)}` })),
+    },
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: url },
+    ],
+  };
+  const body = `
+<h1>Caribbean Family Vacation Destinations</h1>
+<p class="seo-sub">${fmtInt(total)} family resorts across ${countries.length} destinations</p>
+<p class="seo-lede">${esc(intro)}</p>
+<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
+<ul class="seo-grid seo-grid-dest">
+${rows.map(({ c, n, ph }) => `<li class="seo-card">
+  <a href="${countryPath(c)}" class="seo-card-link">
+    ${ph ? `<img class="seo-card-img" src="${ph}" alt="Family resorts in ${esc(c)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
+    <span class="seo-card-body">
+      <span class="seo-card-name">${esc(c)}</span>
+      <span class="seo-card-meta">${n} family resort${n === 1 ? "" : "s"}</span>
+    </span>
+  </a>
+</li>`).join("\n")}
+</ul>
+`;
+  return shell({
+    title: `Caribbean Family Vacation Destinations — ${countries.length} Countries, ${fmtInt(total)} Resorts | KindredTrips`,
+    description: clip(intro, 155),
+    canonical: url,
+    jsonld: [collectionLd, crumbLd],
+    breadcrumbTrail: [{ name: "Home", url: "/" }, { name: "Destinations", url }],
+    body,
+  });
+}
+
+// ---------- write ----------
+function write(rel, html) {
+  const full = join(ROOT, rel);
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, html);
+}
+
+// Clean previous output so removed resorts don't leave orphan files.
+for (const d of ["resort", "caribbean"]) {
+  const p = join(ROOT, d);
+  if (existsSync(p)) rmSync(p, { recursive: true, force: true });
+}
+
+let n = 0;
+for (const r of resorts) { write(`resort/${slugById.get(r.resort_id)}.html`, resortPage(r)); n++; }
+for (const c of countries) write(`caribbean/${slugify(c)}.html`, countryPage(c));
+write("caribbean/index.html", destinationsIndex());
+
+// ---------- sitemap ----------
+const staticUrls = [
+  { loc: `${ORIGIN}/`, pr: "1.0", cf: "daily" },
+  { loc: `${ORIGIN}/caribbean`, pr: "0.9", cf: "weekly" },
+  { loc: `${ORIGIN}/about.html`, pr: "0.6", cf: "monthly" },
+  { loc: `${ORIGIN}/contact.html`, pr: "0.5", cf: "monthly" },
+  { loc: `${ORIGIN}/privacy.html`, pr: "0.3", cf: "yearly" },
+];
+const urls = [
+  ...staticUrls,
+  ...countries.map((c) => ({ loc: `${ORIGIN}${countryPath(c)}`, pr: "0.8", cf: "weekly" })),
+  ...resorts.map((r) => ({ loc: `${ORIGIN}${resortPath(r)}`, pr: "0.7", cf: "weekly" })),
+];
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${TODAY}</lastmod>\n    <changefreq>${u.cf}</changefreq>\n    <priority>${u.pr || u.pr}</priority>\n  </url>`).join("\n")}
+</urlset>
+`;
+writeFileSync(join(ROOT, "sitemap.xml"), sitemap);
+
+console.log(`Generated ${n} resort pages, ${countries.length} country hubs, 1 destinations index.`);
+console.log(`Sitemap: ${urls.length} URLs.`);

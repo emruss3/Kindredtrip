@@ -61,14 +61,24 @@ Cheapest Caribbean family vacations from US origins typically come from Mexico (
 
 ### Can I find Caribbean resorts with connecting rooms?
 
-Yes — KindredTrips has a "connecting rooms guaranteed" filter that surfaces resorts where adjoining rooms can be confirmed at booking, not just requested.
+Yes — KindredTrips has a "connecting rooms" filter that surfaces resorts that offer adjoining rooms. Connecting rooms are requested at booking and subject to availability; we don't claim them as guaranteed because hotel partners can't guarantee a specific room assignment in advance.
 
 ## Pages
 
 - [Homepage and search](https://kindredtrips.com/)
+- [All Caribbean destinations](https://kindredtrips.com/caribbean) — browse 974 family resorts across 35 destinations
 - [About KindredTrips](https://kindredtrips.com/about.html)
 - [Privacy policy](https://kindredtrips.com/privacy.html)
 - [Contact](https://kindredtrips.com/contact.html)
+
+## Browsable destination & resort pages
+
+KindredTrips publishes an indexable page for every destination and every resort in the catalogue, generated from structured family-fit data:
+
+- Destination hubs at `https://kindredtrips.com/caribbean/<country>` (e.g. `/caribbean/aruba`, `/caribbean/jamaica`) list every family resort we track in that country, with kids-club / beachfront / water-park counts and a destination FAQ.
+- Resort pages at `https://kindredtrips.com/resort/<resort-name>` give each property's family-fit summary: star class, guest rating, kids-club age range, beachfront and water-park status, connecting rooms, and family-room occupancy.
+
+A full list of these URLs is in the sitemap: https://kindredtrips.com/sitemap.xml
 
 ## Technical
 
