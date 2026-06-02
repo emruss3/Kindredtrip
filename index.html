@@ -818,6 +818,72 @@
     document.getElementById("date_end").value = fmt(end);
   })();
 
+  // Deep-link entry from a generated SEO page (/resort/<slug>,
+  // /caribbean/<country>). Accepted params:
+  //   origin           IATA, e.g. BNA
+  //   date_start, date_end   YYYY-MM-DD
+  //   adults           int
+  //   kids             comma-separated ages, e.g. "8,8,8,1"
+  //   country          one country to scope the search to (server-side
+  //                    filter via included_countries — keeps a deep-link
+  //                    from a Saint Lucia page fast)
+  //   resort_id        uuid; the matching package's trip modal auto-opens
+  //                    once results render
+  //   autostart        "1" to fire runSearch() immediately
+  //
+  // Only fields actually present in the URL are overridden — anything
+  // absent keeps its current default so a user clicking through with a
+  // partial URL still ends up with a runnable search.
+  (function hydrateFromDeepLink() {
+    const qp = new URLSearchParams(location.search);
+    if (![...qp.keys()].length) return;
+
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const origin = qp.get("origin");
+    if (origin) setVal("origin", origin.trim().toUpperCase());
+    setVal("date_start", qp.get("date_start"));
+    setVal("date_end", qp.get("date_end"));
+
+    const adults = parseInt(qp.get("adults") || "", 10);
+    if (Number.isFinite(adults) && adults > 0) {
+      const a = document.getElementById("adults");
+      const av = document.getElementById("adults-value");
+      if (a) a.value = String(adults);
+      if (av) av.textContent = String(adults);
+    }
+
+    const kidsRaw = qp.get("kids");
+    if (kidsRaw != null) {
+      const ages = kidsRaw.split(/[,\s]+/)
+        .map((s) => parseInt(s, 10))
+        .filter((n) => Number.isFinite(n) && n >= 0 && n <= 17);
+      setVal("child_ages", ages.join(","));
+      const kc = document.getElementById("kids-count-value");
+      if (kc) kc.textContent = String(ages.length);
+      // Re-derive kid-age pills if the stepper UI cares about it.
+      if (typeof window.renderKidsAges === "function") {
+        try { window.renderKidsAges(ages.length, ages); } catch {}
+      }
+    }
+
+    const country = qp.get("country");
+    if (country) {
+      // Mirrors how clicking a featured destination tile sets state.
+      filters.country.add(country);
+      if (typeof syncHomepageDestinationChips === "function") {
+        try { syncHomepageDestinationChips(); } catch {}
+      }
+    }
+
+    const resortId = qp.get("resort_id");
+    if (resortId) pendingAutoOpenResortId = resortId;
+
+    if (qp.get("autostart") === "1") {
+      // Defer one tick so all wizard inputs are settled before submit.
+      setTimeout(() => { try { runSearch(); } catch (e) { console.error("autostart runSearch failed:", e); } }, 0);
+    }
+  })();
+
   // Wire family-fit toggle visual state. Only match <label class="toggle">
   // entries that wrap a checkbox — chip buttons (.toggle.dest-more,
   // .dest-chips children) also use class="toggle" but have no input.
@@ -1159,6 +1225,13 @@
   let lastIsWarmingUp = false;
   let allPackages = [];
   let lastSortBy = "score";
+
+  // Set when the user lands from a generated /resort/<slug> page with
+  // ?resort_id=<uuid>. Once results render, the matching package's trip
+  // modal opens automatically (deep-link entry from SEO pages into the
+  // live booking flow). Cleared after first use so refilters don't keep
+  // re-opening it.
+  let pendingAutoOpenResortId = null;
 
   // Filter state
   const filters = {
@@ -2502,6 +2575,22 @@
 
     main.innerHTML = headerHtml + filterPills + body;
     renderCompareTray();
+
+    // Deep-link from a /resort/<slug> SEO page: the homepage was loaded
+    // with ?resort_id=<uuid>&autostart=1. Once that resort's package
+    // surfaces in the rendered list, open its trip modal so the visitor
+    // lands on live flights + booking deep-links instead of having to
+    // hunt for the card. One-shot — cleared after firing.
+    if (pendingAutoOpenResortId) {
+      const target = allPackages.find((p) => p.resort_id === pendingAutoOpenResortId);
+      if (target) {
+        const id = pendingAutoOpenResortId;
+        pendingAutoOpenResortId = null;
+        // Defer one tick so the just-rendered card is in the DOM for
+        // any scroll/focus the modal opener might do.
+        setTimeout(() => { try { openResortModal(target.package_id); } catch (e) { console.error("auto-open failed:", e); } }, 50);
+      }
+    }
   }
 
   function renderListRest(rest, rankBadges, budgetBadges) {

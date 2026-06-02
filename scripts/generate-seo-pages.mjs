@@ -46,6 +46,80 @@ function slugify(s) {
     .slice(0, 80) || "resort";
 }
 
+// US/Canadian origin airports — same set the homepage datalist offers, so
+// the inline wizard on SEO pages matches the homepage UX.
+const ORIGIN_AIRPORTS = [
+  ["ATL","Atlanta"],["AUS","Austin"],["BNA","Nashville"],["BOS","Boston"],
+  ["BWI","Baltimore"],["CLE","Cleveland"],["CLT","Charlotte"],["CMH","Columbus"],
+  ["CVG","Cincinnati"],["DCA","Washington Reagan"],["DEN","Denver"],["DFW","Dallas/Fort Worth"],
+  ["DTW","Detroit"],["EWR","Newark"],["FLL","Fort Lauderdale"],["IAD","Washington Dulles"],
+  ["IAH","Houston"],["IND","Indianapolis"],["JFK","New York JFK"],["LAS","Las Vegas"],
+  ["LAX","Los Angeles"],["LGA","New York LaGuardia"],["MCI","Kansas City"],["MCO","Orlando"],
+  ["MDW","Chicago Midway"],["MEM","Memphis"],["MIA","Miami"],["MKE","Milwaukee"],
+  ["MSP","Minneapolis"],["MSY","New Orleans"],["ORD","Chicago O'Hare"],["PDX","Portland"],
+  ["PHL","Philadelphia"],["PHX","Phoenix"],["PIT","Pittsburgh"],["RDU","Raleigh-Durham"],
+  ["SAN","San Diego"],["SAT","San Antonio"],["SEA","Seattle"],["SFO","San Francisco"],
+  ["SLC","Salt Lake City"],["STL","St. Louis"],["TPA","Tampa"],
+  ["YEG","Edmonton"],["YHZ","Halifax"],["YOW","Ottawa"],["YUL","Montreal"],
+  ["YVR","Vancouver"],["YYC","Calgary"],["YYZ","Toronto Pearson"],
+];
+
+// Default departure ~90 days out, 7-night trip — same defaults as the
+// homepage's setDefaultDates IIFE so the form looks reasonable on load.
+function defaultDates() {
+  const start = new Date();
+  start.setDate(start.getDate() + 90);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return { date_start: fmt(start), date_end: fmt(end) };
+}
+
+// Embedded search wizard. Submits to "/" with a deep-link query string;
+// the homepage's hydrateFromDeepLink IIFE picks up every field, fills
+// the wizard, auto-runs the search scoped to `country`, and (when
+// resortId is set) auto-opens that resort's trip modal on results land.
+function searchWidget({ country, resortId, headline, sub }) {
+  const { date_start, date_end } = defaultDates();
+  const opts = ORIGIN_AIRPORTS
+    .map(([c, n]) => `<option value="${c}">${esc(n)} (${c})</option>`).join("");
+  const hiddenCountry = country ? `<input type="hidden" name="country" value="${esc(country)}" />` : "";
+  const hiddenResort = resortId ? `<input type="hidden" name="resort_id" value="${esc(resortId)}" />` : "";
+  // No JS framework on these pages — the form submits as GET and the
+  // homepage handles param hydration on load.
+  return `<aside class="seo-wizard" aria-labelledby="seo-wiz-h">
+  <h2 id="seo-wiz-h" class="seo-wizard-headline">${esc(headline)}</h2>
+  ${sub ? `<p class="seo-wizard-sub">${esc(sub)}</p>` : ""}
+  <form class="seo-wizard-form" action="/" method="GET">
+    ${hiddenCountry}${hiddenResort}
+    <input type="hidden" name="autostart" value="1" />
+    <label class="seo-wizard-field">
+      <span>From</span>
+      <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
+    </label>
+    <datalist id="seo-origin-airports">${opts}</datalist>
+    <label class="seo-wizard-field">
+      <span>Check-in</span>
+      <input type="date" name="date_start" value="${date_start}" required />
+    </label>
+    <label class="seo-wizard-field">
+      <span>Check-out</span>
+      <input type="date" name="date_end" value="${date_end}" required />
+    </label>
+    <label class="seo-wizard-field">
+      <span>Adults</span>
+      <input type="number" name="adults" value="2" min="1" max="8" required />
+    </label>
+    <label class="seo-wizard-field seo-wizard-field-wide">
+      <span>Kids' ages</span>
+      <input type="text" name="kids" placeholder="e.g. 8, 5, 1" autocomplete="off" />
+    </label>
+    <button type="submit" class="seo-wizard-submit">${resortId ? "See live prices →" : "Compare trips →"}</button>
+  </form>
+  <p class="seo-wizard-fine">Live flights + hotel rates ranked for your exact family. No fees, no markup.</p>
+</aside>`;
+}
+
 // Clip to <=n chars on a word boundary, adding an ellipsis when cut.
 const clip = (s, n = 155) => {
   s = String(s ?? "").trim();
@@ -260,7 +334,13 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(r.resort_name)} �
 <p class="seo-sub">${esc(r.area ? `${r.area}, ${r.country}` : r.country)}${r.stars ? ` · ${r.stars}-star` : ""}${r5 != null ? ` · ${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}` : ""}</p>
 ${sig.length ? `<ul class="seo-badges">${sig.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
 <p class="seo-lede">${esc(resortIntro(r))}</p>
-<a class="seo-cta" href="/#search-form">Compare trips to ${esc(r.country)} →</a>
+
+${searchWidget({
+  country: r.country,
+  resortId: r.resort_id,
+  headline: `See live prices for ${r.resort_name}`,
+  sub: `Enter your airport, dates, and family. We'll find live flights to ${r.airport_iata || r.country} and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.`,
+})}
 
 <h2>Family-fit at a glance</h2>
 <table class="seo-facts"><tbody>
@@ -377,7 +457,12 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="Family resorts in ${esc(
 <h1>Family Resorts in ${esc(country)}</h1>
 <p class="seo-sub">${total} family-friendly resort${total === 1 ? "" : "s"} tracked by KindredTrips</p>
 <p class="seo-lede">${esc(intro)}</p>
-<a class="seo-cta" href="/#search-form">Compare trips to ${esc(country)} →</a>
+
+${searchWidget({
+  country,
+  headline: `Search ${country} family trips`,
+  sub: `Enter your airport, dates, and family. We'll price every ${country} resort below — live flights plus live hotel rates — and rank by total trip cost for your exact party.`,
+})}
 
 <h2>All ${esc(country)} family resorts</h2>
 <ul class="seo-grid">
