@@ -94,10 +94,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Sunset Beach Resort, Spa &amp; Waterpark</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Sangster and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Jamaica" /><input type="hidden" name="resort_id" value="107d81b5-c4e4-4d27-9193-bcecc3d7ea8b" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Sangster and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/sunset-beach-resort-spa-and-waterpark" method="GET">
+    <input type="hidden" name="country" value="Jamaica" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -152,5 +152,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"107d81b5-c4e4-4d27-9193-bcecc3d7ea8b","resort_name":"Sunset Beach Resort, Spa & Waterpark","country":"Jamaica","airport_iata":"Sangster"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

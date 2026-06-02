@@ -116,10 +116,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for AVA Resort Jamaica</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Jamaica and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Jamaica" /><input type="hidden" name="resort_id" value="8ef15976-55e6-447e-89cc-3da518a4638b" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Jamaica and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/ava-resort-jamaica" method="GET">
+    <input type="hidden" name="country" value="Jamaica" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -174,5 +174,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"8ef15976-55e6-447e-89cc-3da518a4638b","resort_name":"AVA Resort Jamaica","country":"Jamaica","airport_iata":null};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

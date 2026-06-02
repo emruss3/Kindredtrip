@@ -134,10 +134,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Anthony&#39;s Key Resort (Alcohol not included)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Roatan and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Honduras" /><input type="hidden" name="resort_id" value="d35787de-e330-4488-b713-c6b49d250de4" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Roatan and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/anthony-s-key-resort" method="GET">
+    <input type="hidden" name="country" value="Honduras" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -192,5 +192,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"d35787de-e330-4488-b713-c6b49d250de4","resort_name":"Anthony's Key Resort (Alcohol not included)","country":"Honduras","airport_iata":"Roatan"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

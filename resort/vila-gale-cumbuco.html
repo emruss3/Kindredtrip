@@ -133,10 +133,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Vila Gale Cumbuco</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Pinto Martins and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Brazil" /><input type="hidden" name="resort_id" value="4c47d2d2-7949-4652-9cdb-1bda1622a048" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Pinto Martins and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/vila-gale-cumbuco" method="GET">
+    <input type="hidden" name="country" value="Brazil" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -191,5 +191,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"4c47d2d2-7949-4652-9cdb-1bda1622a048","resort_name":"Vila Gale Cumbuco","country":"Brazil","airport_iata":"Pinto Martins"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

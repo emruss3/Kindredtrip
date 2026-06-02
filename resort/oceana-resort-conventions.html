@@ -119,10 +119,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Oceana Resort + Conventions (Non Refundable)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to La Aurora and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Guatemala" /><input type="hidden" name="resort_id" value="19788a59-5ca5-4879-ac90-240f264e16ed" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to La Aurora and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/oceana-resort-conventions" method="GET">
+    <input type="hidden" name="country" value="Guatemala" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -177,5 +177,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"19788a59-5ca5-4879-ac90-240f264e16ed","resort_name":"Oceana Resort + Conventions (Non Refundable)","country":"Guatemala","airport_iata":"La Aurora"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

@@ -108,10 +108,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Bungalows Key Largo</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Miami and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="United States" /><input type="hidden" name="resort_id" value="c82ebfa9-b93d-4a1e-b4f2-9e1af7b11e41" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Miami and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/bungalows-key-largo" method="GET">
+    <input type="hidden" name="country" value="United States" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -166,5 +166,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"c82ebfa9-b93d-4a1e-b4f2-9e1af7b11e41","resort_name":"Bungalows Key Largo","country":"United States","airport_iata":"Miami"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

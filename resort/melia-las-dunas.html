@@ -107,10 +107,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Melia Las Dunas</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Cayo Coco and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Cuba" /><input type="hidden" name="resort_id" value="4f9f318e-05a3-4a6b-a7d5-b45f4b8f518b" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Cayo Coco and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/melia-las-dunas" method="GET">
+    <input type="hidden" name="country" value="Cuba" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -165,5 +165,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"4f9f318e-05a3-4a6b-a7d5-b45f4b8f518b","resort_name":"Melia Las Dunas","country":"Cuba","airport_iata":"Cayo Coco"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

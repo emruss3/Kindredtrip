@@ -119,10 +119,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Wyndham Reef Resort</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Owen Roberts and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Grand Cayman" /><input type="hidden" name="resort_id" value="d10b301b-b540-44e2-9156-d0bc09f68aaf" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Owen Roberts and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/wyndham-reef-resort" method="GET">
+    <input type="hidden" name="country" value="Grand Cayman" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -173,5 +173,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"d10b301b-b540-44e2-9156-d0bc09f68aaf","resort_name":"Wyndham Reef Resort","country":"Grand Cayman","airport_iata":"Owen Roberts"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

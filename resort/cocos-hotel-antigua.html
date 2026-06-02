@@ -108,10 +108,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for COCOS Hotel Antigua (Couples Only, No TV)</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to V.C. Bird and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Antigua" /><input type="hidden" name="resort_id" value="ae5ce927-8c1f-4553-8efb-5bbea0d5a47a" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to V.C. Bird and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/cocos-hotel-antigua" method="GET">
+    <input type="hidden" name="country" value="Antigua" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -166,5 +166,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"ae5ce927-8c1f-4553-8efb-5bbea0d5a47a","resort_name":"COCOS Hotel Antigua (Couples Only, No TV)","country":"Antigua","airport_iata":"V.C. Bird"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

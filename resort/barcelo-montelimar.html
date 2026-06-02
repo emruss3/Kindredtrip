@@ -107,10 +107,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Barceló Montelimar</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Augusto C Sandino and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Nicaragua" /><input type="hidden" name="resort_id" value="7f83ef3a-3359-4b35-aadb-60c48d4ada2f" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Augusto C Sandino and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/barcelo-montelimar" method="GET">
+    <input type="hidden" name="country" value="Nicaragua" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -161,5 +161,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"7f83ef3a-3359-4b35-aadb-60c48d4ada2f","resort_name":"Barceló Montelimar","country":"Nicaragua","airport_iata":"Augusto C Sandino"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

@@ -116,10 +116,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for The Soco House</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Saint Lucia and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Saint Lucia" /><input type="hidden" name="resort_id" value="db43f5c1-d4dd-4c4c-870e-353e893456bf" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Saint Lucia and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/the-soco-house" method="GET">
+    <input type="hidden" name="country" value="Saint Lucia" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -174,5 +174,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"db43f5c1-d4dd-4c4c-870e-353e893456bf","resort_name":"The Soco House","country":"Saint Lucia","airport_iata":null};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

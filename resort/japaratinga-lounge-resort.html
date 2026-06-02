@@ -134,10 +134,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Japaratinga Lounge Resort</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Palmares and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Brazil" /><input type="hidden" name="resort_id" value="09609fa2-af29-408f-9996-b16fd3d10dc3" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Palmares and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/japaratinga-lounge-resort" method="GET">
+    <input type="hidden" name="country" value="Brazil" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -192,5 +192,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"09609fa2-af29-408f-9996-b16fd3d10dc3","resort_name":"Japaratinga Lounge Resort","country":"Brazil","airport_iata":"Palmares"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

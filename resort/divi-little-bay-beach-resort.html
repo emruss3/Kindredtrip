@@ -119,10 +119,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for Divi Little Bay Beach Resort</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Princ. Juliana and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Saint Martin" /><input type="hidden" name="resort_id" value="becb462e-7e1a-47a6-8c79-059071e21d49" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Princ. Juliana and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/divi-little-bay-beach-resort" method="GET">
+    <input type="hidden" name="country" value="Saint Martin" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -177,5 +177,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"becb462e-7e1a-47a6-8c79-059071e21d49","resort_name":"Divi Little Bay Beach Resort","country":"Saint Martin","airport_iata":"Princ. Juliana"};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>

@@ -117,10 +117,10 @@
 
 <aside class="seo-wizard" aria-labelledby="seo-wiz-h">
   <h2 id="seo-wiz-h" class="seo-wizard-headline">See live prices for The Sands Barbados</h2>
-  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Barbados and live hotel rates for this resort, then drop you straight into the trip detail with both legs of the journey priced.</p>
-  <form class="seo-wizard-form" action="/" method="GET">
-    <input type="hidden" name="country" value="Barbados" /><input type="hidden" name="resort_id" value="dda15fc0-b75e-478d-ab4b-a2168347290d" />
-    <input type="hidden" name="autostart" value="1" />
+  <p class="seo-wizard-sub">Enter your airport, dates, and family. We&#39;ll find live flights to Barbados and live hotel rates for this resort, right here on this page.</p>
+  <form class="seo-wizard-form" action="/resort/the-sands-barbados" method="GET">
+    <input type="hidden" name="country" value="Barbados" />
+    
     <label class="seo-wizard-field">
       <span>From</span>
       <input type="text" name="origin" list="seo-origin-airports" value="BNA" required autocomplete="off" placeholder="Airport code" />
@@ -175,5 +175,9 @@
     </p>
   </div>
 </footer>
+<script>
+window.__RESORT_BOOKING__ = {"resort_id":"dda15fc0-b75e-478d-ab4b-a2168347290d","resort_name":"The Sands Barbados","country":"Barbados","airport_iata":null};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>
 </body>
 </html>
