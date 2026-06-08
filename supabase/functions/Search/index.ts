@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "Search_v10_forwards_included_countries";
+const VERSION = "Search_v11_session_id_internal";
 
 type SearchRequest = {
   origin_iata: string;
@@ -19,6 +19,16 @@ type SearchRequest = {
   require_connecting_rooms?: boolean;
   excluded_countries?: string[];
   included_countries?: string[];
+
+  // Stable anonymous visitor id from the browser (matches
+  // outbound_clicks.session_id so a click joins back to the search
+  // that produced it).
+  session_id?: string | null;
+
+  // True for our own test traffic so search/click metrics stay clean
+  // without backfills. Frontend sets this from a sticky localStorage
+  // flag toggled via /?internal=1.
+  is_internal?: boolean;
 
   // NEW: allow client to disable auto-invoke for testing or advanced flows
   skip_auto_process?: boolean;
@@ -57,6 +67,22 @@ serve(async (req) => {
     const childAges = body.child_ages ?? [];
     const children = childAges.length;
 
+    // Reject invalid date ranges at the API boundary too — the picker
+    // had been letting these through, dropping a couple of garbage rows
+    // (YYZ, YUL) into production.
+    if (!body.date_start || !body.date_end || body.date_end < body.date_start) {
+      return new Response(
+        JSON.stringify({ version: VERSION, error: "date_end must be on or after date_start" }),
+        { status: 400, headers },
+      );
+    }
+
+    // Trust the client's session_id only if it looks like a uuid-ish
+    // identifier — keeps a stray "null"/"undefined" out of the column.
+    const rawSession = typeof body.session_id === "string" ? body.session_id.trim() : "";
+    const session_id = /^[A-Za-z0-9_-]{8,64}$/.test(rawSession) ? rawSession : null;
+    const is_internal = body.is_internal === true;
+
     // 1) Insert search
     const { data: searchRow, error: searchErr } = await supabase
       .from("searches")
@@ -75,6 +101,8 @@ serve(async (req) => {
         require_kids_club: body.require_kids_club ?? true,
         require_direct_flight: body.require_direct_flight ?? false,
         require_connecting_rooms: body.require_connecting_rooms ?? false,
+        session_id,
+        is_internal,
       })
       .select("search_id")
       .single();
