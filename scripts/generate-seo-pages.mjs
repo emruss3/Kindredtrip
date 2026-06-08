@@ -30,6 +30,25 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 const resorts = JSON.parse(readFileSync(join(ROOT, "data/resorts-seo.json"), "utf8"));
 
+// Family-fit signals + recent reviews per resort (extracted from
+// resort_family_signals + resort_reviews_raw). Used to render an
+// AggregateRating + individual Review JSON-LD on each resort page,
+// plus a visible "What families say" / "Recent guest reviews"
+// section. Reviews are attributed to their original source per
+// Google's review-snippet guidelines.
+const reviewBundle = (() => {
+  try {
+    return JSON.parse(readFileSync(join(ROOT, "data/resort-review-seo.json"), "utf8"));
+  } catch { return { signals: [], reviews: [] }; }
+})();
+const signalsByResort = new Map();
+for (const s of reviewBundle.signals || []) signalsByResort.set(s.resort_id, s);
+const reviewsByResort = new Map();
+for (const r of reviewBundle.reviews || []) {
+  if (!reviewsByResort.has(r.resort_id)) reviewsByResort.set(r.resort_id, []);
+  reviewsByResort.get(r.resort_id).push(r);
+}
+
 // ---------- helpers ----------
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -299,6 +318,48 @@ function badges(r) {
   return b;
 }
 
+// ---------- reviews + family-signal helpers ----------
+// "What families say" prose from the numeric signals in
+// resort_family_signals. We only surface a signal when there's
+// enough evidence (mentions >= 4) so we don't overclaim from a
+// single review.
+function familySignalLines(s) {
+  if (!s) return [];
+  const out = [];
+  const pct = (v) => Math.round(Number(v) * 100);
+  if (Number.isFinite(Number(s.kids_club_mentions)) && Number(s.kids_club_mentions) >= 4) {
+    out.push(`Kids club: ${pct(s.kids_club_signal)}% positive across ${s.kids_club_mentions} family mentions`);
+  }
+  if (Number.isFinite(Number(s.pool_mentions)) && Number(s.pool_mentions) >= 4) {
+    out.push(`Pool: ${pct(s.pool_signal)}% positive across ${s.pool_mentions} family mentions`);
+  }
+  if (Number.isFinite(Number(s.beach_toddler_mentions)) && Number(s.beach_toddler_mentions) >= 4) {
+    out.push(`Beach for toddlers: ${pct(s.beach_toddler_signal)}% positive across ${s.beach_toddler_mentions} family mentions`);
+  }
+  return out;
+}
+
+// Convert one raw review row → Schema.org Review entry. Per Google's
+// review-snippet guidelines we include author, datePublished, the
+// rating, the body, and a publisher attribution to the original source.
+function reviewToJsonLd(rv, resortName) {
+  if (!rv) return null;
+  const body = [rv.headline, rv.pros ? `Liked: ${rv.pros}` : null, rv.cons ? `Disliked: ${rv.cons}` : null]
+    .filter(Boolean).join(" ").trim();
+  const score = Number(rv.average_score);
+  return {
+    "@type": "Review",
+    author: { "@type": "Person", name: String(rv.reviewer_name || "Verified guest").slice(0, 60) },
+    ...(rv.review_date ? { datePublished: rv.review_date } : {}),
+    ...(Number.isFinite(score) && score > 0 ? {
+      reviewRating: { "@type": "Rating", ratingValue: Math.round((score / 2) * 10) / 10, bestRating: 5, worstRating: 0 },
+    } : {}),
+    ...(body ? { reviewBody: body.slice(0, 600) } : {}),
+    ...(rv.source ? { publisher: { "@type": "Organization", name: rv.source } } : {}),
+    itemReviewed: { "@type": "Resort", name: resortName },
+  };
+}
+
 // ---------- resort page ----------
 function resortPage(r) {
   const slug = slugById.get(r.resort_id);
@@ -307,6 +368,13 @@ function resortPage(r) {
   const r5 = ratingTo5(r.rating);
   const sig = badges(r);
   const facts = factList(r);
+  const familySignal = signalsByResort.get(r.resort_id) || null;
+  const allReviews = reviewsByResort.get(r.resort_id) || [];
+  // Cap visible reviews at 4 so the page stays scannable and we don't
+  // bloat HTML for resorts with 80+ raw reviews. Schema includes the
+  // same 4 — Google's guideline is to expose only reviews users see.
+  const shownReviews = allReviews.slice(0, 4);
+  const reviewLd = shownReviews.map((rv) => reviewToJsonLd(rv, r.resort_name)).filter(Boolean);
 
   const hotelLd = {
     "@context": "https://schema.org",
@@ -319,6 +387,7 @@ function resortPage(r) {
     ...(r5 != null && r.reviews ? { aggregateRating: { "@type": "AggregateRating", ratingValue: r5, bestRating: 5, reviewCount: r.reviews } } : {}),
     ...(hero ? { image: `${ORIGIN}${hero}` } : {}),
     ...(sig.length ? { amenityFeature: sig.map((n) => ({ "@type": "LocationFeatureSpecification", name: n, value: true })) } : {}),
+    ...(reviewLd.length ? { review: reviewLd } : {}),
   };
   const crumbLd = {
     "@context": "https://schema.org",
@@ -358,6 +427,57 @@ ${facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join(""
 
 <h2>Planning a family trip to ${esc(r.resort_name)}</h2>
 <p>${esc(`${r.resort_name} sits in ${r.area ? `${r.area}, ` : ""}${r.country}. KindredTrips doesn't make you pick a destination first — enter your home airport, dates, and your kids' ages, and we compare the total cost of flying your family here against every other Caribbean resort we track, ranked together. Prices are live flight + hotel rates for your exact party, so the number you see is the trip you'd actually book.`)}</p>
+
+${(() => {
+  const lines = familySignalLines(familySignal);
+  if (!familySignal || !lines.length) return "";
+  const famScore5 = familySignal.family_avg_score != null
+    ? Math.round((Number(familySignal.family_avg_score) / 2) * 10) / 10
+    : null;
+  const conf = familySignal.signal_confidence;
+  const sub = famScore5 != null
+    ? `${familySignal.family_review_count} family travelers rated this resort ${famScore5}/5 on average${conf ? ` · ${conf} confidence` : ""}.`
+    : "";
+  return `<h2>What families say</h2>
+${sub ? `<p class="seo-sub">${esc(sub)}</p>` : ""}
+<ul class="seo-signal-list">
+${lines.map((line) => `<li>${esc(line)}</li>`).join("")}
+</ul>`;
+})()}
+
+${shownReviews.length ? `<h2>Recent guest reviews</h2>
+<p class="seo-sub">A few real guest reviews of ${esc(r.resort_name)}, sourced from our booking partners. We display the most recent reviews that mention both pros and cons.</p>
+<ul class="seo-reviews">
+${shownReviews.map((rv) => {
+  const score = Number(rv.average_score);
+  const score5 = Number.isFinite(score) && score > 0
+    ? Math.round((score / 2) * 10) / 10
+    : null;
+  const dateLabel = rv.review_date
+    ? (() => {
+        try {
+          return new Date(rv.review_date).toLocaleDateString("en-US", { year: "numeric", month: "short" });
+        } catch { return rv.review_date; }
+      })()
+    : "";
+  const meta = [
+    rv.reviewer_country,
+    rv.traveler_type_norm,
+    dateLabel,
+    rv.source ? `via ${rv.source}` : null,
+  ].filter(Boolean).map(esc).join(" · ");
+  return `<li class="seo-review">
+    <div class="seo-review-head">
+      <span class="seo-review-author">${esc(rv.reviewer_name || "Verified guest")}</span>
+      ${score5 != null ? `<span class="seo-review-score">${score5}/5</span>` : ""}
+    </div>
+    ${meta ? `<div class="seo-review-meta">${meta}</div>` : ""}
+    ${rv.headline ? `<div class="seo-review-headline">${esc(rv.headline)}</div>` : ""}
+    ${rv.pros ? `<p class="seo-review-pros"><strong>Liked:</strong> ${esc(rv.pros)}</p>` : ""}
+    ${rv.cons ? `<p class="seo-review-cons"><strong>Disliked:</strong> ${esc(rv.cons)}</p>` : ""}
+  </li>`;
+}).join("")}
+</ul>` : ""}
 
 ${siblings.length ? `<h2>More family resorts in ${esc(r.country)}</h2>
 <ul class="seo-link-grid">
