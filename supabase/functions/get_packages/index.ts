@@ -254,6 +254,7 @@ serve(async (req) => {
           google_place_id,
           photo_refs,
           photo_attributions,
+          liteapi_hotel_photos,
           cap_has_kids_club,
           cap_has_family_room,
           cap_has_water_park,
