@@ -41,6 +41,15 @@ const reviewBundle = (() => {
     return JSON.parse(readFileSync(join(ROOT, "data/resort-review-seo.json"), "utf8"));
   } catch { return { signals: [], reviews: [] }; }
 })();
+
+// LiteAPI "hero" photo per matched resort (picked as mainPhoto:true or
+// classOrder:0 from resort_rooms.photos). These are curated hotel
+// photos — much better than Google Places exterior shots.
+const liteapiHero = new Map();
+try {
+  const arr = JSON.parse(readFileSync(join(ROOT, "data/resort-liteapi-hero.json"), "utf8"));
+  for (const row of arr) if (row?.resort_id && row?.url) liteapiHero.set(row.resort_id, row.url);
+} catch { /* file optional */ }
 const signalsByResort = new Map();
 for (const s of reviewBundle.signals || []) signalsByResort.set(s.resort_id, s);
 const reviewsByResort = new Map();
@@ -155,9 +164,19 @@ const clip = (s, n = 155) => {
 const fmtInt = (n) => Number(n).toLocaleString("en-US");
 const ratingTo5 = (r) => (r == null ? null : Math.round((Number(r) / 20) * 10) / 10);
 
-// Cap photo url through the existing edge proxy (Vercel-cached).
-const photoUrl = (ref, w = 1200) =>
-  ref ? `/photo?ref=${encodeURIComponent(ref)}&w=${w}` : null;
+// Resolve a photo source to a displayable URL.
+//   - "https://..."  → returned as-is (LiteAPI hero, full CDN URL)
+//   - otherwise      → treated as a Google Places ref and proxied
+//                      through our /photo edge function
+const photoUrl = (src, w = 1200) => {
+  if (!src) return null;
+  if (/^https?:\/\//.test(src)) return src;
+  return `/photo?ref=${encodeURIComponent(src)}&w=${w}`;
+};
+
+// Make a photo URL absolute for OG/JSON-LD usage. /photo?... becomes
+// https://kindredtrips.com/photo?... ; full URLs pass through.
+const toAbs = (u) => (!u ? null : (/^https?:\/\//.test(u) ? u : `${ORIGIN}${u}`));
 
 // Assign stable, unique slugs (suffix the short id on collision).
 const slugById = new Map();
@@ -181,9 +200,35 @@ for (const r of resorts) {
 }
 const countries = [...byCountry.keys()].sort((a, b) => a.localeCompare(b));
 
+// Per-country hero photo — used as a fallback on the ~316 resort pages
+// that have neither a LiteAPI hero nor a Google Places photo of their
+// own. Prefer the country's strongest LiteAPI hero so even fallbacks
+// are curated hotel photography.
+const countryHero = new Map();
+for (const c of countries) {
+  const list = byCountry.get(c) || [];
+  const liteapiFirst = list.map((r) => liteapiHero.get(r.resort_id)).find(Boolean);
+  if (liteapiFirst) { countryHero.set(c, liteapiFirst); continue; }
+  const gpFirst = list.find((r) => r.photo_ref)?.photo_ref;
+  if (gpFirst) countryHero.set(c, gpFirst);
+}
+
+// Priority chain for any resort: curated LiteAPI hero → Google Places
+// (often older exterior photo) → country fallback. Returns whatever
+// photoUrl() will accept — full https URL OR a Google Places ref.
+function pageHero(resort) {
+  if (!resort) return null;
+  const la = liteapiHero.get(resort.resort_id);
+  if (la) return la;
+  if (resort.photo_ref) return resort.photo_ref;
+  if (resort.country && countryHero.has(resort.country)) return countryHero.get(resort.country);
+  return null;
+}
+
 // ---------- shared shell ----------
-function shell({ title, description, canonical, image, jsonld, body, breadcrumbTrail, bodyScripts }) {
+function shell({ title, description, canonical, image, imageAlt, jsonld, body, breadcrumbTrail, bodyScripts }) {
   const img = image || `${ORIGIN}/og-image.jpg`;
+  const imgAlt = imageAlt || title || "KindredTrips — Caribbean family vacations";
   const ld = (Array.isArray(jsonld) ? jsonld : [jsonld]).filter(Boolean);
   const crumbs = (breadcrumbTrail || [])
     .map((c, i, arr) =>
@@ -208,10 +253,14 @@ function shell({ title, description, canonical, image, jsonld, body, breadcrumbT
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${canonical}" />
 <meta property="og:image" content="${img}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="750" />
+<meta property="og:image:alt" content="${esc(imgAlt)}" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${esc(title)}" />
 <meta name="twitter:description" content="${esc(description)}" />
 <meta name="twitter:image" content="${img}" />
+<meta name="twitter:image:alt" content="${esc(imgAlt)}" />
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -364,7 +413,13 @@ function reviewToJsonLd(rv, resortName) {
 function resortPage(r) {
   const slug = slugById.get(r.resort_id);
   const url = `${ORIGIN}${resortPath(r)}`;
-  const hero = photoUrl(r.photo_ref, 1200);
+  // pageHero() returns the strongest available photo for this resort:
+  // curated LiteAPI hero → Google Places → country fallback. We use it
+  // for both the visible hero (better than no photo) and og:image (way
+  // better than the generic Caribbean stock).
+  const heroSrc = pageHero(r);
+  const hero = photoUrl(heroSrc, 1200);
+  const ownPhoto = !!(liteapiHero.get(r.resort_id) || r.photo_ref);
   const r5 = ratingTo5(r.rating);
   const sig = badges(r);
   const facts = factList(r);
@@ -385,7 +440,7 @@ function resortPage(r) {
     ...(r.lat && r.lng ? { geo: { "@type": "GeoCoordinates", latitude: r.lat, longitude: r.lng } } : {}),
     ...(r.stars ? { starRating: { "@type": "Rating", ratingValue: r.stars } } : {}),
     ...(r5 != null && r.reviews ? { aggregateRating: { "@type": "AggregateRating", ratingValue: r5, bestRating: 5, reviewCount: r.reviews } } : {}),
-    ...(hero ? { image: `${ORIGIN}${hero}` } : {}),
+    ...(hero ? { image: toAbs(hero) } : {}),
     ...(sig.length ? { amenityFeature: sig.map((n) => ({ "@type": "LocationFeatureSpecification", name: n, value: true })) } : {}),
     ...(reviewLd.length ? { review: reviewLd } : {}),
   };
@@ -406,7 +461,7 @@ function resortPage(r) {
     .slice(0, 8);
 
   const body = `
-${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(r.resort_name)} — family resort in ${esc(r.country)}" loading="eager" /></div>` : ""}
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(ownPhoto ? `${r.resort_name} — family resort in ${r.country}` : `${r.country} Caribbean coastline — illustrative photo`)}" loading="eager" />${ownPhoto ? "" : `<div class="seo-hero-fallback-note">Illustrative ${esc(r.country)} photo — partner hasn't supplied a hero image for ${esc(r.resort_name)} yet.</div>`}</div>` : ""}
 <h1>${esc(r.resort_name)}</h1>
 <p class="seo-sub">${esc(r.area ? `${r.area}, ${r.country}` : r.country)}${r.stars ? ` · ${r.stars}-star` : ""}${r5 != null ? ` · ${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}` : ""}</p>
 ${sig.length ? `<ul class="seo-badges">${sig.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
@@ -490,7 +545,10 @@ ${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(s.resort_name)}</a>$
     title: `${r.resort_name} — Family Resort in ${r.country} | KindredTrips`,
     description: clip(resortIntro(r), 155),
     canonical: url,
-    image: hero ? `${ORIGIN}${hero}` : null,
+    image: toAbs(hero),
+    imageAlt: ownPhoto
+      ? `${r.resort_name} — family resort in ${r.country}`
+      : `${r.country} Caribbean coastline — illustrative photo`,
     jsonld: [hotelLd, crumbLd],
     breadcrumbTrail: [
       { name: "Home", url: "/" },
@@ -539,7 +597,9 @@ function countryPage(country) {
   const beach = list.filter((r) => r.on_beach).length;
   const wp = list.filter((r) => r.water_park).length;
   const heroResort = list.find((r) => r.photo_ref);
-  const hero = heroResort ? photoUrl(heroResort.photo_ref, 1200) : null;
+  // Prefer the country's strongest LiteAPI hero (curated hotel photo)
+  // over Google Places — same priority countryHero map applies.
+  const hero = photoUrl(countryHero.get(country) || heroResort?.photo_ref, 1200);
 
   const intro = `Planning a family vacation to ${country}? KindredTrips tracks ${total} family-friendly resort${total === 1 ? "" : "s"} here — ${kc} with a kids club, ${beach} directly on the beach${wp ? `, and ${wp} with a water park` : ""}. Instead of picking ${country} first and hoping the price works, compare the total cost of flying your family here against every other Caribbean destination, ranked together by flights plus hotel for your exact party and dates.`;
 
@@ -575,7 +635,8 @@ function countryPage(country) {
   };
 
   const card = (r) => {
-    const ph = photoUrl(r.photo_ref, 600);
+    // Use the curated LiteAPI hero where available, fall back to Google Places.
+    const ph = photoUrl(pageHero(r), 600);
     const r5 = ratingTo5(r.rating);
     const bs = badges(r).slice(0, 3);
     return `<li class="seo-card">
@@ -619,7 +680,8 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></de
     title: `Family Resorts in ${country} (${total}) — Ranked by Trip Cost | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
-    image: hero ? `${ORIGIN}${hero}` : null,
+    image: toAbs(hero),
+    imageAlt: `Family resorts in ${country} — Caribbean`,
     jsonld: [collectionLd, faqLd, crumbLd],
     breadcrumbTrail: [
       { name: "Home", url: "/" },
@@ -633,11 +695,12 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></de
 // ---------- destinations index ----------
 function destinationsIndex() {
   const url = `${ORIGIN}/caribbean`;
-  const rows = countries.map((c) => {
-    const list = byCountry.get(c);
-    const hero = list.find((r) => r.photo_ref);
-    return { c, n: list.length, ph: hero ? photoUrl(hero.photo_ref, 600) : null };
-  });
+  const rows = countries.map((c) => ({
+    c,
+    n: byCountry.get(c).length,
+    // Same priority as elsewhere: curated LiteAPI hero, then GP fallback.
+    ph: photoUrl(countryHero.get(c), 600),
+  }));
   const total = resorts.length;
   const intro = `KindredTrips tracks ${fmtInt(total)} family-friendly resorts across ${countries.length} Caribbean destinations. Browse by country below, or skip straight to search — enter your airport, dates, and kids' ages and we'll rank complete trips (flights plus hotel) across every destination at once, by total cost for your family.`;
   const collectionLd = {

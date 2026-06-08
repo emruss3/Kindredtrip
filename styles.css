@@ -8539,3 +8539,13 @@ body.trip-detail-open #status { display: none !important; }
 .seo-review-pros, .seo-review-cons { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
 .seo-review-pros strong { color: #2a6b3f; }
 .seo-review-cons strong { color: #8a3a2a; }
+
+/* Small note below the hero when we're showing a country-fallback
+   photo because the resort itself has no curated photo yet. */
+.seo-hero { position: relative; }
+.seo-hero-fallback-note {
+  position: absolute; bottom: 10px; left: 14px;
+  background: rgba(13,43,69,.82); color: #fff;
+  font-size: 11px; padding: 5px 10px; border-radius: 999px;
+  max-width: calc(100% - 28px);
+}
