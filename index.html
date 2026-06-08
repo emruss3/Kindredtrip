@@ -1256,6 +1256,57 @@
   window.KT_SESSION_ID = SESSION_ID;
   window.KT_IS_INTERNAL = IS_INTERNAL;
 
+  // Pre-warm the edge-function chain so the first search doesn't eat
+  // cold-start latency. Supabase functions go idle after ~5-15 min of
+  // no traffic; the first invocation has to spin up a fresh isolate
+  // (~2-5s per fn). The Search → process_search_batch → start_pricing
+  // chain is FOUR cold starts in a row, which historically pushed the
+  // first search past the polling timeout and showed a false "No
+  // resorts match" error.
+  //
+  // OPTIONS preflights load the V8 isolate without running the handler
+  // body, so they warm the worker cheaply (each is ~200 bytes wire).
+  // Fired idle so they don't compete with initial paint, and on first
+  // wizard interaction as a safety net for users who arrive and submit
+  // before the idle callback fires.
+  const _EDGE_FNS_TO_WARM = [
+    "Search",
+    "process_search_batch",
+    "start_pricing",
+    "get_packages",
+    "get_hotel_offers",
+    "get_flight_offers",
+  ];
+  let _warmed = false;
+  function warmupEdgeFunctions() {
+    if (_warmed) return;
+    _warmed = true;
+    for (const fn of _EDGE_FNS_TO_WARM) {
+      // No await — pure fire-and-forget. keepalive lets the request
+      // finish even if the user navigates immediately after triggering.
+      fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+        method: "OPTIONS",
+        keepalive: true,
+        headers: { "x-warmup": "1" },
+      }).catch(() => {});
+    }
+  }
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(warmupEdgeFunctions, { timeout: 1500 });
+  } else {
+    setTimeout(warmupEdgeFunctions, 200);
+  }
+  // Belt-and-suspenders: warm again the instant a user touches the
+  // wizard, in case the idle callback hasn't fired yet.
+  ["focusin", "pointerdown"].forEach((evt) => {
+    document.addEventListener(evt, function once(e) {
+      if (e.target.closest && e.target.closest("#search-form, #search-popover")) {
+        warmupEdgeFunctions();
+        document.removeEventListener(evt, once);
+      }
+    }, { passive: true });
+  });
+
   let lastSearchId = null;
   let lastSearchSummary = null;
   let lastIsWarmingUp = false;
@@ -2020,14 +2071,54 @@
       document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
 
       setStatus("Searching every Caribbean resort…", { spinner: true });
+      // Poll get_packages until we have packages — but trust the worker's
+      // own status field, not our wall-clock timeout, to decide whether
+      // it's a true "no matches" case. The previous loop bailed after 30
+      // × 1.5s = 45s and threw "No resorts match those constraints"
+      // whenever process_search_batch took longer than that to write its
+      // first row (typically on a cold start), which read as a no-results
+      // page even though the worker was still chugging. Now:
+      //   - Keep polling while job.status is null/'queued'/'running'.
+      //   - Bail with a true no-results message only when the worker has
+      //     reached 'hotel_done' / 'flights_done' with zero packages.
+      //   - Cap absolute wait at ~150s as a circuit breaker against a
+      //     stuck worker (process_search_batch should always finish well
+      //     under this even fully cold).
       let pkgData = null;
-      for (let i = 0; i < 30; i++) {
-        await sleep(1500);
+      const POLL_INTERVAL_MS = 1500;
+      const MAX_WALL_MS = 150000;
+      const started = Date.now();
+      while (true) {
+        await sleep(POLL_INTERVAL_MS);
         pkgData = await callFn(`get_packages?search_id=${lastSearchId}&limit=1`, { method: "GET" });
-        if (pkgData.summary && pkgData.summary.total_packages > 0) break;
-      }
-      if (!pkgData || !pkgData.summary || pkgData.summary.total_packages === 0) {
-        throw new Error("No resorts match those constraints. Try clearing a filter or widening your dates.");
+        const total = pkgData?.summary?.total_packages ?? 0;
+        const jobStatus = pkgData?.job?.status ?? null;
+        if (total > 0) break;
+        const elapsed = Date.now() - started;
+        // Worker has explicitly finished and there are zero packages →
+        // true no-results case.
+        const terminal = jobStatus === "hotel_done"
+          || jobStatus === "flights_done"
+          || pkgData?.job?.flights_done === true;
+        if (terminal && total === 0) {
+          throw new Error("No resorts match those constraints. Try clearing a filter or widening your dates.");
+        }
+        // Worker hit an error → surface it instead of silently retrying.
+        if (pkgData?.job?.error) {
+          throw new Error(`Search failed: ${pkgData.job.error}`);
+        }
+        // Keep the user informed during long cold-start runs instead of a
+        // static spinner. The first window of a cold worker can sit at 0
+        // packages for 30-60s before the first batch lands.
+        if (elapsed > 15000 && (elapsed - 15000) % 6000 < POLL_INTERVAL_MS) {
+          const note = jobStatus === "running"
+            ? "Pricing flights across the Caribbean…"
+            : "Spinning up the search workers (first search after an idle period takes a bit longer)…";
+          setStatus(note, { spinner: true });
+        }
+        if (elapsed >= MAX_WALL_MS) {
+          throw new Error("The search is taking longer than expected. Refresh and try again — the workers are warm now and the next attempt should be much faster.");
+        }
       }
 
       // Hand status off to the live progress widget — it shows real counts
