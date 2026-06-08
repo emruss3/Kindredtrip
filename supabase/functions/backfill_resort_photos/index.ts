@@ -1,16 +1,19 @@
-// Backfills photo references for resorts using the Google Places API.
+// Backfills photo references AND lat/lng for resorts using the Google
+// Places API. v2 (2026-06-08) also captures geometry.location so we
+// can drive LiteAPI matching (which is keyed on lat/lng) without a
+// separate geocoding pass.
 //
 // Flow per resort:
-//   1) Text search by "<resort_name>, <country>" with type=lodging
-//   2) Take top result, fetch Place Details with fields=photos
-//   3) Save place_id + photo_references[] + html_attributions[]
+//   1) Text search by "<resort_name>, <area>, <country>" with type=lodging
+//   2) Take top result, fetch Place Details with fields=photos,geometry/location
+//   3) Save place_id + photo_references[] + html_attributions[] + lat/lng
 //
 // Process in batches; auto-chain the next batch until done.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "backfill_resort_photos_v1";
+const VERSION = "backfill_resort_photos_v2_geo";
 
 function corsHeaders() {
   return {
@@ -33,7 +36,9 @@ async function googleTextSearch(apiKey: string, query: string) {
 async function googlePlaceDetails(apiKey: string, placeId: string) {
   const u = new URL("https://maps.googleapis.com/maps/api/place/details/json");
   u.searchParams.set("place_id", placeId);
-  u.searchParams.set("fields", "photos");
+  // v2: ask for geometry/location too. Both photos and geometry/location
+  // are in the "Basic" SKU tier — same billable price as photos alone.
+  u.searchParams.set("fields", "photos,geometry/location,name");
   u.searchParams.set("key", apiKey);
   const res = await fetch(u.toString());
   const json = await res.json();
@@ -119,13 +124,30 @@ serve(async (req) => {
         const photos = details.result?.photos ?? [];
         const photo_refs = photos.map((p: any) => p.photo_reference).filter(Boolean).slice(0, 8);
         const photo_attributions = photos.map((p: any) => (p.html_attributions ?? []).join(" | ")).slice(0, 8);
+        // v2: capture lat/lng from geometry.location (or fall back to
+        // the textsearch top result, which also includes it).
+        const loc = details.result?.geometry?.location ?? top.geometry?.location ?? null;
+        const lat = Number(loc?.lat);
+        const lng = Number(loc?.lng);
+        const hasGeo = Number.isFinite(lat) && Number.isFinite(lng);
+        const resolvedName = details.result?.name ?? top.name ?? null;
 
-        await sb.from("resorts").update({
+        const patch: Record<string, unknown> = {
           google_place_id: placeId,
           photo_refs: photo_refs.length ? photo_refs : null,
           photo_attributions: photo_attributions.length ? photo_attributions : null,
           photos_fetched_at: nowIso,
-        }).eq("resort_id", r.resort_id);
+        };
+        if (hasGeo) {
+          patch.latitude = lat;
+          patch.longitude = lng;
+        }
+        if (resolvedName) {
+          patch.google_place_resolved_name = resolvedName;
+          patch.google_place_verified_at = nowIso;
+          patch.google_place_verification_status = "auto_text_search";
+        }
+        await sb.from("resorts").update(patch).eq("resort_id", r.resort_id);
 
         succeeded++;
       } catch (e) {
