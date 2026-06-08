@@ -107,11 +107,11 @@ function searchWidget({ country, resortId, headline, sub, selfPath }) {
     <datalist id="seo-origin-airports">${opts}</datalist>
     <label class="seo-wizard-field">
       <span>Check-in</span>
-      <input type="date" name="date_start" value="${date_start}" required />
+      <input type="date" name="date_start" value="${date_start}" required onchange="(function(e){var f=e.target.form;if(!f)return;var d=f.elements.date_end;if(d){d.min=e.target.value||'';if(d.value&&e.target.value&&d.value<e.target.value)d.value=e.target.value;}})(event)" />
     </label>
     <label class="seo-wizard-field">
       <span>Check-out</span>
-      <input type="date" name="date_end" value="${date_end}" required />
+      <input type="date" name="date_end" value="${date_end}" min="${date_start}" required />
     </label>
     <label class="seo-wizard-field">
       <span>Adults</span>

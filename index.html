@@ -165,7 +165,7 @@
       </div>
       <div class="search-field">
         <label for="po_date_start">Check-in</label>
-        <input id="po_date_start" type="date" required />
+        <input id="po_date_start" type="date" required onchange="syncEndDateMin('po_date_start','po_date_end')" />
       </div>
       <div class="search-field">
         <label for="po_date_end">Check-out</label>
@@ -295,7 +295,7 @@
         <div class="search-field search-field-combo" onclick="this.querySelector('input').focus()">
           <label>Dates</label>
           <div class="search-field-row">
-            <input id="date_start" type="date" required aria-label="Check-in" />
+            <input id="date_start" type="date" required aria-label="Check-in" onchange="syncEndDateMin()" />
             <span class="search-field-sep" aria-hidden="true">→</span>
             <input id="date_end" type="date" required aria-label="Check-out" />
           </div>
@@ -818,6 +818,20 @@
     document.getElementById("date_end").value = fmt(end);
   })();
 
+  // Enforce check-out >= check-in at the picker UI level (defense in
+  // depth — runSearch / runSearchFromPopover also reject invalid ranges
+  // before the network call). If the user moves check-in past check-out,
+  // bump check-out to match so they can't end up with an invalid pair.
+  function syncEndDateMin(startId, endId) {
+    const s = document.getElementById(startId || "date_start");
+    const e = document.getElementById(endId || "date_end");
+    if (!s || !e) return;
+    e.min = s.value || "";
+    if (e.value && s.value && e.value < s.value) e.value = s.value;
+  }
+  syncEndDateMin();
+  syncEndDateMin("po_date_start", "po_date_end");
+
   // Deep-link entry from a generated SEO page (/resort/<slug>,
   // /caribbean/<country>). Accepted params:
   //   origin           IATA, e.g. BNA
@@ -1210,6 +1224,11 @@
     runSearch();
   }
 
+  // Stable anonymous visitor/session id. Persists across visits via
+  // localStorage; same key the outbound_clicks side sends so a click
+  // joins back to the search that produced it. Sent on the searches
+  // insert (Search edge fn) and on outbound_clicks (generate_booking_
+  // redirect).
   const SESSION_ID = (function () {
     let id = localStorage.getItem("kt_session_id");
     if (!id) {
@@ -1219,6 +1238,23 @@
     }
     return id;
   })();
+
+  // Self-tag internal traffic so test searches don't pollute funnel
+  // numbers. Visit /?internal=1 once on any browser/device you want
+  // tagged and the flag sticks in localStorage; /?internal=0 clears
+  // it. The flag rides on every searches insert and click event.
+  const IS_INTERNAL = (function () {
+    try {
+      const qp = new URLSearchParams(location.search);
+      if (qp.get("internal") === "1") localStorage.setItem("kt_internal", "1");
+      else if (qp.get("internal") === "0") localStorage.removeItem("kt_internal");
+      return localStorage.getItem("kt_internal") === "1";
+    } catch { return false; }
+  })();
+  // Surface for resort-booking.js (loaded separately on /resort/<slug>)
+  // and any future widgets that need the same identity.
+  window.KT_SESSION_ID = SESSION_ID;
+  window.KT_IS_INTERNAL = IS_INTERNAL;
 
   let lastSearchId = null;
   let lastSearchSummary = null;
@@ -1944,13 +1980,25 @@
       const flags = {};
       flagInputs.forEach((cb) => { flags[cb.dataset.flag] = cb.checked; });
 
+      const dateStart = document.getElementById("date_start").value;
+      const dateEnd = document.getElementById("date_end").value;
+      // Two of the 8 real searches in production had end < start (YYZ,
+      // YUL) because the date picker accepted invalid ranges. Guard
+      // here so we never insert garbage.
+      if (!dateStart || !dateEnd || dateEnd < dateStart) {
+        submitBtn.disabled = false;
+        setStatus("Check-out must be on or after check-in.", { error: true });
+        return;
+      }
       const body = {
         origin_iata: document.getElementById("origin").value.trim().toUpperCase(),
-        date_start: document.getElementById("date_start").value,
-        date_end: document.getElementById("date_end").value,
+        date_start: dateStart,
+        date_end: dateEnd,
         adults: parseInt(document.getElementById("adults").value, 10) || 2,
         child_ages: parseChildAges(document.getElementById("child_ages").value),
         excluded_countries: [],
+        session_id: SESSION_ID,
+        is_internal: IS_INTERNAL,
         ...flags,
       };
       if (homepageBudget) body.budget_total = homepageBudget;

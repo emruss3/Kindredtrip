@@ -27,6 +27,34 @@
 
   if (!RESORT_ID) return;
 
+  // Same session-id + internal-traffic contract the homepage uses (see
+  // index.html). Read directly from localStorage so the resort page
+  // works standalone — and honour /?internal=1 / /?internal=0 here too
+  // so visitors who land on a resort page first can self-tag.
+  const SESSION_ID = (function () {
+    try {
+      let id = localStorage.getItem("kt_session_id");
+      if (!id) {
+        id = (crypto.randomUUID && crypto.randomUUID()) ||
+          (Date.now().toString(36) + Math.random().toString(36).slice(2));
+        localStorage.setItem("kt_session_id", id);
+      }
+      return id;
+    } catch { return null; }
+  })();
+  const IS_INTERNAL = (function () {
+    try {
+      const qp = new URLSearchParams(location.search);
+      if (qp.get("internal") === "1") localStorage.setItem("kt_internal", "1");
+      else if (qp.get("internal") === "0") localStorage.removeItem("kt_internal");
+      return localStorage.getItem("kt_internal") === "1";
+    } catch { return false; }
+  })();
+  // Expose for any other widget that might want them (e.g. the SEO
+  // wizard-only on country pages, if we later add the same flow there).
+  window.KT_SESSION_ID = SESSION_ID;
+  window.KT_IS_INTERNAL = IS_INTERNAL;
+
   // ---- DOM helpers ------------------------------------------------------
   const $ = (id) => document.getElementById(id);
   const esc = (s) =>
@@ -312,6 +340,8 @@
         require_kids_club: false,
         // Server-side scope — saves the worker from pricing 974 properties.
         included_countries: COUNTRY ? [COUNTRY] : [],
+        session_id: SESSION_ID,
+        is_internal: IS_INTERNAL,
       }),
     });
     state.search_id = search.search_id;
@@ -422,7 +452,7 @@
               selected_match_path: room?.match_path || null,
               selected_matched_room_id: room?.matched_room_id || null,
               click_type: "hotel",
-              session_id: window.SESSION_ID || `rb-${Date.now()}`,
+              session_id: SESSION_ID,
               referer: location.href,
             }),
           });
@@ -458,6 +488,10 @@
       const date_start = String(fd.get("date_start") || "");
       const date_end = String(fd.get("date_end") || "");
       if (!origin || !date_start || !date_end) return;
+      if (date_end < date_start) {
+        setStatus("Check-out must be on or after check-in.", "warn");
+        return;
+      }
       const party = partyFromForm(form);
       // Replace URL with the search params so refresh/share keeps state,
       // WITHOUT navigating to /.
