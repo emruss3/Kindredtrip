@@ -794,14 +794,26 @@
     return Math.abs(h);
   }
   function photoForResort(resort, w = 480, photoIndex = 0) {
-    // Real Google Places photo when available — served via Vercel CDN-fronted /photo
-    // (rewrites to the Supabase resort_photo proxy; Vercel caches at the edge for 30 days).
+    // Priority chain matches what the SEO pages use, so a card on the
+    // search results page and the /resort/<slug> SEO page show the same
+    // photo for the same resort:
+    //   1) Curated LiteAPI hotel photo (cupid.travel — exterior, lobby,
+    //      pool). Cached in resorts.liteapi_hotel_photos for all 522
+    //      LiteAPI-matched resorts.
+    //   2) Google Places photo (older exterior, served via Vercel-CDN
+    //      proxy /photo?ref=...).
+    //   3) Hashed Unsplash stock fallback (only for the ~167 catalog
+    //      resorts with neither source).
+    const liteapi = resort?.liteapi_hotel_photos;
+    if (Array.isArray(liteapi) && liteapi.length > 0) {
+      const url = liteapi[photoIndex % liteapi.length];
+      if (typeof url === "string" && url) return url;
+    }
     const refs = resort?.photo_refs;
     if (Array.isArray(refs) && refs.length > 0) {
       const ref = refs[photoIndex % refs.length];
       return `/photo?ref=${encodeURIComponent(ref)}&w=${w}`;
     }
-    // Fallback: stock Caribbean image hashed by resort_id
     const seed = resort?.resort_id || resort?.resort_name || "default";
     const id = PHOTO_POOL[hashStr(seed) % PHOTO_POOL.length];
     return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
@@ -2893,7 +2905,7 @@
       if (pkgs[i]) {
         const p = pkgs[i];
         const r = p.resorts || {};
-        const photo = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 220);
+        const photo = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs, liteapi_hotel_photos: r.liteapi_hotel_photos }, 220);
         slots.push(`
           <div class="compare-slot filled">
             <img class="compare-slot-photo" src="${photo}" alt="${escapeHtml(r.resort_name || "")}" loading="lazy" />
@@ -2936,7 +2948,7 @@
 
     const photoCell = (p) => {
       const rr = r(p);
-      const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs }, 320);
+      const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs, liteapi_hotel_photos: rr.liteapi_hotel_photos }, 320);
       return `<div class="compare-cell-photo"><img src="${photo}" alt="${escapeHtml(rr.resort_name || "")}" loading="lazy" /><div class="compare-cell-name">${escapeHtml(rr.resort_name || "")}</div><div class="compare-cell-sub">${escapeHtml(rr.area || rr.country || "")}</div></div>`;
     };
     const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${renderFlightCostBreakdown(p)} · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
@@ -3690,7 +3702,7 @@
   // CTAs — just resort context and a "finding live prices…" state.
   function renderPendingCard(p) {
     const r = p.resorts || {};
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs, liteapi_hotel_photos: r.liteapi_hotel_photos }, 600);
     const stars = Math.round(Number(r.cap_star_rating ?? p.highlights?.star_rating ?? 0));
     const signals = [];
     const r5 = ratingTo5(r.avg_user_rating);
@@ -3764,7 +3776,7 @@
 
     const isLiveCard = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 600);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs, liteapi_hotel_photos: r.liteapi_hotel_photos }, 600);
     const isCompared = compareSet.has(p.package_id);
 
     return `
@@ -3811,7 +3823,7 @@
     const fit = familyFitInfo(p);
     const tripScore = p._tripScore ?? Math.round(compositeScore(p, [p]));
     const tripLabel = tripScoreLabel(tripScore);
-    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
+    const photoUrl = photoForResort({ resort_id: p.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs, liteapi_hotel_photos: r.liteapi_hotel_photos }, 1200);
     const isLive = p.flight_supplier === "liteapi" && p.hotel_supplier === "liteapi";
     const delta = budgetDelta(p);
     const eyebrow = rankBadge?.label || "Best overall for your family";
@@ -4310,7 +4322,7 @@
       fmtSize(r.rooms_count) ? escapeHtml(fmtSize(r.rooms_count)) : null,
     ].filter(Boolean).join(`<span class="dot">·</span>`);
 
-    const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs }, 1200);
+    const photoUrl = photoForResort({ resort_id: pkg.resort_id, resort_name: r.resort_name, photo_refs: r.photo_refs, liteapi_hotel_photos: r.liteapi_hotel_photos }, 1200);
 
     const renderTagList = (tagsList, plays = new Set()) => {
       if (!tagsList || tagsList.length === 0) return "";
@@ -4546,7 +4558,7 @@
           ${alts.map(({ pkg: a, why }) => {
             const ar = a.resorts || {};
             const aDelta = budgetDelta(a);
-            const aPhoto = photoForResort({ resort_id: a.resort_id, resort_name: ar.resort_name, photo_refs: ar.photo_refs }, 400);
+            const aPhoto = photoForResort({ resort_id: a.resort_id, resort_name: ar.resort_name, photo_refs: ar.photo_refs, liteapi_hotel_photos: ar.liteapi_hotel_photos }, 400);
             return `
               <button class="alt-card" onclick="openResortModal('${a.package_id}')">
                 <div class="alt-card-photo"><img src="${aPhoto}" alt="${escapeHtml(ar.resort_name || "Alternative")}" loading="lazy" /></div>
