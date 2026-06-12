@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v15_skip_unfittable_resorts";
+const VERSION = "process_search_batch_v16_service_excluded";
 
 // CHANGE v14 -> v15: drop resorts that can never satisfy the user's
 // search constraints BEFORE we seed a package row for them. Avoids
@@ -109,6 +109,7 @@ serve(async (req) => {
         cap_has_villa, cap_child_allowed, cap_fetched_at
       `)
       .eq("audience", "Family")
+      .eq("service_excluded", false)
       .not("airport_code", "is", null);
 
     if (included_countries) resortsQuery = resortsQuery.in("country", included_countries);
