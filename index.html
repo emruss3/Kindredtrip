@@ -1266,6 +1266,50 @@
   window.KT_SESSION_ID = SESSION_ID;
   window.KT_IS_INTERNAL = IS_INTERNAL;
 
+  // Mid-funnel event logging. Fire-and-forget POST to the log_event edge
+  // fn (the anon key can't write search_signals directly since the RLS
+  // lockdown — the edge fn writes it with the service role). Never awaited,
+  // never throws, so a logging hiccup can't affect the UI. Uses sendBeacon
+  // on page-hide events so they survive navigation.
+  function trackEvent(signal_type, payload) {
+    try {
+      const bodyObj = {
+        signal_type,
+        session_id: SESSION_ID,
+        is_internal: IS_INTERNAL,
+        search_id: lastSearchId || null,
+        payload: payload || null,
+      };
+      const url = `${SUPABASE_URL}/functions/v1/log_event`;
+      const body = JSON.stringify(bodyObj);
+      // sendBeacon can't set the Authorization header log_event's verify_jwt
+      // needs, so use it only as a last resort on unload; prefer fetch.
+      if (signal_type === "search_abandoned" && navigator.sendBeacon) {
+        const blob = new Blob([body], { type: "application/json" });
+        // Beacon to a no-JWT variant isn't available; best-effort fetch with
+        // keepalive instead, which DOES carry headers and survives unload.
+        fetch(url, {
+          method: "POST", keepalive: true, body,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY },
+        }).catch(() => {});
+        return;
+      }
+      fetch(url, {
+        method: "POST", keepalive: true, body,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY },
+      }).catch(() => {});
+    } catch (_) { /* analytics must never break the page */ }
+  }
+  window.KT_trackEvent = trackEvent;
+
+  // Honest price label. A package is "live" only when BOTH suppliers are
+  // LiteAPI (real bookable rates). Anything else is still an estimate while
+  // pricing settles — say so, instead of the old no-op `? "Live price" :
+  // "Live price"` that labelled everything live.
+  function priceLabel(isLivePkg) {
+    return isLivePkg ? "Live partner rate" : "Estimate · confirming";
+  }
+
   // Pre-warm the edge-function chain so the first search doesn't eat
   // cold-start latency. Supabase functions go idle after ~5-15 min of
   // no traffic; the first invocation has to spin up a fresh isolate
@@ -1329,6 +1373,26 @@
   // live booking flow). Cleared after first use so refilters don't keep
   // re-opening it.
   let pendingAutoOpenResortId = null;
+
+  // Funnel state: true between search_started and the first results paint.
+  // Used to fire search_abandoned if the user leaves during the wait.
+  let __searchInFlight = false;
+  let __searchStartedAt = 0;
+  let __firstPaintLogged = false;
+
+  // If the user navigates away or backgrounds the tab while a search is
+  // still pricing, that's an abandonment — the cold-start wait is the
+  // prime suspect, and this is how we measure it.
+  function flushAbandonIfWaiting() {
+    if (__searchInFlight && !__firstPaintLogged) {
+      __searchInFlight = false;
+      trackEvent("search_abandoned", { ms_waited: Date.now() - __searchStartedAt });
+    }
+  }
+  window.addEventListener("pagehide", flushAbandonIfWaiting);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAbandonIfWaiting();
+  });
 
   // Filter state
   const filters = {
@@ -2088,6 +2152,16 @@
       const search = await callFn("Search", { method: "POST", body: JSON.stringify(body) });
       lastSearchId = search.search_id;
       if (!lastSearchId) throw new Error("No search_id returned");
+      // Funnel: search created. Mark the search as "in flight" so an
+      // unload during the pricing wait fires search_abandoned.
+      __searchInFlight = true;
+      __searchStartedAt = Date.now();
+      __firstPaintLogged = false;
+      trackEvent("search_started", {
+        origin: body.origin_iata, nights: null,
+        adults: body.adults, kids: (body.child_ages || []).length,
+        countries: body.included_countries || [],
+      });
 
       // Smooth scroll to results area while skeleton shows
       document.getElementById("results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2735,6 +2809,18 @@
     }
 
     main.innerHTML = headerHtml + filterPills + body;
+
+    // Funnel: first time we actually paint result cards for this search.
+    // This is the "did the user survive the wait" milestone, and it ends
+    // the abandonment window.
+    if (!__firstPaintLogged && visible.length > 0) {
+      __firstPaintLogged = true;
+      __searchInFlight = false;
+      trackEvent("results_first_paint", {
+        ms_to_paint: __searchStartedAt ? Date.now() - __searchStartedAt : null,
+        visible_count: visible.length,
+      });
+    }
     renderCompareTray();
 
     // Deep-link from a /resort/<slug> SEO page: the homepage was loaded
@@ -3803,7 +3889,7 @@
           <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
         <div class="card-price">
-          <div class="price-from${isLiveCard ? " live" : ""}">${isLiveCard ? "Live price" : "Live price"}</div>
+          <div class="price-from${isLiveCard ? " live" : ""}">${escapeHtml(priceLabel(isLiveCard))}</div>
           <p class="price-total">${fmtMoney(p.total_price)}</p>
           <div class="price-sub">flights + hotel</div>
           <div class="price-breakdown-inline">
@@ -3868,7 +3954,7 @@
             ${reasonsHtml}
           </div>
           <div class="hero-card-pricing">
-            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
+            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
             <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
             <div class="hero-price-sub">total · flights + hotel</div>
             <div class="hero-price-split">
@@ -4300,6 +4386,16 @@
     if (!pkg) return;
     const r = pkg.resorts || {};
     const tags = pkg._tags || extractTags(pkg);
+    // Funnel: a result was opened. Rank position is the index in the
+    // currently-rendered, sorted list — tells us whether people open the
+    // top result or dig.
+    trackEvent("trip_opened", {
+      resort_id: pkg.resort_id,
+      country: r.country || null,
+      rank: allPackages.findIndex((x) => x.package_id === packageId),
+      total_price: pkg.total_price ?? null,
+      is_live: pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi",
+    });
 
     const allKidTagsInOrder = KIDS_AMENITY_PRIORITY.filter((t) => tags.amenities.includes(t));
     const activityTags = ACTIVITY_PRIORITY.filter((t) => tags.amenities.includes(t));
@@ -4351,7 +4447,7 @@
 
     const tripFitTotal = `
       <div class="trip-fit-total">
-        <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
+        <div class="price-from${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">
@@ -4638,7 +4734,7 @@
     const rail = `
       <aside class="trip-side-col">
         <div class="trip-rail trip-fit-summary">
-          <div class="price-from${isLive ? " live" : ""}">${isLive ? "Live price" : "Live price"}</div>
+          <div class="price-from${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
           <p class="price-total">${fmtMoney(pkg.total_price)}</p>
           <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
           <div class="trip-fit-breakdown">
@@ -4651,8 +4747,8 @@
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
             <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}</b></div>
           </div>
-          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
-          <button class="btn-link-secondary" onclick="openBookingDotCom('${pkg.package_id}')">Compare on Booking.com</button>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
+          <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees.</div>
           <div class="trip-rail-actions">
             <button type="button" class="trip-rail-action" title="Send to self" onclick="sendTripToSelf('${pkg.package_id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
@@ -4809,14 +4905,16 @@
 
       ${compareSection ? `<section class="trip-alts">${compareSection}</section>` : ""}
 
-      <p class="modal-footer-note">Prices are KindredTrips estimates based on rating tier, country, and party size. Final pricing is set by the booking partner. Live flight + hotel rates are pulled when you click through.</p>
+      <p class="modal-footer-note">${isLive
+        ? "Prices are live flight + hotel rates for your party and dates, pulled from our booking partners. The partner shows the same fare when you click through — we don't add fees."
+        : "Live rates are still loading for this trip — the price shown is an estimate based on rating tier, country, and party size. The exact fare is confirmed by the booking partner when you click through."}</p>
 
       <div class="trip-mobile-cta">
         <div class="trip-mobile-cta-info">
           <div class="trip-mobile-cta-price"><b>${fmtMoney(pkg.total_price)}</b></div>
           <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>
         </div>
-        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">See hotel rates →</button>
+        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
       </div>
     `;
 
@@ -7160,6 +7258,10 @@
     }
   }
   function watchTrip(packageId) {
+    // Funnel: measures demand for price-drop alerts / email capture — the
+    // signal that tells us whether to build the real "watch" feature.
+    const wp = allPackages.find((p) => p.package_id === packageId);
+    trackEvent("watch_trip_click", { resort_id: wp?.resort_id || null, total_price: wp?.total_price ?? null });
     try {
       const watched = JSON.parse(localStorage.getItem("kt_watched_trips") || "[]");
       if (!watched.includes(packageId)) {
@@ -7259,6 +7361,16 @@
   }
 
   async function bookHotel(packageId) {
+    // Funnel: booking intent — the money moment. (generate_booking_redirect
+    // also logs the authoritative outbound_clicks row server-side; this
+    // mirrors it into search_signals so the whole funnel lives in one view.)
+    const bp = allPackages.find((p) => p.package_id === packageId);
+    trackEvent("booking_click", {
+      resort_id: bp?.resort_id || null,
+      total_price: bp?.total_price ?? null,
+      is_live: bp ? (bp.flight_supplier === "liteapi" && bp.hotel_supplier === "liteapi") : null,
+      click_type: "hotel",
+    });
     try {
       // Pass the user's currently-selected offer + its match path through
       // to the backend. The booking flow then re-fetches /hotels/rates

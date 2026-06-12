@@ -55,6 +55,17 @@
   window.KT_SESSION_ID = SESSION_ID;
   window.KT_IS_INTERNAL = IS_INTERNAL;
 
+  // Fire-and-forget funnel event to the log_event edge fn. Never throws.
+  function logEvent(signal_type, payload) {
+    try {
+      fetch(`${SUPABASE_URL}/functions/v1/log_event`, {
+        method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY },
+        body: JSON.stringify({ signal_type, session_id: SESSION_ID, is_internal: IS_INTERNAL, payload: payload || null }),
+      }).catch(() => {});
+    } catch (_) { /* analytics must never break the page */ }
+  }
+
   // ---- DOM helpers ------------------------------------------------------
   const $ = (id) => document.getElementById(id);
   const esc = (s) =>
@@ -438,6 +449,10 @@
       if (e.target.id === "rb-book-hotel") {
         e.preventDefault();
         if (!state.package_id) return;
+        logEvent("booking_click", {
+          resort_id: RESORT_ID, click_type: "hotel",
+          offer_id: state.selectedRoomId || null,
+        });
         const btn = e.target;
         btn.disabled = true;
         const orig = btn.textContent;
@@ -470,8 +485,17 @@
         e.preventDefault();
         const flight = state.flights.find((f) => f.offer_id === state.selectedFlightId);
         const url = flight?.deep_link || flight?.booking_url || flight?.book_url;
+        // Log the flight booking click so it's tracked like hotel clicks
+        // (previously this opened the deep-link with no telemetry at all).
+        logEvent("booking_click", {
+          resort_id: RESORT_ID,
+          click_type: "flight",
+          offer_id: flight?.offer_id || null,
+          total_price: flight?.total_price ?? null,
+          has_link: !!url,
+        });
         if (url) window.open(url, "_blank", "noopener,noreferrer");
-        else alert("No direct booking link available for this fare yet — book the hotel first and we'll surface a flight link after.");
+        else alert("This fare doesn't have a direct booking link yet. Book the room below and we'll show bookable flights for your dates.");
       }
     });
   }
