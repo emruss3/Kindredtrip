@@ -964,8 +964,7 @@
 
     chipsEl.innerHTML = visible.map((country) => {
       const active = filters.country.has(country) ? " active" : "";
-      const safe = country.replace(/'/g, "\\'");
-      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination('${safe}')">${escapeHtml(country)}</button>`;
+      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination(${jsArg(country)})">${escapeHtml(country)}</button>`;
     }).join("");
 
     const hintEl = document.getElementById("dest-hint");
@@ -1147,8 +1146,7 @@
     const list = homepageDestinations();
     grid.innerHTML = list.map((country) => {
       const active = filters.country.has(country) ? " active" : "";
-      const safe = country.replace(/'/g, "\\'");
-      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination('${safe}'); renderDestPicker();">${escapeHtml(country)}</button>`;
+      return `<button type="button" class="toggle${active}" onclick="toggleHomepageDestination(${jsArg(country)}); renderDestPicker();">${escapeHtml(country)}</button>`;
     }).join("");
   }
 
@@ -1542,6 +1540,18 @@
     return String(str).replace(/[&<>"']/g, (c) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
+  }
+
+  // Safely embed a dynamic value as a JS string literal inside an inline
+  // on*="" handler. JSON.stringify does the JS-string escaping (quotes,
+  // backslashes, newlines); escapeHtml then neutralises the HTML-special
+  // chars so the value can't break out of the double-quoted attribute.
+  // Usage (note: NO surrounding quotes — jsArg supplies them):
+  //   onclick="setCountryFilter(${jsArg(country)})"
+  // Replaces the old `'${country.replace(/'/g,"\\'")}'` pattern, which a
+  // crafted catalogue value (embedded backtick/newline) could escape.
+  function jsArg(v) {
+    return escapeHtml(JSON.stringify(String(v ?? "")));
   }
 
   function fmtMoney(n) {
@@ -2768,7 +2778,7 @@
     const sections = ordered.map(([country, pkgs]) => {
       const cards = pkgs.slice(0, 5).map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
       const more = pkgs.length > 5
-        ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add('${country.replace(/'/g, "\\'")}'); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
+        ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add(${jsArg(country)}); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
         : "";
       return `
         <section class="dest-group">
@@ -3197,8 +3207,7 @@
 
     const rows = visible.map(([country, count]) => {
       const active = filters.country.has(country) ? " active" : "";
-      const safeCountry = country.replace(/'/g, "\\'");
-      return `<button class="tag-row${active}" onclick="setCountryFilter('${safeCountry}')">
+      return `<button class="tag-row${active}" onclick="setCountryFilter(${jsArg(country)})">
         <span class="tag-checkbox"></span>
         <span class="tag-label">${escapeHtml(country)}</span>
         <span class="tag-count">${count}</span>
@@ -3238,8 +3247,7 @@
 
     const rows = visible.map(([tag, count]) => {
       const active = activeSet.has(tag) ? " active" : "";
-      const safeTag = tag.replace(/'/g, "\\'");
-      return `<button class="tag-row${active}" onclick="toggleTag('${group}','${safeTag}')">
+      return `<button class="tag-row${active}" onclick="toggleTag(${jsArg(group)},${jsArg(tag)})">
         <span class="tag-checkbox"></span>
         <span class="tag-label">${escapeHtml(tag)}</span>
         <span class="tag-count">${count}</span>
@@ -3276,8 +3284,7 @@
 
     const rows = visible.map(([brand, count]) => {
       const active = filters.brands.has(brand) ? " active" : "";
-      const safe = brand.replace(/'/g, "\\'");
-      return `<button class="tag-row${active}" onclick="toggleTag('brands','${safe}')">
+      return `<button class="tag-row${active}" onclick="toggleTag('brands',${jsArg(brand)})">
         <span class="tag-checkbox"></span>
         <span class="tag-label">${escapeHtml(brand)}</span>
         <span class="tag-count">${count}</span>
@@ -3343,13 +3350,11 @@
   function renderActiveFilterPills() {
     const pills = [];
     filters.country.forEach((country) => {
-      const safe = country.replace(/'/g, "\\'");
-      pills.push(`<button class="active-filter-pill" onclick="setCountryFilter('${safe}')">${escapeHtml(country)}<span class="x">×</span></button>`);
+      pills.push(`<button class="active-filter-pill" onclick="setCountryFilter(${jsArg(country)})">${escapeHtml(country)}<span class="x">×</span></button>`);
     });
     [["amenities", filters.amenities], ["rooms", filters.rooms], ["styles", filters.styles], ["highlights", filters.highlights], ["brands", filters.brands]].forEach(([group, set]) => {
       set.forEach((tag) => {
-        const safe = tag.replace(/'/g, "\\'");
-        pills.push(`<button class="active-filter-pill" onclick="toggleTag('${group}','${safe}')">${escapeHtml(tag)}<span class="x">×</span></button>`);
+        pills.push(`<button class="active-filter-pill" onclick="toggleTag(${jsArg(group)},${jsArg(tag)})">${escapeHtml(tag)}<span class="x">×</span></button>`);
       });
     });
     if (filters.priceMin != null || filters.priceMax != null) {
