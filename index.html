@@ -7283,21 +7283,121 @@
     }
   }
   function watchTrip(packageId) {
-    // Funnel: measures demand for price-drop alerts / email capture — the
-    // signal that tells us whether to build the real "watch" feature.
+    // Funnel: peak-intent moment. Capture demand for price-drop alerts AND
+    // the email address itself — they planned a 3-12-month-out trip, this
+    // is the only way to reach them again.
     const wp = allPackages.find((p) => p.package_id === packageId);
-    trackEvent("watch_trip_click", { resort_id: wp?.resort_id || null, total_price: wp?.total_price ?? null });
+    trackEvent("watch_trip_click", {
+      resort_id: wp?.resort_id || null,
+      total_price: wp?.total_price ?? null,
+    });
+    // Still keep the local-storage list as before, so a returning visitor
+    // can see what they've watched.
     try {
       const watched = JSON.parse(localStorage.getItem("kt_watched_trips") || "[]");
       if (!watched.includes(packageId)) {
         watched.push(packageId);
         localStorage.setItem("kt_watched_trips", JSON.stringify(watched));
       }
-      alert("Saved to your watchlist on this device. Live price tracking is coming soon.");
-    } catch {
-      alert("We'll keep an eye on this trip — watchlist saved locally.");
+    } catch (_) { /* local persistence is best-effort */ }
+    openWatchTripDialog(packageId, wp);
+  }
+
+  // The real email-capture dialog. Replaces the fake "coming soon" alert.
+  // Inline, no overlay needed — appended to body and absolutely positioned
+  // so it overlays the modal without re-implementing modal a11y plumbing.
+  function openWatchTripDialog(packageId, pkg) {
+    document.getElementById("kt-watch-dialog")?.remove();
+    const r = pkg?.resorts || {};
+    const total = Math.max(1, Math.round(Number(pkg?.total_price ?? 0)));
+    const defaultThreshold = total > 0 ? Math.max(1, Math.round(total * 0.9 / 100) * 100) : "";
+    const dlg = document.createElement("div");
+    dlg.id = "kt-watch-dialog";
+    dlg.className = "kt-watch-dialog";
+    dlg.setAttribute("role", "dialog");
+    dlg.setAttribute("aria-modal", "true");
+    dlg.setAttribute("aria-labelledby", "kt-watch-title");
+    dlg.innerHTML = `
+      <div class="kt-watch-backdrop" onclick="closeWatchTripDialog()"></div>
+      <form class="kt-watch-card" onsubmit="event.preventDefault(); submitWatchTrip('${packageId}', this);">
+        <button type="button" class="kt-watch-x" aria-label="Close" onclick="closeWatchTripDialog()">×</button>
+        <h3 id="kt-watch-title" class="kt-watch-title">Watch this trip${r.resort_name ? ` to ${escapeHtml(r.resort_name)}` : ""}</h3>
+        <p class="kt-watch-sub">We'll email you if the total drops${total > 0 ? ` below your target. Current total is <b>${fmtMoney(total)}</b>.` : "."} One email per drop. Unsubscribe in one click.</p>
+        <label class="kt-watch-field">
+          <span>Email</span>
+          <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <label class="kt-watch-field">
+          <span>Alert me when total drops below</span>
+          <input type="number" name="threshold" min="100" step="50" value="${defaultThreshold || ""}" placeholder="${total > 0 ? fmtMoney(Math.round(total * 0.9 / 100) * 100) : "$3,000"}" />
+          <small>Default is ~10% below today's total. Leave blank to be alerted on any drop.</small>
+        </label>
+        <div class="kt-watch-actions">
+          <button type="submit" class="btn btn-primary kt-watch-submit">Save my watch</button>
+        </div>
+        <p class="kt-watch-fine">We email you only about this trip. We never sell your address.</p>
+      </form>`;
+    document.body.appendChild(dlg);
+    setTimeout(() => dlg.querySelector('input[name="email"]')?.focus(), 30);
+  }
+  function closeWatchTripDialog() {
+    document.getElementById("kt-watch-dialog")?.remove();
+  }
+  async function submitWatchTrip(packageId, form) {
+    const btn = form.querySelector(".kt-watch-submit");
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = "Saving…";
+    try {
+      const email = String(form.elements.email?.value || "").trim();
+      const threshold = parseInt(form.elements.threshold?.value || "", 10);
+      const data = await callFn("subscribe_watch_trip", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          package_id: packageId,
+          threshold_usd: Number.isFinite(threshold) && threshold > 0 ? threshold : null,
+          session_id: SESSION_ID,
+          is_internal: IS_INTERNAL,
+        }),
+      });
+      if (data?.ok) {
+        const card = form;
+        card.innerHTML = `
+          <button type="button" class="kt-watch-x" aria-label="Close" onclick="closeWatchTripDialog()">×</button>
+          <div class="kt-watch-success">
+            <div class="kt-watch-success-icon" aria-hidden="true">✓</div>
+            <h3 class="kt-watch-title">You're watching this trip.</h3>
+            <p class="kt-watch-sub">We'll email if the total drops${form.elements.threshold?.value ? ` below ${fmtMoney(parseInt(form.elements.threshold.value, 10))}` : ""}. You can close this now.</p>
+            <button type="button" class="btn btn-secondary" onclick="closeWatchTripDialog()">Done</button>
+          </div>`;
+      } else {
+        const reason = data?.reason || "Something went wrong — try again.";
+        let err = form.querySelector(".kt-watch-error");
+        if (!err) {
+          err = document.createElement("p");
+          err.className = "kt-watch-error";
+          form.insertBefore(err, btn.parentElement);
+        }
+        err.textContent = reason;
+      }
+    } catch (e) {
+      let err = form.querySelector(".kt-watch-error");
+      if (!err) {
+        err = document.createElement("p");
+        err.className = "kt-watch-error";
+        form.insertBefore(err, btn.parentElement);
+      }
+      err.textContent = "We couldn't save right now — try again in a moment.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
     }
   }
+  // Esc to close the dialog (cheap a11y win)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("kt-watch-dialog")) {
+      closeWatchTripDialog();
+    }
+  });
 
   // Internal close — clears UI state but does NOT touch history.
   // Used by popstate when the user navigates back via browser.
