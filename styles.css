@@ -8558,3 +8558,39 @@ body.trip-detail-open #status { display: none !important; }
   margin: 6px 0 2px;
   line-height: 1.4;
 }
+
+/* AI search card when it sits BELOW the main wizard — quieter, smaller,
+   reads as an alternate way to search rather than competing with the
+   primary form. */
+.ai-search-card-below {
+  background: transparent;
+  border: 1px dashed var(--line-soft);
+  box-shadow: none;
+  max-width: 920px;
+  margin: 14px 0 0;
+  padding: 12px 14px 14px;
+}
+.ai-search-card-below .ai-search-headline { font-size: 13px; opacity: 0.85; }
+
+/* "?" button next to Trip score — native title tooltip carries the
+   explanation of the 0-100 scale. */
+.card-fit-help {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  cursor: help;
+  margin-left: 6px;
+  padding: 0;
+  transition: color .12s, border-color .12s;
+}
+.card-fit-help:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+.bk-disclaimer-em { font-style: italic; color: var(--ink-2); }

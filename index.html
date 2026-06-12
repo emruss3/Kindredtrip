@@ -204,19 +204,10 @@
   <div class="hero-inner">
     <div>
       <div class="hero-eyebrow fade-in">Caribbean family travel</div>
-      <h1 class="fade-in delay-1">Find the Caribbean trip<br/>that actually fits<br/><em>your family.</em></h1>
-      <p class="lede fade-in delay-2">Enter your airport, dates, and kids' ages. KindredTrips compares curated family-friendly resorts across Caribbean destinations and ranks the best trips by total cost, travel time, and family fit.</p>
+      <h1 class="fade-in delay-1">Every Caribbean island.<br/><em>One ranked list.</em></h1>
+      <p class="lede fade-in delay-2">Every other tool makes you pick the destination first. KindredTrips compares <b>900+ family resorts across 34 Caribbean destinations</b> for your exact family — and ranks complete trips by total cost, travel time, and family fit.</p>
     </div>
 
-    <div class="ai-search-card fade-in delay-2" id="ai-search-card">
-      <form class="ai-search-form" onsubmit="event.preventDefault(); runSemanticSearch();">
-        <div class="ai-search-label-row">
-          <span class="ai-search-eyebrow">
-            <span class="ai-search-eyebrow-dot" aria-hidden="true"></span>
-            AI search · beta
-          </span>
-          <span class="ai-search-help">Describe the vibe — we'll find matching resorts across every resort in the catalogue.</span>
-        </div>
         <div class="ai-search-row">
           <input
             id="ai-search-input"
@@ -238,7 +229,7 @@
       <div class="search-card-grid">
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="origin">From</label>
-          <input id="origin" type="text" list="origin-airports" value="BNA" placeholder="Airport code" required autocomplete="off" />
+          <input id="origin" type="text" list="origin-airports" placeholder="Airport code (e.g. ATL, JFK, ORD)" required autocomplete="off" inputmode="text" />
           <datalist id="origin-airports">
             <option value="ATL">Atlanta (ATL)</option>
             <option value="AUS">Austin (AUS)</option>
@@ -373,6 +364,15 @@
         <button type="button" class="toggle toggle-more" onclick="openMoreFilters()">More filters</button>
       </div>
     </form>
+    <div class="ai-search-card ai-search-card-below" id="ai-search-card">
+      <form class="ai-search-form" onsubmit="event.preventDefault(); runSemanticSearch();">
+        <div class="ai-search-label-row">
+          <span class="ai-search-eyebrow">
+            <span class="ai-search-eyebrow-dot" aria-hidden="true"></span>
+            AI search · beta
+          </span>
+          <span class="ai-search-help">Describe the vibe — we'll find matching resorts across every resort in the catalogue.</span>
+        </div>
   </div>
 </section>
 
@@ -3885,6 +3885,7 @@
           <div class="card-fit">
             <span class="card-fit-num">${tripScore}</span>
             <span class="card-fit-lbl">Trip score · ${escapeHtml(tripLabel)}</span>
+            <button type="button" class="card-fit-help" title="0-100 blend of total trip cost, flight ease (stops + travel time), family-fit (kids club, room size, beach access), and guest reviews. Higher = better fit for your family." onclick="event.stopPropagation();" aria-label="How is Trip score calculated?">?</button>
           </div>
           <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
@@ -4514,7 +4515,7 @@
             <span class="bk-flight-tab-sub" id="bk-tab-sub-fastest">—</span>
           </button>
         </div>
-        <p class="bk-flights-disclaimer">Live fares from carriers — prices may change if there are <a href="#" onclick="event.preventDefault()">additional baggage fees</a>.</p>
+        <p class="bk-flights-disclaimer">Live fares from carriers — prices may change if there are <span class="bk-disclaimer-em">additional baggage fees</span>.</p>
         <div class="bk-flight-list" id="flight-options-list">
           <div class="bk-flight-loading">Loading flight options…</div>
         </div>
