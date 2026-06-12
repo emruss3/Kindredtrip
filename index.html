@@ -2208,8 +2208,8 @@
         // packages for 30-60s before the first batch lands.
         if (elapsed > 15000 && (elapsed - 15000) % 6000 < POLL_INTERVAL_MS) {
           const note = jobStatus === "running"
-            ? "Pricing flights across the Caribbean…"
-            : "Spinning up the search workers (first search after an idle period takes a bit longer)…";
+            ? "Checking live fares from your airport to every island…"
+            : "Checking live fares from your airport to every island…";
           setStatus(note, { spinner: true });
         }
         if (elapsed >= MAX_WALL_MS) {
@@ -2220,6 +2220,31 @@
       // Hand status off to the live progress widget — it shows real counts
       // and progressively renders cards as they're priced.
       setStatus("");
+
+      // PRE-PAINT: render unpriced resort cards immediately so the user
+      // is browsing photos + family-fit chips while pricing streams in,
+      // instead of staring at a spinner for 30-60s.
+      // Without this we previously got every package row only AFTER
+      // start_pricing had filled in flight + hotel totals — which is the
+      // exact "30-60s blank screen" Fable flagged as our biggest invisible
+      // bail point. allPackages may have isPricesPending(p)===true cards;
+      // renderResults already routes those through renderPendingCard with
+      // a skeleton price slot, so they show instantly.
+      try {
+        const initial = await callFn(
+          `get_packages?search_id=${lastSearchId}&limit=25&prepaint=true&sort_by=${lastSortBy}`,
+          { method: "GET" }
+        );
+        if (Array.isArray(initial?.packages)) {
+          allPackages = initial.packages.map((p) => {
+            p._tags = extractTags(p);
+            return p;
+          });
+          renderResults();
+        }
+      } catch (e) {
+        console.error("[pre-paint] failed:", e);
+      }
 
       // Fire start_pricing as fire-and-forget; render progressively while
       // the backend works through hotel + initial flight pricing.
