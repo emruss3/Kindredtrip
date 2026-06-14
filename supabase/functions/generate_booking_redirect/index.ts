@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "generate_booking_redirect_v3_results_list";
+const VERSION = "generate_booking_redirect_v4_relax_occupancy";
 
 function corsHeaders() {
   return {
@@ -52,9 +52,15 @@ function buildBookingHotelUrl(opts: {
   params.set("checkin", opts.dateStart);
   params.set("checkout", opts.dateEnd);
   params.set("group_adults", String(opts.adults));
-  params.set("group_children", String(opts.childAges.length));
-  for (const age of opts.childAges) params.append("age", String(age));
-  params.set("no_rooms", "1");
+  // Deliberately DO NOT send group_children / age / no_rooms. Confirmed
+  // behavior: with the strict child+single-room occupancy filter, Booking's
+  // results page false-negatives ("no availability for your dates") for any
+  // hotel whose standard room sleeps fewer than the full party — even though
+  // the hotel page shows larger/sofa-bed rooms with those exact dates
+  // available. Landing on dates + adults gets the user to the right hotel
+  // for the right dates; they set exact occupancy on the hotel page, where
+  // availability resolves correctly. (childAges still drives flight pricing
+  // and our own hotel pricing elsewhere — this only affects the Booking URL.)
   params.set("selected_currency", "USD");
 
   const targetUrl = `https://www.booking.com/searchresults.html?${params.toString()}`;
