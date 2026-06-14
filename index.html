@@ -2784,14 +2784,21 @@
 
     // Shortest travel — lowest stops then lowest duration on the longer
     // single leg (outbound vs return), matching what the ✈ chip displays.
-    // Using raw pkg.stops / duration_hours here meant the badge could
-    // land on a 12h 15m · 1 stop trip while other 8h 28m · 1 stop trips
-    // ranked lower in the same list.
+    // CRITICAL: this is a comparative pick, so without an absolute ceiling
+    // it would badge the least-bad option even when EVERY trip in the set
+    // is long (e.g. a far origin to Grenada where the best is 19h · 1 stop
+    // — calling that "Shortest travel" reads as a lie). Only award when the
+    // winner's worst single leg is genuinely short (<= 9h), otherwise show
+    // no badge. Honest beats superlative.
+    const SHORT_TRAVEL_MAX_LEG_H = 9;
     const shortest = [...visible].sort((a, b) =>
       (num(flightLegStops(a)) - num(flightLegStops(b))) ||
       (num(flightLegHours(a)) - num(flightLegHours(b)))
     )[0];
-    if (shortest && !winners.has(shortest.package_id) && Number.isFinite(flightLegStops(shortest))) {
+    if (shortest && !winners.has(shortest.package_id)
+        && Number.isFinite(flightLegStops(shortest))
+        && Number.isFinite(flightLegHours(shortest))
+        && flightLegHours(shortest) <= SHORT_TRAVEL_MAX_LEG_H) {
       winners.set(shortest.package_id, { label: "Shortest travel", cls: "rank rank-short" });
     }
 
