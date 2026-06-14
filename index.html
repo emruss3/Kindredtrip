@@ -2815,15 +2815,34 @@
   // package that isn't fully live. We detect that and render a
   // skeleton card instead of hiding the row, so users see resort
   // context with a "finding live prices…" state rather than a gap.
+  // A trip is only complete when BOTH flight legs (outbound + inbound)
+  // are priced from a real carrier. We never present a trip — or a trip
+  // total — built on one leg or no flight.
+  //   summed_oneway     two one-way fares summed → both legs ✓
+  //   roundtrip_native  one combined round-trip fare → both legs ✓
+  //   oneway_outbound   only the outbound priced → NOT complete ✗
+  //   null / mock       no live flight yet → NOT complete ✗
+  // When basis is absent we fall back to requiring explicit return-leg
+  // data (return_minutes / return_stops, attached by get_packages from
+  // flight_offers).
+  function hasBothFlightLegs(p) {
+    if (!p) return false;
+    if (p.flight_supplier !== "liteapi") return false;
+    if (p.flight_price == null) return false;
+    if (p.flight_price_basis === "oneway_outbound") return false;
+    if (p.flight_price_basis === "summed_oneway" || p.flight_price_basis === "roundtrip_native") return true;
+    return p.return_minutes != null || p.return_stops != null;
+  }
+
   function isPricesPending(p) {
     return p?.prices_pending === true
       || p?.is_live === false
       || (p?.total_price == null && p?.flight_supplier !== "liteapi")
-      // Outbound-only basis means the return fare isn't priced yet, so
-      // total_price is just one leg. A trip with only one flight isn't a
-      // complete trip — hold it in the pending state until both legs
-      // confirm rather than ranking it on a half-priced total.
-      || p?.flight_price_basis === "oneway_outbound";
+      // Core rule: no complete trip without both flight legs. Anything
+      // short of a live round-trip (outbound-only, mock, or not-yet-priced)
+      // stays in the pending "finding live prices" state — never rendered
+      // as a bookable trip with a final total.
+      || !hasBothFlightLegs(p);
   }
 
   function renderResults() {
@@ -2910,7 +2929,10 @@
     // Country order: by best (lowest) ranked card in each country.
     const ordered = Array.from(groups.entries());
     const sections = ordered.map(([country, pkgs]) => {
-      const cards = pkgs.slice(0, 5).map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+      const cards = pkgs.slice(0, 5).map((p) => isPricesPending(p)
+        ? renderPendingCard(p)
+        : renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))
+      ).join("");
       const more = pkgs.length > 5
         ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add(${jsArg(country)}); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
         : "";
@@ -3230,39 +3252,25 @@
       <span style="color: var(--ink-3); font-size: 13px;">${collapsed ? "Show ▾" : "Hide ▴"}</span>
     </button>`;
 
-    // Sidebar layout: ordered by the decision a parent actually makes —
-    // Must-haves at the top (the non-negotiables); then flight ease and
-    // budget which dominate the trip math; then room fit and kids
-    // amenities which decide whether the resort itself works; destination
-    // and resort quality at the bottom for the secondary trade-offs.
+    // Flat, single-level list of uniform collapsible sections — ordered
+    // by the decision a parent actually makes: non-negotiables first, then
+    // the trip-math levers (budget, flight ease), then what makes the
+    // resort work (rooms, kids amenities), then secondary trade-offs
+    // (style, rating, brand). One heading level, one card style — no
+    // group-header-over-section-header nesting (that was the choppiness).
     return toggle + [
-      sidebarGroup("Must-haves", renderMustHavesBlock()),
-      sidebarGroup("Flight ease", renderFlightEaseBlock()),
-      sidebarGroup("Budget", renderPriceBlock(bounds)),
-      sidebarGroup("Room fit", renderTagBlock("Room types", "rooms", ROOM_PRIORITY, "rooms")),
-      sidebarGroup("Kids amenities",
-        renderTagBlock("Amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities") +
-        renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities")
-      ),
-      sidebarGroup("Destination",
-        renderCountryBlock() + renderBrandBlock()
-      ),
-      sidebarGroup("Resort quality",
-        renderRatingBlock() +
-        renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles") +
-        renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights")
-      ),
+      renderMustHavesBlock(),
+      renderPriceBlock(bounds),
+      renderFlightEaseBlock(),
+      renderCountryBlock(),
+      renderTagBlock("Room types", "rooms", ROOM_PRIORITY, "rooms"),
+      renderTagBlock("Kids amenities", "amenities", KIDS_AMENITY_PRIORITY, "amenities"),
+      renderTagBlock("Activities", "amenities", ACTIVITY_PRIORITY, "amenities", "activities"),
+      renderTagBlock("Resort style", "styles", STYLE_PRIORITY, "styles"),
+      renderTagBlock("Highlights", "highlights", HIGHLIGHT_PRIORITY, "highlights"),
+      renderRatingBlock(),
+      renderBrandBlock(),
     ].filter(Boolean).join("");
-  }
-  // Wraps a logical group of related filter blocks under one section
-  // heading. Empty groups (e.g. no brand data yet) collapse out so the
-  // sidebar doesn't read as a bunch of empty headers.
-  function sidebarGroup(title, inner) {
-    if (!inner || !inner.trim()) return "";
-    return `<div class="sidebar-group">
-      <h4 class="sidebar-group-title">${escapeHtml(title)}</h4>
-      ${inner}
-    </div>`;
   }
 
   // Must-haves: the search-time flags from lastSearchSummary surfaced as
@@ -3275,6 +3283,7 @@
       { key: "require_all_inclusive",    label: "All-inclusive" },
       { key: "require_direct_flight",    label: "Direct flights only" },
     ];
+    const activeN = flags.filter(f => !!s[f.key]).length;
     const rows = flags.map(f => {
       const active = !!s[f.key];
       return `<button class="tag-row${active ? " active" : ""}" onclick="setSearchFlag('${f.key}', ${!active})">
@@ -3282,7 +3291,14 @@
         <span class="tag-label">${escapeHtml(f.label)}</span>
       </button>`;
     }).join("");
-    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+    const isOpen = isOpenFor("musthaves", true);
+    return `
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary onclick="onSidebarToggle('musthaves', this)">
+          <span>Must-haves${activeN > 0 ? ` <span class="summary-active">${activeN}</span>` : ""}</span>
+        </summary>
+        <div class="sidebar-block-body">${rows}</div>
+      </details>`;
   }
 
   // Flight ease: max stops control. Max travel hours is search-time
@@ -3299,11 +3315,18 @@
     const rows = opts.map(o => {
       const active = (o.value === cur);
       return `<button class="tag-row${active ? " active" : ""}" onclick="setMaxStops(${o.value === null ? "null" : o.value})">
-        <span class="tag-checkbox"></span>
+        <span class="tag-checkbox tag-checkbox-radio"></span>
         <span class="tag-label">${escapeHtml(o.label)}</span>
       </button>`;
     }).join("");
-    return `<div class="sidebar-block sidebar-block-flat"><div class="sidebar-block-body">${rows}</div></div>`;
+    const isOpen = isOpenFor("flightease", cur != null);
+    return `
+      <details class="sidebar-block"${isOpen ? " open" : ""}>
+        <summary onclick="onSidebarToggle('flightease', this)">
+          <span>Flight ease${cur != null ? ` <span class="summary-active">1</span>` : ""}</span>
+        </summary>
+        <div class="sidebar-block-body">${rows}</div>
+      </details>`;
   }
   function setMaxStops(value) {
     filters.maxStops = value;
