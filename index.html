@@ -208,23 +208,6 @@
       <p class="lede fade-in delay-2">Every other tool makes you pick the destination first. KindredTrips compares <b>900+ family resorts across 34 Caribbean destinations</b> for your exact family — and ranks complete trips by total cost, travel time, and family fit.</p>
     </div>
 
-        <div class="ai-search-row">
-          <input
-            id="ai-search-input"
-            type="text"
-            autocomplete="off"
-            maxlength="500"
-            placeholder='e.g. "quiet beachfront with toddler kids club and connecting rooms in Turks and Caicos"'
-          />
-          <button type="submit" class="ai-search-submit" id="ai-search-submit">
-            Search
-          </button>
-        </div>
-      </form>
-      <div class="ai-search-status" id="ai-search-status" hidden></div>
-      <div class="ai-search-results" id="ai-search-results" hidden></div>
-    </div>
-
     <form id="search-form" class="search-card" onsubmit="event.preventDefault(); runSearch();">
       <div class="search-card-grid">
         <div class="search-field" onclick="this.querySelector('input').focus()">
@@ -371,8 +354,24 @@
             <span class="ai-search-eyebrow-dot" aria-hidden="true"></span>
             AI search · beta
           </span>
-          <span class="ai-search-help">Describe the vibe — we'll find matching resorts across every resort in the catalogue.</span>
+          <span class="ai-search-help">Or describe the vibe in your own words — we'll match it across every resort in the catalogue.</span>
         </div>
+        <div class="ai-search-row">
+          <input
+            id="ai-search-input"
+            type="text"
+            autocomplete="off"
+            maxlength="500"
+            placeholder='e.g. "quiet beachfront with toddler kids club and connecting rooms in Turks and Caicos"'
+          />
+          <button type="submit" class="ai-search-submit" id="ai-search-submit">
+            Search
+          </button>
+        </div>
+      </form>
+      <div class="ai-search-status" id="ai-search-status" hidden></div>
+      <div class="ai-search-results" id="ai-search-results" hidden></div>
+    </div>
   </div>
 </section>
 
@@ -2600,13 +2599,37 @@
   // Silent refetch — fetches packages, re-renders, returns the response data.
   // Used by both fetchAndRender (with status text) and the pricing poll (silent).
   async function refetchPackages() {
-    const data = await callFn(
+    let data = await callFn(
       `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
-    // Track top-level is_warming_up so the polling banner can stop in
-    // steady state. The per-card "Estimated" badge is supplier-based
-    // and independent — see isLiveCard in renderCard.
+    // First-run resilience. The strict-live query returns nothing while
+    // pricing is still warming up (no package has both a live flight AND
+    // a live room yet). On a cold first search that's the normal state for
+    // the first 20-60s — and rendering it would WIPE the prepaint cards
+    // and show the empty "no results" state, which is exactly the
+    // "trips don't show up on first run" bug. So: if strict-live yields
+    // zero packages but packages actually exist for this search, fall
+    // back to the prepaint view (resort cards with pending/estimate price
+    // slots) so the user keeps seeing trips. Subsequent polls replace
+    // these with live cards as pricing settles.
+    const liveCount = (data?.packages || []).length;
+    const totalExist = Number(data?.summary?.total_packages) || 0;
+    if (liveCount === 0 && totalExist > 0) {
+      try {
+        const fallback = await callFn(
+          `get_packages?search_id=${lastSearchId}&limit=1000&prepaint=true&sort_by=${lastSortBy}`,
+          { method: "GET" }
+        );
+        if ((fallback?.packages || []).length > 0) {
+          // Preserve the strict summary (pricing_settled, counts) for the
+          // progress widget; only swap in the fallback's package rows.
+          data = { ...fallback, summary: data.summary || fallback.summary };
+        }
+      } catch (e) {
+        console.error("[refetchPackages] prepaint fallback failed:", e);
+      }
+    }
     if (typeof data?.is_warming_up === "boolean") lastIsWarmingUp = data.is_warming_up;
     allPackages = (data.packages || []).map((p) => {
       p._tags = extractTags(p);
