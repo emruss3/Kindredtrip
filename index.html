@@ -2815,15 +2815,34 @@
   // package that isn't fully live. We detect that and render a
   // skeleton card instead of hiding the row, so users see resort
   // context with a "finding live prices…" state rather than a gap.
+  // A trip is only complete when BOTH flight legs (outbound + inbound)
+  // are priced from a real carrier. We never present a trip — or a trip
+  // total — built on one leg or no flight.
+  //   summed_oneway     two one-way fares summed → both legs ✓
+  //   roundtrip_native  one combined round-trip fare → both legs ✓
+  //   oneway_outbound   only the outbound priced → NOT complete ✗
+  //   null / mock       no live flight yet → NOT complete ✗
+  // When basis is absent we fall back to requiring explicit return-leg
+  // data (return_minutes / return_stops, attached by get_packages from
+  // flight_offers).
+  function hasBothFlightLegs(p) {
+    if (!p) return false;
+    if (p.flight_supplier !== "liteapi") return false;
+    if (p.flight_price == null) return false;
+    if (p.flight_price_basis === "oneway_outbound") return false;
+    if (p.flight_price_basis === "summed_oneway" || p.flight_price_basis === "roundtrip_native") return true;
+    return p.return_minutes != null || p.return_stops != null;
+  }
+
   function isPricesPending(p) {
     return p?.prices_pending === true
       || p?.is_live === false
       || (p?.total_price == null && p?.flight_supplier !== "liteapi")
-      // Outbound-only basis means the return fare isn't priced yet, so
-      // total_price is just one leg. A trip with only one flight isn't a
-      // complete trip — hold it in the pending state until both legs
-      // confirm rather than ranking it on a half-priced total.
-      || p?.flight_price_basis === "oneway_outbound";
+      // Core rule: no complete trip without both flight legs. Anything
+      // short of a live round-trip (outbound-only, mock, or not-yet-priced)
+      // stays in the pending "finding live prices" state — never rendered
+      // as a bookable trip with a final total.
+      || !hasBothFlightLegs(p);
   }
 
   function renderResults() {
@@ -2910,7 +2929,10 @@
     // Country order: by best (lowest) ranked card in each country.
     const ordered = Array.from(groups.entries());
     const sections = ordered.map(([country, pkgs]) => {
-      const cards = pkgs.slice(0, 5).map((p) => renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))).join("");
+      const cards = pkgs.slice(0, 5).map((p) => isPricesPending(p)
+        ? renderPendingCard(p)
+        : renderCard(p, rankBadges.get(p.package_id), budgetBadges.get(p.package_id))
+      ).join("");
       const more = pkgs.length > 5
         ? `<div class="dest-group-more"><button class="dest-group-more-btn" onclick="filters.country.clear(); filters.country.add(${jsArg(country)}); syncHomepageDestinationChips(); renderResults();">See all ${pkgs.length} in ${escapeHtml(country)} →</button></div>`
         : "";
