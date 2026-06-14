@@ -1284,11 +1284,16 @@ button { font-family: inherit; }
    * scrolling over the sidebar bubbles up to the page once the
    * sidebar hits its scroll limits. */
   overscroll-behavior: contain;
-  padding-bottom: 32px;
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-  padding-right: 4px;
+  gap: 0;
+  /* One cohesive panel instead of a stack of separate cards — the
+   * sections inside are separated by dividers, not gaps, which reads
+   * far calmer than the old boxed-card-per-filter look. */
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
@@ -1304,12 +1309,8 @@ button { font-family: inherit; }
   }
 }
 
-.sidebar-block {
-  background: #fff;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-md);
-  padding: var(--s-4);
-}
+/* Legacy boxed-card style retained only for any non-details block; the
+   live sidebar is now a single panel of divider-separated sections. */
 .sidebar-block h4 {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 12px;
@@ -1373,15 +1374,16 @@ button { font-family: inherit; }
 /* Collapsible sidebar group */
 details.sidebar-block {
   padding: 0;
-  background: #fff;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-md);
-  overflow: hidden;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
 }
+/* Last section has no divider — the panel border closes it off. */
+.results-sidebar > details.sidebar-block:last-of-type { border-bottom: none; }
 details.sidebar-block > summary {
   list-style: none;
   cursor: pointer;
-  padding: 12px var(--s-4);
+  padding: 13px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1392,20 +1394,25 @@ details.sidebar-block > summary {
   letter-spacing: -0.005em;
   color: var(--ink);
   text-transform: none;
+  border-radius: 8px;
+  transition: background 0.12s;
 }
+details.sidebar-block > summary:hover { background: var(--bg-soft); }
 details.sidebar-block > summary::-webkit-details-marker { display: none; }
 details.sidebar-block > summary::after {
   content: "";
-  width: 9px; height: 9px;
+  width: 8px; height: 8px;
   border-right: 1.5px solid var(--ink-3);
   border-bottom: 1.5px solid var(--ink-3);
   transform: rotate(45deg);
   margin-top: -3px;
   transition: transform 0.2s;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 details.sidebar-block[open] > summary::after { transform: rotate(-135deg); margin-top: 2px; }
 details.sidebar-block > .sidebar-block-body {
-  padding: 0 var(--s-4) var(--s-3);
+  padding: 2px 16px 12px;
 }
 details.sidebar-block .summary-active {
   background: var(--ink);
@@ -5093,37 +5100,18 @@ body.trip-detail-open #status { display: none !important; }
   .modal-cta-actions .btn { width: 100%; }
 }
 
-/* ---------- Sidebar groups (named sections) ---------- */
-.sidebar-group {
-  margin-bottom: var(--s-5);
-  padding-bottom: var(--s-4);
-  border-bottom: 1px solid var(--line-soft);
+/* Sidebar is now a single divider-separated panel (see .results-sidebar
+   and details.sidebar-block above). The old .sidebar-group / -flat rules
+   were removed when the two-level heading hierarchy was flattened.
+
+   Radio-style indicator for single-choice rows (Flight ease) so they
+   read as "pick one" rather than the multi-select checkboxes. */
+.tag-checkbox-radio { border-radius: 50%; }
+.tag-row.active .tag-checkbox-radio { background: var(--ink); border-color: var(--ink); }
+.tag-row.active .tag-checkbox-radio::after {
+  content: ""; width: 6px; height: 6px; border: none;
+  border-radius: 50%; background: #fff; transform: none;
 }
-.sidebar-group:last-of-type { border-bottom: none; }
-.sidebar-group-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-  margin: 0 0 var(--s-2) 4px;
-}
-.sidebar-group .sidebar-block { border: none; padding: 0 0 6px; margin: 0; }
-.sidebar-group .sidebar-block + .sidebar-block { margin-top: 4px; }
-.sidebar-block.sidebar-block-flat {
-  /* Used by Must-haves / Flight ease — no <details> wrapper, just the
-   * tag rows. Keeps the named group visible above without a redundant
-   * second collapsing summary. */
-  display: block;
-  padding: 0;
-}
-.sidebar-block.sidebar-block-flat > .sidebar-block-body {
-  padding: 0;
-}
-.sidebar-group details.sidebar-block { border: none; padding: 0; }
-.sidebar-group details.sidebar-block > summary { padding: 8px 0; }
-.sidebar-group details.sidebar-block > .sidebar-block-body { padding: 0 0 var(--s-2); }
-.sidebar-group details.sidebar-block + details.sidebar-block { margin-top: 0; border-top: 1px dashed var(--line-soft); }
 
 /* ---------- View toggle (Ranked list / By destination) ---------- */
 .rh-controls {
