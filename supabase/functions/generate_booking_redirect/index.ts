@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "generate_booking_redirect_v1";
+const VERSION = "generate_booking_redirect_v3_results_list";
 
 function corsHeaders() {
   return {
@@ -9,6 +9,19 @@ function corsHeaders() {
     "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
     "access-control-allow-methods": "POST, OPTIONS",
   };
+}
+
+// Strip booking-poisoning junk from resort names (parenthetical age/policy
+// notes, audience tags, refundability notes) so Booking's search resolves
+// to the real hotel.
+function cleanResortName(raw: string): string {
+  let s = String(raw ?? "");
+  s = s.replace(/\([^)]*\)/g, " ");
+  s = s.replace(/\[[^\]]*\]/g, " ");
+  s = s.replace(/\b(adults?\s*only|couples?\s*only|clothing\s*optional|nude(\s*areas)?|non[-\s]?refundable|all\s*ages|\d{1,2}\s*\+)\b/gi, " ");
+  s = s.replace(/[-–—,]\s*$/g, " ");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s;
 }
 
 function buildBookingHotelUrl(opts: {
@@ -20,13 +33,19 @@ function buildBookingHotelUrl(opts: {
   adults: number;
   childAges: number[];
   marker: string;
-  useDirect: boolean;
-  directAid?: string;
 }) {
-  const queryParts = [opts.resortName];
+  const cleanName = cleanResortName(opts.resortName);
+  // v3: land on a Booking RESULTS LIST for the destination + dates, NOT a
+  // forced single-hotel page. v2's ssne/ssne_untouched jumped straight to
+  // the exact hotel page, which dead-ends on "not available for that stay"
+  // whenever that hotel/date combo isn't in Booking's inventory (common:
+  // we price via LiteAPI, a different source). A results list shows the
+  // hotel when Booking has it, and real available alternatives for those
+  // dates when it doesn't — never a dead end.
+  const queryParts = [cleanName];
   if (opts.city) queryParts.push(opts.city);
   if (opts.country) queryParts.push(opts.country);
-  const ss = queryParts.filter(Boolean).join(" ");
+  const ss = queryParts.filter(Boolean).join(", ");
 
   const params = new URLSearchParams();
   params.set("ss", ss);
@@ -34,17 +53,9 @@ function buildBookingHotelUrl(opts: {
   params.set("checkout", opts.dateEnd);
   params.set("group_adults", String(opts.adults));
   params.set("group_children", String(opts.childAges.length));
-  for (const age of opts.childAges) {
-    params.append("age", String(age));
-  }
+  for (const age of opts.childAges) params.append("age", String(age));
   params.set("no_rooms", "1");
   params.set("selected_currency", "USD");
-
-  if (opts.useDirect && opts.directAid) {
-    params.set("aid", opts.directAid);
-    params.set("label", "kindredtrips-mvp");
-    return `https://www.booking.com/searchresults.html?${params.toString()}`;
-  }
 
   const targetUrl = `https://www.booking.com/searchresults.html?${params.toString()}`;
   const tpUrl = new URL("https://tp.media/r");
@@ -72,7 +83,7 @@ serve(async (req) => {
     if (!package_id || !click_type) {
       return new Response(JSON.stringify({ version: VERSION, error: "package_id and click_type required" }), { status: 400, headers });
     }
-    if (!"flight hotel".includes(click_type)) {
+    if (click_type !== "flight" && click_type !== "hotel") {
       return new Response(JSON.stringify({ version: VERSION, error: "click_type must be 'flight' or 'hotel'" }), { status: 400, headers });
     }
 
@@ -86,19 +97,10 @@ serve(async (req) => {
     const { data: pkg, error: pErr } = await sb
       .from("packages")
       .select(`
-        package_id,
-        search_id,
-        resort_id,
-        flight_booking_url,
-        hotel_booking_url,
-        flight_price,
-        hotel_price,
-        total_price,
-        resorts (
-          resort_name,
-          country,
-          area
-        )
+        package_id, search_id, resort_id,
+        flight_booking_url, hotel_booking_url,
+        flight_price, hotel_price, total_price,
+        resorts ( resort_name, country, area )
       `)
       .eq("package_id", package_id)
       .maybeSingle();
@@ -135,7 +137,6 @@ serve(async (req) => {
         adults: Number(search.adults ?? 2),
         childAges: search.child_ages ?? [],
         marker: tpMarker,
-        useDirect: false,
       });
       supplier = "booking_via_tp";
       total_price_at_click = pkg.hotel_price ? Number(pkg.hotel_price) : null;
@@ -155,15 +156,11 @@ serve(async (req) => {
       user_agent_family,
       referer,
     });
-    if (clickErr) {
-      console.error("outbound_clicks insert error:", clickErr);
-    }
+    if (clickErr) console.error("outbound_clicks insert error:", clickErr);
 
     return new Response(JSON.stringify({
       version: VERSION,
-      package_id,
-      click_type,
-      supplier,
+      package_id, click_type, supplier,
       redirect_url: target_url,
     }), { status: 200, headers });
 
