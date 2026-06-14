@@ -8648,3 +8648,8 @@ body.trip-detail-open #status { display: none !important; }
   font-size: 28px; line-height: 48px;
   font-weight: 700;
 }
+
+/* Per-person flight callout in the card price breakdown */
+.flight-pp { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.flight-lap { color: var(--accent, #c08a3e); font-size: 12px; white-space: nowrap; cursor: help; }
+.rail-lap-note { font-weight: 400; color: var(--ink-3); font-size: 12px; }
