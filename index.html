@@ -1660,20 +1660,47 @@
   // Returns an inline-HTML string ready to drop into the existing
   // breakdown rows. Per-segment <b> wraps preserve the existing
   // emphasis treatment.
+  // Infants (under 2) fly as lap children — no seat — so we don't count
+  // them toward the per-person flight fare. They're noted separately so
+  // the family knows the quote assumes a lap infant.
+  function lapInfantCount() {
+    const s = lastSearchSummary || {};
+    return (Array.isArray(s.child_ages) ? s.child_ages : []).filter((a) => Number(a) < 2).length;
+  }
+  // Seated travelers the per-person fare divides across (adults + kids
+  // aged 2+). flight_price is always the GROUP total from the carrier.
+  function flightPaxCount() {
+    const s = lastSearchSummary || {};
+    const adults = Number(s.adults) || 2;
+    const seatedKids = (Array.isArray(s.child_ages) ? s.child_ages : []).filter((a) => Number(a) >= 2).length;
+    return Math.max(1, adults + seatedKids);
+  }
+  function lapInfantNote() {
+    const n = lapInfantCount();
+    if (n <= 0) return "";
+    return ` <span class="flight-lap" title="Children under 2 fly as lap infants (no seat). The per-person fare is for seated travelers; the airline may charge a small lap-infant fee at booking.">incl. ${n} lap ${n === 1 ? "infant" : "infants"}</span>`;
+  }
+  function flightPerPersonTag(fp) {
+    const pax = flightPaxCount();
+    if (!(fp > 0) || pax <= 1) return "";
+    return ` <span class="flight-pp">${fmtMoney(Math.round(fp / pax))}/person</span>`;
+  }
   function renderFlightCostBreakdown(pkg) {
     const basis = pkg?.flight_price_basis || null;
     const fp = Number(pkg?.flight_price) || 0;
     const ob = pkg?.flight_outbound_price;
     const rt = pkg?.flight_return_price;
+    const pp = flightPerPersonTag(fp);
 
+    const lap = lapInfantNote();
     if (basis === "summed_oneway" && ob != null && rt != null) {
-      return `<b>${fmtMoney(ob)}</b> outbound <span class="flight-split-plus">+</span> <b>${fmtMoney(rt)}</b> return`;
+      return `<b>${fmtMoney(ob)}</b> out <span class="flight-split-plus">+</span> <b>${fmtMoney(rt)}</b> return${pp}${lap}`;
     }
     if (basis === "oneway_outbound") {
       const obShown = ob != null ? ob : fp;
       return `<b>${fmtMoney(obShown)}</b> outbound <span class="flight-oneway-tag" title="Return flight not yet priced — total is outbound only">Outbound only</span>`;
     }
-    return `<b>${fmtMoney(fp)}</b> flights`;
+    return `<b>${fmtMoney(fp)}</b> flights${pp}${lap}`;
   }
 
   // For places that only want the basis chip (e.g. card eyebrow,
@@ -4816,7 +4843,7 @@
           <div class="trip-rail-dates">
             <div><span>Check-in</span><b>${fmtRailDate(lastSearchSummary?.date_start)}</b></div>
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
-            <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}</b></div>
+            <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}${lapInfantCount() > 0 ? ` <span class="rail-lap-note">(incl. ${lapInfantCount()} lap ${lapInfantCount() === 1 ? "infant" : "infants"})</span>` : ""}</b></div>
           </div>
           <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
           <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees.</div>
