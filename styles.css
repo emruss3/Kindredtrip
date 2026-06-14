@@ -8653,3 +8653,6 @@ body.trip-detail-open #status { display: none !important; }
 .flight-pp { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
 .flight-lap { color: var(--accent, #c08a3e); font-size: 12px; white-space: nowrap; cursor: help; }
 .rail-lap-note { font-weight: 400; color: var(--ink-3); font-size: 12px; }
+
+/* Secondary "Book flights" CTA under the hotel CTA in the trip rail */
+.trip-rail-cta-flight { width: 100%; margin-top: 8px; }

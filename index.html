@@ -4852,8 +4852,9 @@
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
             <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}${lapInfantCount() > 0 ? ` <span class="rail-lap-note">(incl. ${lapInfantCount()} lap ${lapInfantCount() === 1 ? "infant" : "infants"})</span>` : ""}</b></div>
           </div>
-          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
-          <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees.</div>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book hotel on Booking.com →</button>
+          <button class="btn btn-secondary trip-rail-cta-flight" onclick="bookFlight('${pkg.package_id}')">Book flights on Aviasales →</button>
+          <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees. Hotel and flights are booked separately.</div>
           <div class="trip-rail-actions">
             <button type="button" class="trip-rail-action" title="Send to self" onclick="sendTripToSelf('${pkg.package_id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
@@ -7604,6 +7605,37 @@
       }
     } catch (err) {
       alert("Couldn't open booking link: " + err.message);
+    }
+  }
+
+  // Flight booking — opens an Aviasales search for the trip's route + dates
+  // (built server-side in generate_booking_redirect, affiliate-tagged).
+  // Hotel and flights book separately because they come from different
+  // suppliers; the integrated single-checkout is the LiteAPI path (roadmap).
+  async function bookFlight(packageId) {
+    const bp = allPackages.find((p) => p.package_id === packageId);
+    trackEvent("booking_click", {
+      resort_id: bp?.resort_id || null,
+      total_price: bp?.flight_price ?? null,
+      click_type: "flight",
+    });
+    try {
+      const data = await callFn("generate_booking_redirect", {
+        method: "POST",
+        body: JSON.stringify({
+          package_id: packageId,
+          click_type: "flight",
+          session_id: SESSION_ID,
+          referer: location.href,
+        }),
+      });
+      if (data.redirect_url) {
+        window.open(data.redirect_url, "_blank", "noopener,noreferrer");
+      } else {
+        alert(data.error || "Flight booking link isn't available for this route yet.");
+      }
+    } catch (err) {
+      alert("Couldn't open flight booking link: " + err.message);
     }
   }
 

@@ -1,7 +1,28 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "generate_booking_redirect_v4_relax_occupancy";
+const VERSION = "generate_booking_redirect_v5_flight_deeplink";
+
+// Aviasales (Travelpayouts) flight-search deep link. We don't store a
+// per-fare booking URL — flight_booking_url is null and LiteAPI flight
+// offers carry no deep link — so we construct an Aviasales search from the
+// route + dates + passenger count, affiliate-tagged with our TP marker.
+// Format: ORIGIN + DDMM(depart) + DEST + DDMM(return) + passengers.
+// Returns null if either IATA is malformed (caller surfaces an error).
+function ddmm(iso: string): string {
+  const d = new Date(iso);
+  return String(d.getUTCDate()).padStart(2, "0") + String(d.getUTCMonth() + 1).padStart(2, "0");
+}
+function buildAviasalesUrl(o: {
+  origin: string; dest: string; dateStart: string; dateEnd: string; pax: number; marker: string;
+}): string | null {
+  const O = String(o.origin || "").toUpperCase();
+  const D = String(o.dest || "").toUpperCase();
+  if (!/^[A-Z]{3}$/.test(O) || !/^[A-Z]{3}$/.test(D)) return null;
+  const pax = Math.min(9, Math.max(1, Math.floor(o.pax || 1)));
+  const code = `${O}${ddmm(o.dateStart)}${D}${ddmm(o.dateEnd)}${pax}`;
+  return `https://www.aviasales.com/search/${code}?marker=${encodeURIComponent(o.marker)}`;
+}
 
 function corsHeaders() {
   return {
@@ -103,7 +124,7 @@ serve(async (req) => {
     const { data: pkg, error: pErr } = await sb
       .from("packages")
       .select(`
-        package_id, search_id, resort_id,
+        package_id, search_id, resort_id, dest_airport_iata,
         flight_booking_url, hotel_booking_url,
         flight_price, hotel_price, total_price,
         resorts ( resort_name, country, area )
@@ -126,11 +147,23 @@ serve(async (req) => {
     let total_price_at_click: number | null = null;
 
     if (click_type === "flight") {
-      target_url = pkg.flight_booking_url;
+      // Prefer a stored fare URL if one ever exists; otherwise construct an
+      // Aviasales search deep link from the route + dates (the normal path
+      // today, since flight_booking_url is not populated).
+      const childAges = Array.isArray(search.child_ages) ? search.child_ages : [];
+      const seatedPax = Number(search.adults ?? 2) + childAges.filter((a: any) => Number(a) >= 2).length;
+      target_url = pkg.flight_booking_url || buildAviasalesUrl({
+        origin: String(search.origin_iata ?? ""),
+        dest: String(pkg.dest_airport_iata ?? ""),
+        dateStart: String(search.date_start),
+        dateEnd: String(search.date_end),
+        pax: seatedPax,
+        marker: tpMarker,
+      });
       supplier = "aviasales";
       total_price_at_click = pkg.flight_price ? Number(pkg.flight_price) : null;
       if (!target_url) {
-        return new Response(JSON.stringify({ version: VERSION, error: "No flight booking URL available for this package" }), { status: 400, headers });
+        return new Response(JSON.stringify({ version: VERSION, error: "Could not build a flight booking link (missing or invalid airport codes for this route)." }), { status: 400, headers });
       }
     } else {
       const resort = (pkg as any).resorts;
