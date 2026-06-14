@@ -754,6 +754,204 @@ ${rows.map(({ c, n, ph }) => `<li class="seo-card">
   });
 }
 
+// ---------- themed long-tail pages ("best X for Y") ----------
+// Each theme is a real, data-backed filter — no thin doorway pages. A
+// themed page is only published when at least THEME_MIN resorts match,
+// so every page has a substantive list. Generated per-country and as a
+// cross-Caribbean "best of" hub.
+const THEME_MIN = 4;
+const THEMES = [
+  {
+    slug: "water-park-resorts", globalSlug: "best-water-park-resorts",
+    countryH: (c) => `Family Resorts with a Water Park in ${c}`,
+    globalH: "Best Caribbean Family Resorts with a Water Park",
+    blurb: "On-site water parks, slides, and splash pads — the resorts that keep kids busy from breakfast to sunset.",
+    match: (r) => r.water_park === true,
+  },
+  {
+    slug: "beachfront-resorts", globalSlug: "best-beachfront-resorts",
+    countryH: (c) => `Beachfront Family Resorts in ${c}`,
+    globalH: "Best Beachfront Caribbean Family Resorts",
+    blurb: "Step from your room straight onto the sand — resorts directly on the beach.",
+    match: (r) => r.on_beach === true,
+  },
+  {
+    slug: "resorts-for-toddlers", globalSlug: "best-resorts-for-toddlers",
+    countryH: (c) => `Best ${c} Resorts for Toddlers & Infants`,
+    globalH: "Best Caribbean Resorts for Toddlers & Infants",
+    blurb: "Infant-friendly resorts and kids clubs that welcome little ones as young as 3.",
+    match: (r) => r.infants === true || (r.kids_club && r.kc_min != null && Number(r.kc_min) <= 3),
+  },
+  {
+    slug: "connecting-room-resorts", globalSlug: "best-connecting-room-resorts",
+    countryH: (c) => `${c} Family Resorts with Connecting Rooms`,
+    globalH: "Best Caribbean Family Resorts with Connecting Rooms",
+    blurb: "Adjoining rooms so the kids are next door, not down the hall.",
+    match: (r) => r.connecting === true,
+  },
+  {
+    slug: "large-family-resorts", globalSlug: "best-large-family-resorts",
+    countryH: (c) => `${c} Resorts for Large Families (Sleep 6+)`,
+    globalH: "Best Caribbean Resorts for Large Families (Sleep 6+)",
+    blurb: "Suites and villas that sleep six or more — one booking for the whole crew.",
+    match: (r) => r.family_max != null && Number(r.family_max) >= 6,
+  },
+];
+const themeCountryPath = (t, c) => `/caribbean/${slugify(c)}/${t.slug}`;
+const themeGlobalPath = (t) => `/caribbean/${t.globalSlug}`;
+
+// Shared grid card (same markup countryPage uses).
+function gridCard(r) {
+  const ph = photoUrl(pageHero(r), 600);
+  const r5 = ratingTo5(r.rating);
+  const bs = badges(r).slice(0, 3);
+  return `<li class="seo-card">
+  <a href="${resortPath(r)}" class="seo-card-link">
+    ${ph ? `<img class="seo-card-img" src="${ph}" alt="${esc(r.resort_name)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
+    <span class="seo-card-body">
+      <span class="seo-card-name">${esc(r.resort_name)}</span>
+      <span class="seo-card-meta">${esc(r.area || r.country)}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
+      ${bs.length ? `<span class="seo-card-tags">${bs.map((b) => `<span>${esc(b)}</span>`).join("")}</span>` : ""}
+    </span>
+  </a>
+</li>`;
+}
+
+// Which themes have enough matches to publish for a given country.
+function themesForCountry(country) {
+  const list = byCountry.get(country) || [];
+  return THEMES.filter((t) => list.filter(t.match).length >= THEME_MIN);
+}
+
+function themeCountryPage(t, country, matches) {
+  const url = `${ORIGIN}${themeCountryPath(t, country)}`;
+  const hero = photoUrl(countryHero.get(country) || matches.find((r) => r.photo_ref)?.photo_ref, 1200);
+  const n = matches.length;
+  const title = t.countryH(country);
+  const intro = `${t.blurb} These are the ${n} family resort${n === 1 ? "" : "s"} in ${country} that KindredTrips tracks ${title.toLowerCase().includes("toddler") ? "for the youngest travelers" : `matching this`}. Compare the total trip cost — flights plus hotel — for your exact family across all of them.`;
+  const collectionLd = {
+    "@context": "https://schema.org", "@type": "CollectionPage",
+    name: title, description: clip(intro, 200), url,
+    about: { "@type": "TouristDestination", name: country },
+    mainEntity: {
+      "@type": "ItemList", numberOfItems: n,
+      itemListElement: matches.slice(0, 50).map((r, i) => ({
+        "@type": "ListItem", position: i + 1, name: r.resort_name, url: `${ORIGIN}${resortPath(r)}`,
+      })),
+    },
+  };
+  const crumbLd = {
+    "@context": "https://schema.org", "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: country, item: `${ORIGIN}${countryPath(country)}` },
+      { "@type": "ListItem", position: 4, name: title, item: url },
+    ],
+  };
+  const otherThemes = themesForCountry(country).filter((x) => x.slug !== t.slug);
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(title)}" loading="eager" /></div>` : ""}
+<h1>${esc(title)}</h1>
+<p class="seo-sub">${n} resort${n === 1 ? "" : "s"} in ${esc(country)} · ranked by guest rating</p>
+<p class="seo-lede">${esc(intro)}</p>
+
+${searchWidget({
+  country,
+  headline: `Price these ${esc(country)} resorts for your family`,
+  sub: `Enter your airport, dates, and family. We'll price every resort below — live flights plus live hotel rates — ranked by total trip cost.`,
+})}
+
+<h2>${esc(title)}</h2>
+<ul class="seo-grid">
+${matches.map(gridCard).join("\n")}
+</ul>
+
+<p class="seo-back"><a href="${countryPath(country)}">← All family resorts in ${esc(country)}</a> · <a href="${themeGlobalPath(t)}">${esc(t.globalH)} →</a></p>
+${otherThemes.length ? `<h2>More ${esc(country)} searches</h2>
+<ul class="seo-link-grid">
+${otherThemes.map((x) => `<li><a href="${themeCountryPath(x, country)}">${esc(x.countryH(country))}</a></li>`).join("")}
+</ul>` : ""}
+`;
+  return shell({
+    title: `${title} — Ranked by Trip Cost | KindredTrips`,
+    description: clip(intro, 155),
+    canonical: url,
+    image: toAbs(hero),
+    imageAlt: title,
+    jsonld: [collectionLd, crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: country, url: countryPath(country) },
+      { name: t.countryH(country).replace(`in ${country}`, "").trim(), url },
+    ],
+    body,
+  });
+}
+
+function themeGlobalPage(t, matches) {
+  const url = `${ORIGIN}${themeGlobalPath(t)}`;
+  const top = matches.slice(0, 48);
+  const hero = photoUrl(top.find((r) => r.photo_ref)?.photo_ref || top[0] && pageHero(top[0]), 1200);
+  const countryList = [...new Set(matches.map((r) => r.country))];
+  const intro = `${t.blurb} Across ${countryList.length} Caribbean destinations, these are the family resorts KindredTrips tracks that match — ranked by guest rating. Pick any and we'll price the complete trip (flights + hotel) for your family.`;
+  const collectionLd = {
+    "@context": "https://schema.org", "@type": "CollectionPage",
+    name: t.globalH, description: clip(intro, 200), url,
+    mainEntity: {
+      "@type": "ItemList", numberOfItems: matches.length,
+      itemListElement: top.map((r, i) => ({
+        "@type": "ListItem", position: i + 1, name: r.resort_name, url: `${ORIGIN}${resortPath(r)}`,
+      })),
+    },
+  };
+  const crumbLd = {
+    "@context": "https://schema.org", "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: t.globalH, item: url },
+    ],
+  };
+  // Per-country links for this theme (where the country has enough matches).
+  const countryLinks = countries
+    .filter((c) => (byCountry.get(c) || []).filter(t.match).length >= THEME_MIN)
+    .map((c) => `<li><a href="${themeCountryPath(t, c)}">${esc(t.countryH(c))}</a></li>`);
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loading="eager" /></div>` : ""}
+<h1>${esc(t.globalH)}</h1>
+<p class="seo-sub">${matches.length} resorts across ${countryList.length} destinations · ranked by guest rating</p>
+<p class="seo-lede">${esc(intro)}</p>
+<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
+
+<h2>Top picks</h2>
+<ul class="seo-grid">
+${top.map(gridCard).join("\n")}
+</ul>
+
+${countryLinks.length ? `<h2>By destination</h2>
+<ul class="seo-link-grid">
+${countryLinks.join("")}
+</ul>` : ""}
+<p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
+`;
+  return shell({
+    title: `${t.globalH} | KindredTrips`,
+    description: clip(intro, 155),
+    canonical: url,
+    image: toAbs(hero),
+    imageAlt: t.globalH,
+    jsonld: [collectionLd, crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: t.globalH, url },
+    ],
+    body,
+  });
+}
+
 // ---------- write ----------
 function write(rel, html) {
   const full = join(ROOT, rel);
@@ -772,6 +970,26 @@ for (const r of resorts) { write(`resort/${slugById.get(r.resort_id)}.html`, res
 for (const c of countries) write(`caribbean/${slugify(c)}.html`, countryPage(c));
 write("caribbean/index.html", destinationsIndex());
 
+// Themed long-tail pages: per-theme global hub + per-country pages.
+let themeN = 0;
+const themeUrls = [];
+for (const t of THEMES) {
+  const globalMatches = resorts.filter(t.match).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  if (globalMatches.length >= THEME_MIN) {
+    write(`caribbean/${t.globalSlug}.html`, themeGlobalPage(t, globalMatches));
+    themeUrls.push({ loc: `${ORIGIN}${themeGlobalPath(t)}`, pr: "0.7", cf: "weekly" });
+    themeN++;
+  }
+  for (const c of countries) {
+    const matches = (byCountry.get(c) || []).filter(t.match).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    if (matches.length >= THEME_MIN) {
+      write(`caribbean/${slugify(c)}/${t.slug}.html`, themeCountryPage(t, c, matches));
+      themeUrls.push({ loc: `${ORIGIN}${themeCountryPath(t, c)}`, pr: "0.6", cf: "weekly" });
+      themeN++;
+    }
+  }
+}
+
 // ---------- sitemap ----------
 const staticUrls = [
   { loc: `${ORIGIN}/`, pr: "1.0", cf: "daily" },
@@ -783,6 +1001,7 @@ const staticUrls = [
 const urls = [
   ...staticUrls,
   ...countries.map((c) => ({ loc: `${ORIGIN}${countryPath(c)}`, pr: "0.8", cf: "weekly" })),
+  ...themeUrls,
   ...resorts.map((r) => ({ loc: `${ORIGIN}${resortPath(r)}`, pr: "0.7", cf: "weekly" })),
 ];
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
