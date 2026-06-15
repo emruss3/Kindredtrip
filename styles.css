@@ -285,6 +285,12 @@ button { font-family: inherit; }
 @media (max-width: 720px) {
   .topbar.has-search .compact-search .cs-line { display: none; }
 }
+/* After a search the compact "Edit search" bar replaces the "Search trips"
+   CTA's job. On a phone the logo + edit bar + CTA don't fit together, so the
+   CTA overlapped/squished. Hide the now-redundant CTA once a search exists. */
+@media (max-width: 880px) {
+  .topbar.has-search .topbar-cta { display: none; }
+}
 
 /* Inline-edit popover under the sticky topbar */
 .search-popover {
