@@ -15,7 +15,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "discover_liteapi_hotels_v1";
+const VERSION = "discover_liteapi_hotels_v3_star_filter";
+
+// Read a hotel's star rating from whatever field LiteAPI uses in the
+// /data/hotels list response (it has varied across versions).
+function hotelStars(h: any): number {
+  const v = h?.stars ?? h?.starRating ?? h?.star_rating ?? h?.rating?.stars ?? null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 
 // ISO 3166-1 alpha-2 codes for our addressable resort countries. Cuba
@@ -111,6 +119,11 @@ serve(async (req) => {
     const hotelTypeIds: number[] = Array.isArray(body.hotel_type_ids)
       ? body.hotel_type_ids.map(Number).filter(Number.isFinite)
       : [206];
+    // Minimum star rating for candidate hotels. Product policy: only add
+    // 4-star-or-higher resorts. (Family-fit + sleeps-5 are applied later,
+    // in the detail-enrichment pass — they need room-level data the list
+    // endpoint doesn't carry.)
+    const minStars: number = Number.isFinite(Number(body.min_stars)) ? Number(body.min_stars) : 4;
     const countries = filterCodes
       ? COUNTRY_CODES.filter((c) => filterCodes.includes(c.code))
       : COUNTRY_CODES;
@@ -133,10 +146,13 @@ serve(async (req) => {
     let totalNetNew = 0;
     let lastError: string | undefined;
 
+    let rawSample: string[] | null = null;
     for (const c of countries) {
       let offset = 0;
       const limit = 1000;
       const seenIds: Set<string> = new Set();
+      // net-new candidates meeting the star floor: id -> {name, stars, city}
+      const candidates = new Map<string, { name: string; stars: number; city: string | null }>();
       let pages = 0;
       while (pages < 10) {
         const res = await fetchHotels(apiKey, c.code, offset, limit, hotelTypeIds.length ? hotelTypeIds : null);
@@ -146,7 +162,19 @@ serve(async (req) => {
         }
         for (const h of res.hotels) {
           const id = String(h?.id ?? h?.hotelId ?? "");
-          if (id) seenIds.add(id);
+          if (!id) continue;
+          seenIds.add(id);
+          // capture the field shape of the first hotel we ever see, so we
+          // can confirm which attributes the list endpoint exposes
+          if (!rawSample) rawSample = Object.keys(h);
+          const stars = hotelStars(h);
+          if (stars >= minStars && !haveSet.has(id)) {
+            candidates.set(id, {
+              name: String(h?.name ?? ""),
+              stars,
+              city: h?.city ?? h?.cityName ?? null,
+            });
+          }
         }
         pages++;
         if (res.hotels.length < limit) break;
@@ -155,12 +183,20 @@ serve(async (req) => {
       const liteapi_total = seenIds.size;
       const already_have = Array.from(seenIds).filter((id) => haveSet.has(id)).length;
       const net_new = liteapi_total - already_have;
+      const net_new_starred = candidates.size;
+      const sample = Array.from(candidates.values())
+        .sort((a, b) => b.stars - a.stars)
+        .slice(0, 8)
+        .map((x) => `${x.name}${x.city ? " — " + x.city : ""} (${x.stars}★)`);
       perCountry.push({
         country: c.name, code: c.code,
-        liteapi_total, already_have, net_new, pages,
+        liteapi_total, already_have, net_new,
+        net_new_4star_plus: net_new_starred,
+        sample,
+        pages,
       });
       totalLiteapi += liteapi_total;
-      totalNetNew += net_new;
+      totalNetNew += net_new_starred;
     }
 
     perCountry.sort((a, b) => b.net_new - a.net_new);
@@ -169,10 +205,10 @@ serve(async (req) => {
       version: VERSION,
       countries_scanned: countries.length,
       hotel_type_ids_filter: hotelTypeIds,
+      min_stars: minStars,
+      list_field_sample: rawSample,
       totals: {
-        liteapi_total: totalLiteapi,
-        net_new: totalNetNew,
-        already_have: totalLiteapi - totalNetNew,
+        net_new_4star_plus: totalNetNew,
       },
       per_country: perCountry,
       last_error: lastError,
