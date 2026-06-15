@@ -58,6 +58,20 @@
   // Fire-and-forget funnel event to the log_event edge fn. Never throws.
   function logEvent(signal_type, payload) {
     try {
+      // Mirror to GA4 (same mapping as the homepage trackEvent) so resort-page
+      // booking clicks land in the same funnel/conversion reports. gtag is
+      // present only if the page loaded the tag (see SEO page <head>).
+      if (typeof gtag === "function") {
+        const GA_NAME = {
+          booking_click: "begin_checkout",   // primary conversion
+          watch_trip_click: "generate_lead",
+        }[signal_type] || signal_type;
+        gtag("event", GA_NAME, {
+          ...(payload || {}),
+          session_id: SESSION_ID,
+          internal_traffic: IS_INTERNAL ? "yes" : "no",
+        });
+      }
       fetch(`${SUPABASE_URL}/functions/v1/log_event`, {
         method: "POST", keepalive: true,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY },
