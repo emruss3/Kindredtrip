@@ -180,7 +180,7 @@
     <div class="search-popover-grid">
       <div class="search-field">
         <label for="po_origin">From</label>
-        <input id="po_origin" type="text" list="origin-airports" placeholder="Airport code" required autocomplete="off" />
+        <input id="po_origin" type="text" list="origin-airports" placeholder="City or airport" required autocomplete="off" />
       </div>
       <div class="search-field">
         <label for="po_date_start">Check-in</label>
@@ -231,7 +231,7 @@
       <div class="search-card-grid">
         <div class="search-field" onclick="this.querySelector('input').focus()">
           <label for="origin">From</label>
-          <input id="origin" type="text" list="origin-airports" placeholder="Airport code (e.g. ATL, JFK, ORD)" required autocomplete="off" inputmode="text" />
+          <input id="origin" type="text" list="origin-airports" placeholder="City or airport (e.g. Nashville, BNA)" required autocomplete="off" inputmode="text" />
           <datalist id="origin-airports">
             <option value="ATL">Atlanta (ATL)</option>
             <option value="AUS">Austin (AUS)</option>
@@ -2189,6 +2189,97 @@
     }
   }
 
+  // ---- Airport typeahead (type a city OR an IATA code) --------------------
+  // Built once from the #origin-airports datalist so there's a single source
+  // of truth. Native <datalist> only matches the option's code value (typing
+  // "Nash" would never surface Nashville), so we replace it with a custom
+  // menu that matches city name OR code, then resolve whatever's in the field
+  // back to a 3-letter code at submit time.
+  const AIRPORTS = Array.from(document.querySelectorAll("#origin-airports option"))
+    .map((o) => {
+      const code = (o.value || "").trim().toUpperCase();
+      const label = (o.textContent || "").trim();                 // "Nashville (BNA)"
+      const cityDisplay = label.replace(/\s*\([^)]*\)\s*$/, "").trim() || code;
+      return { code, label, cityDisplay, city: cityDisplay.toLowerCase() };
+    })
+    .filter((a) => a.code);
+
+  // Turn "Nashville", "Nashville (BNA)", or "bna" into "BNA".
+  function resolveAirportCode(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    const paren = s.match(/\(([A-Za-z]{3})\)\s*$/);
+    if (paren) return paren[1].toUpperCase();
+    const up = s.toUpperCase();
+    if (AIRPORTS.some((a) => a.code === up)) return up;
+    const low = s.toLowerCase();
+    const m = AIRPORTS.find((a) => a.city === low)
+           || AIRPORTS.find((a) => a.city.startsWith(low))
+           || AIRPORTS.find((a) => a.city.includes(low));
+    return m ? m.code : up;
+  }
+
+  function attachAirportAutocomplete(input) {
+    if (!input || input.__acAttached) return;
+    input.__acAttached = true;
+    input.removeAttribute("list");                 // disable the native datalist
+    input.setAttribute("autocomplete", "off");
+    const wrap = input.parentElement;
+    if (wrap && getComputedStyle(wrap).position === "static") wrap.style.position = "relative";
+    const menu = document.createElement("div");
+    menu.className = "ac-menu";
+    menu.setAttribute("role", "listbox");
+    menu.hidden = true;
+    wrap.appendChild(menu);
+    let items = [], active = -1;
+
+    const close = () => { menu.hidden = true; menu.innerHTML = ""; items = []; active = -1; };
+    const pick = (a) => { if (a) input.value = a.label; close(); };
+    const updateActive = () => {
+      Array.from(menu.children).forEach((c, i) => c.classList.toggle("active", i === active));
+      if (active >= 0 && menu.children[active]) menu.children[active].scrollIntoView({ block: "nearest" });
+    };
+    const render = (q) => {
+      const low = q.trim().toLowerCase();
+      const list = !low
+        ? AIRPORTS.slice(0, 8)
+        : AIRPORTS.filter((a) => a.code.toLowerCase().startsWith(low) || a.city.includes(low)).slice(0, 8);
+      items = list; active = -1;
+      if (!list.length) { close(); return; }
+      menu.innerHTML = list.map((a, i) =>
+        `<div class="ac-item" role="option" data-i="${i}"><span class="ac-city">${escapeHtml(a.cityDisplay)}</span><span class="ac-code">${escapeHtml(a.code)}</span></div>`
+      ).join("");
+      menu.hidden = false;
+    };
+
+    input.addEventListener("input", () => render(input.value));
+    input.addEventListener("focus", () => { if (!input.value.trim()) render(""); });
+    input.addEventListener("keydown", (e) => {
+      if (menu.hidden) return;
+      if (e.key === "ArrowDown") { active = Math.min(active + 1, items.length - 1); updateActive(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); updateActive(); e.preventDefault(); }
+      else if (e.key === "Enter") { if (active >= 0) { pick(items[active]); e.preventDefault(); } else { close(); } }
+      else if (e.key === "Escape") { close(); }
+    });
+    // mousedown (not click) so the pick fires before the input blur closes it
+    menu.addEventListener("mousedown", (e) => {
+      const it = e.target.closest(".ac-item");
+      if (!it) return;
+      e.preventDefault();
+      pick(items[Number(it.dataset.i)]);
+    });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+  }
+
+  (function initAirportAutocomplete() {
+    const run = () => {
+      attachAirportAutocomplete(document.getElementById("origin"));
+      attachAirportAutocomplete(document.getElementById("po_origin"));
+    };
+    if (document.readyState !== "loading") run();
+    else document.addEventListener("DOMContentLoaded", run);
+  })();
+
   async function runSearch() {
     const submitBtn = document.getElementById("submit-btn");
     submitBtn.disabled = true;
@@ -2224,7 +2315,7 @@
         return;
       }
       const body = {
-        origin_iata: document.getElementById("origin").value.trim().toUpperCase(),
+        origin_iata: resolveAirportCode(document.getElementById("origin").value),
         date_start: dateStart,
         date_end: dateEnd,
         adults: parseInt(document.getElementById("adults").value, 10) || 2,

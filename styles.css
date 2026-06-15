@@ -8666,6 +8666,42 @@ body.trip-detail-open #status { display: none !important; }
 /* Secondary "Book flights" CTA under the hotel CTA in the trip rail */
 .trip-rail-cta-flight { width: 100%; margin-top: 8px; }
 
+/* ---- Airport typeahead menu (city or IATA code) ------------------------- */
+.ac-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 80;
+  background: #fff;
+  border: 1px solid var(--line, #E8DCCB);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(13, 43, 69, 0.16);
+  max-height: 280px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  text-align: left;
+}
+.ac-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.ac-item + .ac-item { border-top: 1px solid var(--line-soft, #F2E8DA); }
+.ac-item:hover,
+.ac-item.active { background: var(--bg-soft, #FAF6EF); }
+.ac-city { font-weight: 500; }
+.ac-code { color: var(--ink-3); font-weight: 700; font-size: 12.5px; letter-spacing: 0.04em; }
+/* The popover grid clips its corners with overflow:hidden, which would hide
+   the typeahead dropdown — allow it to overflow so the menu is visible. */
+.search-popover-grid { overflow: visible; }
+
 /* ============================================================================
    MOBILE CONVERSION FIXES  (additive — does not override existing rules)
    ============================================================================
