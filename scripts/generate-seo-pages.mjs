@@ -317,6 +317,7 @@ ${ld.map((o) => `<script type="application/ld+json">\n${JSON.stringify(o, null, 
     <a href="/" class="logo" aria-label="KindredTrips home"><img src="/logo.png" alt="KindredTrips" class="logo-img" /></a>
     <nav class="topbar-nav" aria-label="Primary">
       <a href="/caribbean" class="nav-link">Destinations</a>
+      <a href="/inspiration.html" class="nav-link">Inspiration</a>
       <a href="/about.html" class="nav-link">About</a>
       <a href="/contact.html" class="nav-link">Contact</a>
       <a href="/#search-form" class="topbar-cta">Search trips</a>
@@ -1043,6 +1044,7 @@ for (const t of THEMES) {
 const staticUrls = [
   { loc: `${ORIGIN}/`, pr: "1.0", cf: "daily" },
   { loc: `${ORIGIN}/caribbean`, pr: "0.9", cf: "weekly" },
+  { loc: `${ORIGIN}/inspiration.html`, pr: "0.8", cf: "weekly" },
   { loc: `${ORIGIN}/about.html`, pr: "0.6", cf: "monthly" },
   { loc: `${ORIGIN}/contact.html`, pr: "0.5", cf: "monthly" },
   { loc: `${ORIGIN}/privacy.html`, pr: "0.3", cf: "yearly" },
