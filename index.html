@@ -51,6 +51,13 @@
 <!-- Search fires a request to Supabase the moment a user types, so warming
      the TLS handshake at parse time saves ~100-200ms on first interaction. -->
 <link rel="preconnect" href="https://wyqbtcuoorclmirepkuo.supabase.co" crossorigin />
+<!-- The hero background is the homepage LCP element. Preload it (browsers
+     honor media on preload) so it starts before CSS parses; phones get a
+     lighter variant matching the mobile .hero-bg override in styles.css. -->
+<link rel="preload" as="image" fetchpriority="high" media="(min-width: 721px)"
+      href="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=2400&q=80" />
+<link rel="preload" as="image" fetchpriority="high" media="(max-width: 720px)"
+      href="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=70" />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/styles.css?v=20260520-score-retune" />
 <meta name="kt-build" content="20260520-score-retune" />
