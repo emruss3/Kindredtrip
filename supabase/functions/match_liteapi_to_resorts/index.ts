@@ -37,7 +37,31 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "match_liteapi_to_resorts_v3_brand_chain";
+// v4 adds three fixes on top of v3 that recover obvious matches v3 parked
+// as low_confidence:
+//
+//   1. CHARACTER-BIGRAM DICE similarity alongside token Jaccard. Token
+//      Jaccard can't see that "Waterpark" == "Water Park" (one token vs
+//      two), so "All Ritmo Cancun Resort & Waterpark" scored 0.40 against
+//      LiteAPI's "All Ritmo ... Water Park - All Inclusive" and got
+//      parked. Dice over space-stripped char bigrams scores that pair
+//      ~0.8. Name similarity is now max(jaccard, dice).
+//
+//   2. GOOGLE-RESOLVED NAME as a second name source. Our resort_name is
+//      full of marketing cruft ("All Inclusive", "- 2027") and is
+//      sometimes flat wrong; google_place_resolved_name is cleaner and
+//      Google-verified. We score against BOTH and keep the better one.
+//      (Google names are occasionally junk like "3-bedroom villa..." —
+//      taking the max means a junk Google name never hurts, it just
+//      doesn't help.)
+//
+//   3. A FUZZY acceptance path gated hard on geo + leading token. The
+//      new Dice signal is permissive, so it only accepts within 5 km AND
+//      when our first distinctive token also appears in the candidate.
+//      That keeps same-city/different-brand pairs (Sunscape Puerto
+//      Vallarta vs Marriott Puerto Vallarta) rejected while letting the
+//      compound-word and cruft cases through.
+const VERSION = "match_liteapi_to_resorts_v4_dice_google_name";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const PER_REQUEST_DELAY_MS = 250;
 const WALL_CLOCK_BUDGET_MS = 90_000;
@@ -103,6 +127,30 @@ function jaccard(aTokens: string[], bTokens: string[]): number {
   const union = a.size + b.size - inter;
   return union > 0 ? inter / union : 0;
 }
+// Character-bigram Dice coefficient over the space-stripped, accent-folded
+// string. Robust to tokenization quirks ("waterpark" vs "water park"),
+// word order, and trailing cruft. Returns 0..1.
+function squish(s: string): string {
+  return strip(s).replace(/ /g, "");
+}
+function bigrams(s: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
+  return out;
+}
+function diceBigram(a: string, b: string): number {
+  const A = bigrams(a), B = bigrams(b);
+  if (!A.length || !B.length) return a && a === b ? 1 : 0;
+  const counts = new Map<string, number>();
+  for (const g of B) counts.set(g, (counts.get(g) ?? 0) + 1);
+  let inter = 0;
+  for (const g of A) {
+    const c = counts.get(g);
+    if (c && c > 0) { inter++; counts.set(g, c - 1); }
+  }
+  return (2 * inter) / (A.length + B.length);
+}
+
 function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -213,7 +261,7 @@ serve(async (req) => {
 
       // Candidate unmatched rows for this country
       let oursQ = sb.from("resorts")
-        .select("resort_id,resort_name,country,latitude,longitude,airport_code,hotel_brand,liteapi_match_status")
+        .select("resort_id,resort_name,google_place_resolved_name,country,latitude,longitude,airport_code,hotel_brand,liteapi_match_status")
         .eq("country", c.name)
         .is("liteapi_hotel_id", null);
       // Status filter: combine NULL + explicit set into a single OR clause.
@@ -278,13 +326,39 @@ serve(async (req) => {
         h,
         id: String(h?.id ?? h?.hotelId ?? ""),
         tokens: tokenize(h?.name ?? ""),
+        sq: squish(h?.name ?? ""),
         chainK: chainKey(h?.chain),
         lat: Number(h?.latitude ?? h?.lat),
         lng: Number(h?.longitude ?? h?.lng),
       })).filter((x) => x.id && Number.isFinite(x.lat) && Number.isFinite(x.lng) && !usedIdSet.has(x.id));
 
       for (const ours_row of unmatched) {
-        const ourTokens = tokenize(ours_row.resort_name);
+        // Score against BOTH our raw resort_name and the Google-resolved
+        // name; keep the better of the two for every signal.
+        const nameSources = [ours_row.resort_name, (ours_row as any).google_place_resolved_name]
+          .map((s: any) => String(s ?? "").trim())
+          .filter((s: string) => s.length > 0);
+        const ourTokenSets = nameSources.map(tokenize).filter((t) => t.length > 0);
+        const ourSquished = nameSources.map(squish).filter((s) => s.length > 1);
+        // Primary token set (for chain pass / lead-token guard): resort_name
+        // first, falling back to whatever's available.
+        const ourTokens = ourTokenSets[0] ?? [];
+        // best name signals for a candidate, across all name sources
+        const scoreCand = (cand: any) => {
+          let jac = 0, shared = 0, dice = 0, lead = false;
+          for (const ts of ourTokenSets) {
+            const j = jaccard(ts, cand.tokens);
+            if (j > jac) jac = j;
+            const sh = ts.filter((t: string) => cand.tokens.includes(t)).length;
+            if (sh > shared) shared = sh;
+            if (ts[0] && cand.tokens.includes(ts[0])) lead = true;
+          }
+          for (const sq of ourSquished) {
+            const d = diceBigram(sq, cand.sq);
+            if (d > dice) dice = d;
+          }
+          return { jac, shared, dice, lead };
+        };
         const ourLat = Number(ours_row.latitude);
         const ourLng = Number(ours_row.longitude);
         const hasOurCoords = Number.isFinite(ourLat) && Number.isFinite(ourLng);
@@ -312,7 +386,9 @@ serve(async (req) => {
           if (anchorLat != null && anchorLng != null) {
             dKm = distanceKm(anchorLat as number, anchorLng as number, cand.lat, cand.lng);
           }
-          const sim = jaccard(ourTokens, cand.tokens);
+          const sc = scoreCand(cand);
+          // Combined name signal: best of token Jaccard and char-bigram Dice.
+          const sim = Math.max(sc.jac, sc.dice);
           // Chain-anchored thresholds:
           //   own coords:        sim >= 0.30 within 5 km
           //   airport centroid:  sim >= 0.40 within 50 km
@@ -323,11 +399,17 @@ serve(async (req) => {
           // location token after stopword strip). Require ourTokens
           // share at least 2 distinctive tokens AND a stricter sim
           // floor when the brand match alone is doing most of the work.
-          const sharedTokens = ourTokens.filter((t) => cand.tokens.includes(t)).length;
+          const sharedTokens = sc.shared;
+          // v4: chain + location alone caused false positives between
+          // co-located sister properties of the same chain (Riu Jalisco vs
+          // Riu Flamingos; Turquoize/Hyatt vs Riu Palace). Require a higher
+          // combined-name floor AND that our leading distinctive token
+          // appears in the candidate, so the property-distinguishing word
+          // (not just the chain + city) has to agree.
           let acceptable = false;
-          if (hasOurCoords) acceptable = sim >= 0.40 && sharedTokens >= 2 && dKm <= 5;
-          else if (anchorLat != null) acceptable = sim >= 0.50 && sharedTokens >= 2 && dKm <= 50;
-          else acceptable = sim >= 0.60 && sharedTokens >= 2;
+          if (hasOurCoords) acceptable = sim >= 0.55 && sharedTokens >= 2 && sc.lead && dKm <= 5;
+          else if (anchorLat != null) acceptable = sim >= 0.60 && sharedTokens >= 2 && sc.lead && dKm <= 50;
+          else acceptable = sim >= 0.65 && sharedTokens >= 2 && sc.lead;
           if (!acceptable) continue;
           const score = sim * 100 + 20 /* chain bonus */ - (Number.isFinite(dKm) ? dKm * 0.3 : 0);
           if (score > bestScore) {
@@ -346,29 +428,55 @@ serve(async (req) => {
               dKm = distanceKm(anchorLat as number, anchorLng as number, cand.lat, cand.lng);
               if (dKm > geoRadiusKm) continue;
             }
-            const sim = jaccard(ourTokens, cand.tokens);
+            const sc = scoreCand(cand);
+            const jac = sc.jac;
             let acceptable = false;
-            if (hasOurCoords) acceptable = (sim >= 0.55 && dKm <= 3) || (sim >= 0.80 && dKm <= 8);
-            else if (anchorLat != null) acceptable = sim >= 0.80 && dKm <= 25;
-            else acceptable = sim >= 0.90;
+            let path = "name_geo";
+            if (hasOurCoords) {
+              acceptable = (jac >= 0.55 && dKm <= 3) || (jac >= 0.80 && dKm <= 8);
+              // Fuzzy Dice path: catches "Waterpark" vs "Water Park" and
+              // marketing-cruft mismatches that token Jaccard misses.
+              // Gated hard — within 5 km, our leading distinctive token must
+              // appear in the candidate, and >=2 shared tokens — so a
+              // same-city different-brand pair (Sunscape vs Marriott Puerto
+              // Vallarta) is still rejected (different lead token).
+              if (!acceptable && sc.dice >= 0.62 && sc.lead && sc.shared >= 2 && dKm <= 5) {
+                acceptable = true;
+                path = "name_geo_dice";
+              }
+            } else if (anchorLat != null) {
+              acceptable = Math.max(jac, sc.dice) >= 0.80 && dKm <= 25;
+            } else {
+              acceptable = Math.max(jac, sc.dice) >= 0.90;
+            }
             if (!acceptable) continue;
+            const sim = Math.max(jac, sc.dice);
             const score = sim * 100 - (Number.isFinite(dKm) ? dKm * 0.5 : 0);
             if (score > bestScore) {
               bestScore = score;
               best = { cand, sim, dKm };
-              matchPath = "name_geo";
+              matchPath = path;
             }
           }
         }
 
         // Track best-effort score even when nothing meets the threshold,
-        // so we can record low_confidence vs no_match.
+        // so we can record low_confidence vs no_match. Cheap: Jaccard only
+        // (no Dice) and geo-gated, so this doesn't blow the CPU budget.
         let runnerUp: any = null;
         if (!best) {
           let bestSim = 0;
           for (const cand of liteTok) {
-            const sim = jaccard(ourTokens, cand.tokens);
-            if (sim > bestSim) { bestSim = sim; runnerUp = { cand, sim }; }
+            if (anchorLat != null && anchorLng != null) {
+              const dKm = distanceKm(anchorLat as number, anchorLng as number, cand.lat, cand.lng);
+              if (dKm > geoRadiusKm) continue;
+            }
+            let jac = 0;
+            for (const ts of ourTokenSets) {
+              const j = jaccard(ts, cand.tokens);
+              if (j > jac) jac = j;
+            }
+            if (jac > bestSim) { bestSim = jac; runnerUp = { cand, sim: jac }; }
           }
         }
 
