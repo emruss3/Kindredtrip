@@ -8955,6 +8955,15 @@ body.trip-detail-open #status { display: none !important; }
   color: var(--ink-2);
 }
 .insp-feat-fit span { white-space: nowrap; }
+.insp-feat-note {
+  margin: 22px auto 0;
+  max-width: 760px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.insp-feat-note strong { color: var(--ink); font-weight: 600; }
 
 /* Closing CTA */
 .insp-cta {
