@@ -66,6 +66,24 @@ try {
   const arr = JSON.parse(readFileSync(join(ROOT, "data/resort-liteapi-hero.json"), "utf8"));
   for (const row of arr) if (row?.resort_id && row?.url) liteapiHero.set(row.resort_id, row.url);
 } catch { /* file optional */ }
+
+// Max room occupancy ("sleeps N") per resort_id, for 4★+ resorts that
+// sleep 5+. Sourced from Supabase cap_max_room_occupancy /
+// family_room_max_occupancy (the snapshot's family_max column is empty).
+// Attached to each resort below as r.sleeps so the large-family +
+// family-of-5 themes work. Resorts not in this map get sleeps=0.
+const sleeps5ById = (() => {
+  try { return JSON.parse(readFileSync(join(ROOT, "data/resort-sleeps5.json"), "utf8")); }
+  catch { return {}; }
+})();
+for (const r of resorts) {
+  if (r && r.resort_id && sleeps5ById[r.resort_id] != null) {
+    r.sleeps = Number(sleeps5ById[r.resort_id]) || 0;
+  } else if (r) {
+    // fall back to family_max if the snapshot ever carries it
+    r.sleeps = r.family_max != null ? Number(r.family_max) || 0 : 0;
+  }
+}
 const signalsByResort = new Map();
 for (const s of reviewBundle.signals || []) signalsByResort.set(s.resort_id, s);
 const reviewsByResort = new Map();
@@ -810,11 +828,22 @@ const THEMES = [
     match: (r) => r.connecting === true,
   },
   {
+    // High-intent long-tail: "family of 5" is a top family-travel query and
+    // a genuine pain point — most standard resort rooms cap at 4 (2+2), so
+    // a family of five is forced into two rooms or a suite. These pages list
+    // the 4★+ resorts whose rooms actually sleep 5+.
+    slug: "family-of-5-resorts", globalSlug: "best-resorts-for-family-of-5",
+    countryH: (c) => `${c} All-Inclusive Resorts for a Family of 5`,
+    globalH: "Best Caribbean All-Inclusive Resorts for a Family of 5",
+    blurb: "One room that actually sleeps five. Most resort rooms cap at four — these 4-star-plus resorts have rooms and suites built for a family of five, so you book one room, not two.",
+    match: (r) => Number(r.sleeps || 0) >= 5,
+  },
+  {
     slug: "large-family-resorts", globalSlug: "best-large-family-resorts",
     countryH: (c) => `${c} Resorts for Large Families (Sleep 6+)`,
     globalH: "Best Caribbean Resorts for Large Families (Sleep 6+)",
     blurb: "Suites and villas that sleep six or more — one booking for the whole crew.",
-    match: (r) => r.family_max != null && Number(r.family_max) >= 6,
+    match: (r) => Number(r.sleeps || 0) >= 6,
   },
 ];
 const themeCountryPath = (t, c) => `/caribbean/${slugify(c)}/${t.slug}`;
