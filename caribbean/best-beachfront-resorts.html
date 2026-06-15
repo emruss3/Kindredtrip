@@ -942,10 +942,12 @@
     var hits = 0;
     grid.querySelectorAll('.seo-card').forEach(function (li) {
       var show = !country || li.getAttribute('data-country') === country;
-      li.hidden = !show;
+      // Set display directly: .seo-card has display:flex which would
+      // override the [hidden] attribute, so toggling .hidden does nothing.
+      li.style.display = show ? '' : 'none';
       if (show) hits++;
     });
-    if (empty) empty.hidden = hits > 0;
+    if (empty) empty.hidden = hits > 0;  // <p> has no display override, [hidden] works here
     row.querySelectorAll('.seo-cc').forEach(function (b) {
       b.classList.toggle('is-active', (b.getAttribute('data-country') || '') === country);
     });
