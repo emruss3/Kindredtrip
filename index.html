@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#0D2B45" />
 
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4WHVMCP4Z0"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-4WHVMCP4Z0');
+</script>
+
 <title>KindredTrips — Caribbean family vacations, ranked by total trip cost</title>
 <meta name="description" content="Search every family resort in the Caribbean and every airport in one place. Ranked by total trip cost — flights plus hotel — for your exact family. Kids club, on-the-beach, and infant-friendly filters." />
 
@@ -1279,6 +1288,27 @@
         search_id: lastSearchId || null,
         payload: payload || null,
       };
+      // Mirror every funnel event to GA4. Map our signal_types onto GA's
+      // recommended event names so the standard funnel/conversion reports
+      // work without custom setup. internal_traffic lets us filter our own
+      // sessions out in the GA console (Data Filters). Fire-and-forget;
+      // gtag may be absent if the script is still loading or blocked.
+      if (typeof gtag === "function") {
+        const GA_NAME = {
+          search_started:      "search",
+          results_first_paint: "view_search_results",
+          trip_opened:         "select_item",
+          booking_click:       "begin_checkout",   // primary conversion
+          watch_trip_click:    "generate_lead",
+          search_abandoned:    "search_abandoned",
+        }[signal_type] || signal_type;
+        gtag("event", GA_NAME, {
+          ...(payload || {}),
+          session_id: SESSION_ID,
+          search_id: lastSearchId || null,
+          internal_traffic: IS_INTERNAL ? "yes" : "no",
+        });
+      }
       const url = `${SUPABASE_URL}/functions/v1/log_event`;
       const body = JSON.stringify(bodyObj);
       // sendBeacon can't set the Authorization header log_event's verify_jwt
