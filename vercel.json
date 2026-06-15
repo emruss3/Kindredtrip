@@ -5,6 +5,10 @@
     {
       "source": "/photo",
       "destination": "https://wyqbtcuoorclmirepkuo.supabase.co/functions/v1/resort_photo"
+    },
+    {
+      "source": "/(google[0-9a-fA-F]+\\.html)",
+      "destination": "/$1"
     }
   ],
   "headers": [
