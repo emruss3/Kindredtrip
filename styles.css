@@ -8656,3 +8656,97 @@ body.trip-detail-open #status { display: none !important; }
 
 /* Secondary "Book flights" CTA under the hotel CTA in the trip rail */
 .trip-rail-cta-flight { width: 100%; margin-top: 8px; }
+
+/* ============================================================================
+   MOBILE CONVERSION FIXES  (additive — does not override existing rules)
+   ============================================================================
+   Three quietly-broken things on phones that hurt conversion:
+   1. iOS Safari auto-zooms into any form input with font-size < 16px and
+      doesn't always zoom back out. Families filling in dates+ages hit this
+      on every field. Force 16px on form controls inside breakpoints we
+      already use, only on touch screens, so desktop visuals stay identical.
+   2. Several interactive chips/badges fall under the 44x44 px touch-target
+      bar (WCAG / Apple HIG). Tap-and-miss directly burns clicks.
+   3. Dense text in score breakdowns / footnotes is 11-12px — marginal on
+      desktop, painful on phones. Bump the smallest sizes to 13px on small
+      screens only.
+   ============================================================================ */
+
+/* (1) Stop iOS auto-zoom on form fields. 16px is the magic threshold.
+   Scoped to the search/popover/SEO-wizard fields which are the conversion
+   path. Desktop visuals unchanged. */
+@media (max-width: 720px) {
+  .search-field input,
+  .search-field select,
+  .search-field textarea,
+  .seo-wizard-field input,
+  .seo-wizard-field select,
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="tel"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* (2) Touch-target floor on interactive chips/buttons/links on mobile.
+   Using inline-flex+min-height+padding gets us a ≥44px hit area without
+   visually inflating tiny chips because we centre-align contents. */
+@media (pointer: coarse), (max-width: 720px) {
+  .tag-checkbox,
+  .tag-checkbox-radio,
+  .toggle,
+  .filter-chip,
+  .pill,
+  .nav-link,
+  .topbar-cta,
+  .sort-pill,
+  details.sidebar-block > summary,
+  .modal-close,
+  .badge-rank,
+  .modal-tab,
+  .seo-wizard-submit {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Common close-buttons sit absolute in the top-right of modals — make
+     them tappable without disturbing the close glyph itself. */
+  .modal-close,
+  .search-popover-close {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
+/* (3) Tiny text bump on small screens. Don't touch desktop where the
+   density is intentional. */
+@media (max-width: 720px) {
+  .score-breakdown-row,
+  .score-breakdown-label,
+  .score-breakdown-value,
+  .trip-rail-note,
+  .flight-pp,
+  .flight-lap,
+  .rail-lap-note,
+  .seo-wizard-field-hint,
+  .footnote,
+  .meta,
+  .footer-fine,
+  .micro {
+    font-size: 13px !important;
+  }
+}
+
+/* (Modal scroll-lock companion class. JS toggles .body-lock on <body> when
+   a full-screen modal opens. Prevents iOS background-scroll bleed-through.) */
+body.body-lock {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  /* Preserves scroll position via top: -<scrollY>px set by JS. */
+}

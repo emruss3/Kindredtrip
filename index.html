@@ -48,7 +48,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
+<!-- Search fires a request to Supabase the moment a user types, so warming
+     the TLS handshake at parse time saves ~100-200ms on first interaction. -->
+<link rel="preconnect" href="https://wyqbtcuoorclmirepkuo.supabase.co" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/styles.css?v=20260520-score-retune" />
 <meta name="kt-build" content="20260520-score-retune" />
 
@@ -990,14 +993,33 @@
     syncHomepageDestinationChips();
   }
 
+  // iOS-safe body scroll lock. `overflow:hidden` alone doesn't block
+  // background-scroll-through on iOS Safari (rubber-band bug); locking
+  // position:fixed AND remembering the scrollY is the canonical fix.
+  // Restoration goes through scrollTo, which iOS treats as the official
+  // scroll (no momentum left over).
+  let __lockedScrollY = 0;
+  function lockBodyScroll() {
+    if (document.body.classList.contains("body-lock")) return;
+    __lockedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.top = `-${__lockedScrollY}px`;
+    document.body.classList.add("body-lock");
+  }
+  function unlockBodyScroll() {
+    if (!document.body.classList.contains("body-lock")) return;
+    document.body.classList.remove("body-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, __lockedScrollY);
+  }
+
   function openDestPicker() {
     renderDestPicker();
     document.getElementById("dest-picker").hidden = false;
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
   }
   function closeDestPicker() {
     document.getElementById("dest-picker").hidden = true;
-    document.body.style.overflow = "";
+    unlockBodyScroll();
   }
   function clearAllDestinations() {
     filters.country.clear();
@@ -3239,12 +3261,12 @@
       </div>
     `;
     overlay.classList.add("open");
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
   }
   function closeCompareModal() {
     const overlay = document.getElementById("compare-modal-overlay");
     if (overlay) overlay.classList.remove("open");
-    document.body.style.overflow = "";
+    unlockBodyScroll();
   }
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
