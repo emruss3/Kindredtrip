@@ -8750,3 +8750,132 @@ body.body-lock {
   width: 100%;
   /* Preserves scroll position via top: -<scrollY>px set by JS. */
 }
+
+/* ============================================================================
+   MOBILE FILTER BOTTOM-SHEET  (item 3)
+   ----------------------------------------------------------------------------
+   Desktop: the left filter rail stays exactly as-is (these elements are
+   display:none above 980px). Mobile: the rail was rendering inline ABOVE the
+   results, pushing cards down so most phone users never refined. Now a
+   floating "Filters" button opens the rail as a slide-up sheet; the results
+   get the full width. The filter inputs always live in the DOM so filtering
+   works whether the sheet is open or not.
+   ============================================================================ */
+.filter-fab,
+.filter-sheet-backdrop,
+.filter-sheet-apply { display: none; }
+
+@media (max-width: 980px) {
+  /* Floating trigger */
+  .filter-fab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 13px 22px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 15px;
+    min-height: 48px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    cursor: pointer;
+  }
+  .filter-fab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--coral);
+    color: #fff;
+    border-radius: 999px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* The rail becomes the sheet. Overrides the earlier ≤980px static rule
+     because this block is later in the file. */
+  .results-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-height: 82vh;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+    border: none;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.28);
+    transform: translateY(110%);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 70;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); /* clear the apply bar */
+    -webkit-overflow-scrolling: touch;
+  }
+  .results-sidebar.sheet-open { transform: translateY(0); }
+
+  /* Sheet grabber */
+  .results-sidebar::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
+    margin: 10px auto 4px;
+    position: sticky;
+    top: 0;
+  }
+
+  /* The old inline collapse UI is replaced by the sheet: kill the toggle
+     button and undo the collapse content-hiding so the sheet always shows
+     its sections. (Leaving the old JS harmless — it just toggles a class
+     that no longer hides anything.) */
+  .sidebar-mobile-toggle { display: none !important; }
+  .results-sidebar.collapsed > details,
+  .results-sidebar.collapsed > .sidebar-block { display: block; }
+
+  .filter-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 43, 69, 0.45);
+    z-index: 65;
+  }
+
+  .filter-sheet-apply {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 75;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    border-top: 1px solid var(--line-soft);
+  }
+  .filter-sheet-apply button {
+    width: 100%;
+    min-height: 48px;
+    border: none;
+    border-radius: 12px;
+    background: var(--coral);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+  }
+}

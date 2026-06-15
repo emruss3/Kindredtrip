@@ -709,6 +709,20 @@
   </section>
 </main>
 
+<!-- Mobile filter bottom-sheet chrome (hidden on desktop via CSS). The
+     #results-sidebar itself becomes the sliding sheet; these are the
+     trigger, backdrop and apply bar that live outside it so renderSidebar's
+     innerHTML replacement never wipes them. -->
+<button id="filter-fab" class="filter-fab" type="button" onclick="openFilterSheet()" hidden aria-haspopup="dialog">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+  <span>Filters</span>
+  <span id="filter-fab-count" class="filter-fab-count" hidden></span>
+</button>
+<div id="filter-sheet-backdrop" class="filter-sheet-backdrop" onclick="closeFilterSheet()" hidden></div>
+<div id="filter-sheet-apply" class="filter-sheet-apply" hidden>
+  <button type="button" onclick="closeFilterSheet()">Show trips</button>
+</div>
+
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalIfBackdrop(event)">
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
 </div>
@@ -2946,6 +2960,7 @@
 
     sidebar.classList.toggle("collapsed", window.__sidebarCollapsedMobile === true);
     sidebar.innerHTML = renderSidebar();
+    updateFilterFab();
 
     // Header (sticky search-summary bar) always renders so the user can
     // edit the search / change sort even when no cards match.
@@ -3588,6 +3603,41 @@
         </div>
       </details>
     `;
+  }
+
+  // Mobile filter bottom-sheet. The sidebar's inputs always exist in the
+  // DOM (so filtering works whether the sheet is open or not); the sheet
+  // just makes them reachable on phones without burying the results.
+  function openFilterSheet() {
+    document.getElementById("results-sidebar")?.classList.add("sheet-open");
+    const bd = document.getElementById("filter-sheet-backdrop");
+    const ap = document.getElementById("filter-sheet-apply");
+    if (bd) bd.hidden = false;
+    if (ap) ap.hidden = false;
+    lockBodyScroll();
+  }
+  function closeFilterSheet() {
+    document.getElementById("results-sidebar")?.classList.remove("sheet-open");
+    const bd = document.getElementById("filter-sheet-backdrop");
+    const ap = document.getElementById("filter-sheet-apply");
+    if (bd) bd.hidden = true;
+    if (ap) ap.hidden = true;
+    unlockBodyScroll();
+  }
+  // Keep the FAB visible (mobile only; CSS hides it on desktop) and its
+  // count badge in sync whenever results render.
+  function updateFilterFab() {
+    const fab = document.getElementById("filter-fab");
+    if (!fab) return;
+    const resultsVisible = !document.getElementById("results-wrap")?.hidden;
+    fab.hidden = !resultsVisible;
+    const n = activeFilterCount();
+    const badge = document.getElementById("filter-fab-count");
+    if (badge) {
+      badge.hidden = n === 0;
+      badge.textContent = n > 0 ? String(n) : "";
+    }
+    fab.classList.toggle("has-active", n > 0);
   }
 
   function renderActiveFilterPills() {
@@ -7570,6 +7620,20 @@
     // (only if we have the package loaded into allPackages).
     if (stillTrip && !wasOpen && allPackages.some((p) => p.package_id === stillTrip)) {
       openResortModal(stillTrip);
+    }
+  });
+
+  // ESC closes the mobile filter sheet first (if open).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("results-sidebar")?.classList.contains("sheet-open")) {
+      closeFilterSheet();
+    }
+  });
+  // If the viewport grows past the mobile breakpoint while the sheet is
+  // open, close it so we don't leave a fixed panel / locked body on desktop.
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 980 && document.getElementById("results-sidebar")?.classList.contains("sheet-open")) {
+      closeFilterSheet();
     }
   });
 
