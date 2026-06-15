@@ -855,12 +855,19 @@ function gridCard(r) {
   const ph = photoUrl(pageHero(r), 600);
   const r5 = ratingTo5(r.rating);
   const bs = badges(r).slice(0, 3);
-  return `<li class="seo-card">
+  // data-country drives the client-side country filter on global theme
+  // pages. Visible meta now includes the country in addition to the area
+  // (or just country if no area) so users always see where a resort is.
+  const loc = r.area && r.area !== r.country
+    ? `${r.area}, ${r.country}`
+    : (r.country || r.area || "");
+  return `<li class="seo-card" data-country="${esc(r.country || "")}">
   <a href="${resortPath(r)}" class="seo-card-link">
     ${ph ? `<img class="seo-card-img" src="${ph}" alt="${esc(r.resort_name)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
     <span class="seo-card-body">
+      ${r.country ? `<span class="seo-card-country">${esc(r.country)}</span>` : ""}
       <span class="seo-card-name">${esc(r.resort_name)}</span>
-      <span class="seo-card-meta">${esc(r.area || r.country)}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
+      <span class="seo-card-meta">${esc(loc)}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
       ${bs.length ? `<span class="seo-card-tags">${bs.map((b) => `<span>${esc(b)}</span>`).join("")}</span>` : ""}
     </span>
   </a>
@@ -875,7 +882,12 @@ function themesForCountry(country) {
 
 function themeCountryPage(t, country, matches) {
   const url = `${ORIGIN}${themeCountryPath(t, country)}`;
-  const hero = photoUrl(countryHero.get(country) || matches.find((r) => r.photo_ref)?.photo_ref, 1200);
+  // Theme-page heroes: only stable LiteAPI hero URLs. Google Places refs
+  // (the .photo_ref string) expire and were producing dead hero images on
+  // theme pages — prefer the highest-rated property in this country
+  // with a real LiteAPI photo; if none exists, skip the hero entirely.
+  const heroByLite = matches.map((r) => liteapiHero.get(r.resort_id)).find(Boolean);
+  const hero = heroByLite || null;
   const n = matches.length;
   const title = t.countryH(country);
   const intro = `${t.blurb} These are the ${n} family resort${n === 1 ? "" : "s"} in ${country} that KindredTrips tracks ${title.toLowerCase().includes("toddler") ? "for the youngest travelers" : `matching this`}. Compare the total trip cost — flights plus hotel — for your exact family across all of them.`;
@@ -943,7 +955,9 @@ ${otherThemes.map((x) => `<li><a href="${themeCountryPath(x, country)}">${esc(x.
 function themeGlobalPage(t, matches) {
   const url = `${ORIGIN}${themeGlobalPath(t)}`;
   const top = matches.slice(0, 48);
-  const hero = photoUrl(top.find((r) => r.photo_ref)?.photo_ref || top[0] && pageHero(top[0]), 1200);
+  // Stable hero only — pick the first property in the top set that has
+  // an actual LiteAPI hero photo. (Google Places photo_refs expire.)
+  const hero = top.map((r) => liteapiHero.get(r.resort_id)).find(Boolean) || null;
   const countryList = [...new Set(matches.map((r) => r.country))];
   const intro = `${t.blurb} Across ${countryList.length} Caribbean destinations, these are the family resorts KindredTrips tracks that match — ranked by guest rating. Pick any and we'll price the complete trip (flights + hotel) for your family.`;
   const collectionLd = {
@@ -968,6 +982,18 @@ function themeGlobalPage(t, matches) {
   const countryLinks = countries
     .filter((c) => (byCountry.get(c) || []).filter(t.match).length >= THEME_MIN)
     .map((c) => `<li><a href="${themeCountryPath(t, c)}">${esc(t.countryH(c))}</a></li>`);
+  // Country filter chips above the grid — countries with at least one
+  // matching resort in the top set, with a per-country resort count.
+  const topCountryCounts = new Map();
+  for (const r of top) {
+    if (!r.country) continue;
+    topCountryCounts.set(r.country, (topCountryCounts.get(r.country) || 0) + 1);
+  }
+  const filterChips = [...topCountryCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([c, n]) =>
+      `<button type="button" class="seo-cc" data-country="${esc(c)}">${esc(c)} <span class="seo-cc-n">${n}</span></button>`
+    ).join("");
   const body = `
 ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loading="eager" /></div>` : ""}
 <h1>${esc(t.globalH)}</h1>
@@ -976,15 +1002,48 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loadi
 <a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
 
 <h2>Top picks</h2>
-<ul class="seo-grid">
+${filterChips ? `<div class="seo-cc-row" role="group" aria-label="Filter by country">
+  <button type="button" class="seo-cc seo-cc-all is-active" data-country="">All <span class="seo-cc-n">${top.length}</span></button>
+  ${filterChips}
+</div>` : ""}
+<ul class="seo-grid" id="seo-grid">
 ${top.map(gridCard).join("\n")}
 </ul>
+<p class="seo-grid-empty" hidden>No resorts in that country in the top picks. <button type="button" class="seo-cc-clear">Show all</button></p>
 
 ${countryLinks.length ? `<h2>By destination</h2>
 <ul class="seo-link-grid">
 ${countryLinks.join("")}
 </ul>` : ""}
 <p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
+<script>
+(function () {
+  var row = document.querySelector('.seo-cc-row');
+  if (!row) return;
+  var grid = document.getElementById('seo-grid');
+  var empty = document.querySelector('.seo-grid-empty');
+  function apply(country) {
+    var hits = 0;
+    grid.querySelectorAll('.seo-card').forEach(function (li) {
+      var show = !country || li.getAttribute('data-country') === country;
+      li.hidden = !show;
+      if (show) hits++;
+    });
+    if (empty) empty.hidden = hits > 0;
+    row.querySelectorAll('.seo-cc').forEach(function (b) {
+      b.classList.toggle('is-active', (b.getAttribute('data-country') || '') === country);
+    });
+  }
+  row.addEventListener('click', function (e) {
+    var b = e.target.closest('.seo-cc');
+    if (!b) return;
+    apply(b.getAttribute('data-country') || '');
+  });
+  document.querySelectorAll('.seo-cc-clear').forEach(function (b) {
+    b.addEventListener('click', function () { apply(''); });
+  });
+})();
+</script>
 `;
   return shell({
     title: `${t.globalH} | KindredTrips`,
