@@ -109,12 +109,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://kindredtrips.com/caribbean/ecuador</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://kindredtrips.com/caribbean/el-salvador</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
@@ -181,12 +175,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://kindredtrips.com/caribbean/peru</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://kindredtrips.com/caribbean/saint-croix</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
@@ -218,12 +206,6 @@
   </url>
   <url>
     <loc>https://kindredtrips.com/caribbean/turks-and-caicos</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/caribbean/united-states</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -2126,18 +2108,6 @@
   </url>
   <url>
     <loc>https://kindredtrips.com/resort/zoetry-agua-punta-cana</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/royal-decameron-mompiche</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/royal-decameron-punta-centinela</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -5323,18 +5293,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://kindredtrips.com/resort/decameron-el-pueblo</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/royal-decameron-punta-sal</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://kindredtrips.com/resort/divi-carina-bay-beach-resort-and-casino</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
@@ -5606,24 +5564,6 @@
   </url>
   <url>
     <loc>https://kindredtrips.com/resort/sailrock-south-caicos</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/bungalows-key-largo</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/little-palm-island-resort-and-spa</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kindredtrips.com/resort/voco-sandpiper-all-inclusive-resort</loc>
     <lastmod>2026-06-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

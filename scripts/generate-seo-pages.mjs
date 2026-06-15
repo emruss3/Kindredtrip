@@ -37,8 +37,11 @@ const TODAY = new Date().toISOString().slice(0, 10);
 // schema predates that DB column). DB-side, see the
 // service_excluded migrations.
 const EXCLUDED_COUNTRIES = new Set([
-  "Cuba",    // US OFAC restrictions
-  "Brazil",  // South America / Atlantic, not Caribbean
+  "Cuba",          // US OFAC restrictions
+  "Brazil",        // South America / Atlantic, not Caribbean
+  "Ecuador",       // Pacific South America, not Caribbean
+  "Peru",          // Pacific South America, not Caribbean
+  "United States", // Florida Keys/coast, not Caribbean
 ]);
 const resorts = JSON.parse(readFileSync(join(ROOT, "data/resorts-seo.json"), "utf8"))
   .filter((r) => r && r.service_excluded !== true && !EXCLUDED_COUNTRIES.has(r.country));
