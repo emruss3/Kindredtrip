@@ -8702,52 +8702,44 @@ body.trip-detail-open #status { display: none !important; }
   }
 }
 
-/* (2) Touch-target floor on interactive chips/buttons/links on mobile.
-   Using inline-flex+min-height+padding gets us a ≥44px hit area without
-   visually inflating tiny chips because we centre-align contents. */
-@media (pointer: coarse), (max-width: 720px) {
+/* (2) Touch-target floor on genuinely-interactive controls on small
+   screens. Scoped to ≤980px (not pointer:coarse, which would also hit
+   touchscreen laptops at desktop widths). Deliberately excludes elements
+   that already have their own layout/padding (e.g. the sidebar <summary>,
+   which is already a full-width display:flex row) and display-only badges,
+   so we don't break layouts or inflate non-interactive chips. */
+@media (max-width: 980px) {
   .tag-checkbox,
   .tag-checkbox-radio,
   .toggle,
-  .filter-chip,
-  .pill,
   .nav-link,
   .topbar-cta,
-  .sort-pill,
-  details.sidebar-block > summary,
-  .modal-close,
-  .badge-rank,
-  .modal-tab,
   .seo-wizard-submit {
     min-height: 44px;
     display: inline-flex;
     align-items: center;
   }
-  /* Common close-buttons sit absolute in the top-right of modals — make
-     them tappable without disturbing the close glyph itself. */
+  /* Modal close buttons sit absolute in the top-right — give them a 44px
+     square hit area without disturbing the glyph. */
   .modal-close,
   .search-popover-close {
     min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
   }
 }
 
-/* (3) Tiny text bump on small screens. Don't touch desktop where the
-   density is intentional. */
+/* (3) Tiny text bump on small screens — only the specific 12px helper
+   labels that are genuinely hard to read on a phone. Scoped to these
+   exact classes (not generic ones like .meta, which a blanket rule would
+   have shrunk wherever it was already larger than 13px). */
 @media (max-width: 720px) {
-  .score-breakdown-row,
-  .score-breakdown-label,
-  .score-breakdown-value,
-  .trip-rail-note,
   .flight-pp,
   .flight-lap,
-  .rail-lap-note,
-  .seo-wizard-field-hint,
-  .footnote,
-  .meta,
-  .footer-fine,
-  .micro {
-    font-size: 13px !important;
+  .rail-lap-note {
+    font-size: 13px;
   }
 }
 
@@ -8775,8 +8767,10 @@ body.body-lock {
 .filter-sheet-apply { display: none; }
 
 @media (max-width: 980px) {
-  /* Floating trigger */
-  .filter-fab {
+  /* Floating trigger. :not([hidden]) so the element honors the hidden
+     attribute JS toggles — otherwise display:inline-flex overrides
+     [hidden]{display:none} and the control is stuck on-screen. */
+  .filter-fab:not([hidden]) {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -8797,7 +8791,7 @@ body.body-lock {
     box-shadow: 0 6px 20px rgba(0,0,0,0.25);
     cursor: pointer;
   }
-  .filter-fab-count {
+  .filter-fab-count:not([hidden]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -8856,7 +8850,7 @@ body.body-lock {
   .results-sidebar.collapsed > details,
   .results-sidebar.collapsed > .sidebar-block { display: block; }
 
-  .filter-sheet-backdrop {
+  .filter-sheet-backdrop:not([hidden]) {
     display: block;
     position: fixed;
     inset: 0;
@@ -8864,7 +8858,7 @@ body.body-lock {
     z-index: 65;
   }
 
-  .filter-sheet-apply {
+  .filter-sheet-apply:not([hidden]) {
     display: block;
     position: fixed;
     left: 0;
