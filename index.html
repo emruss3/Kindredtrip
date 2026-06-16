@@ -2378,6 +2378,18 @@
         body.included_countries = Array.from(filters.country);
       }
 
+      // Direct-trip (resort deep-link): scope the search to JUST this resort.
+      // The backend then prices only this hotel (one rate call + one route)
+      // and bypasses the family-fit gating that could otherwise drop the
+      // resort the user explicitly chose. Far faster than pricing the whole
+      // country, and never filters out the target.
+      if (directTripMode && pendingAutoOpenResortId) {
+        body.included_resort_ids = [pendingAutoOpenResortId];
+        body.require_kids_club = false;
+        body.require_all_inclusive = false;
+        body.require_direct_flight = false;
+      }
+
       lastSearchSummary = body;
       updateCompactSearch(body);
 
