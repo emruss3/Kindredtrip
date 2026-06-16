@@ -1448,15 +1448,20 @@
   // modal opens automatically (deep-link entry from SEO pages into the
   // live booking flow). Cleared after first use so refilters don't keep
   // re-opening it.
-  let pendingAutoOpenResortId = null;
+  // NB: var (not let) — these are assigned by the synchronous
+  // hydrateFromDeepLink() IIFE near the top of the script, which executes
+  // BEFORE this line. With let they'd be in the temporal dead zone and the
+  // assignment would throw, aborting the deep-link handler before runSearch
+  // fires (every resort deep-link landed on the bare homepage). var hoists.
+  var pendingAutoOpenResortId = null;
 
   // Direct-to-trip mode: arrived from a /resort/<slug> deep-link
-  // (resort_id + autostart). We run the normal search behind a full-screen
-  // loader and open this resort's trip detail directly — the user never
-  // sees the results grid ("kicked back to search"). Falls back to revealing
-  // the grid if the resort can't be found / priced in time.
-  let directTripMode = false;
-  let directTripTimer = null;
+  // (resort_id + autostart). We run the search behind a full-screen loader
+  // and open this resort's trip detail directly — the user never sees the
+  // results grid. Falls back to revealing the grid if the resort can't be
+  // found / priced in time.
+  var directTripMode = false;
+  var directTripTimer = null;
   function showTripLoadingOverlay(label) {
     if (document.getElementById("trip-loading-overlay")) return;
     const el = document.createElement("div");
