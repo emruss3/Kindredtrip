@@ -237,14 +237,38 @@ const countries = [...byCountry.keys()].sort((a, b) => a.localeCompare(b));
 // Per-country hero photo — used as a fallback on the ~316 resort pages
 // that have neither a LiteAPI hero nor a Google Places photo of their
 // own. Prefer the country's strongest LiteAPI hero so even fallbacks
-// are curated hotel photography.
+// are curated hotel photography. If no LiteAPI hero exists, fall back
+// to a stable Unsplash Caribbean photo (Google Places photo_refs expire
+// and were rotting the destinations index — same bug class as the sample
+// card photo we already fixed).
+//
+// Map keyed by country name. The fallback constants are direct https
+// URLs (not Google refs) so they survive without our /photo proxy and
+// don't 404 over time. Country-specific where possible, generic
+// turquoise-Caribbean default for anything not listed.
+const CARIBBEAN_FALLBACK = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=70";
+const COUNTRY_HERO_FALLBACK = {
+  "Bermuda":                            "https://images.unsplash.com/photo-1562195643-79efbd2a5d40?auto=format&fit=crop&w=1200&q=70",
+  "Bonaire":                            "https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?auto=format&fit=crop&w=1200&q=70",
+  "El Salvador":                        "https://images.unsplash.com/photo-1583309217394-d6cf5b3a3d80?auto=format&fit=crop&w=1200&q=70",
+  "Grand Cayman":                       "https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?auto=format&fit=crop&w=1200&q=70",
+  "Guatemala":                          "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=1200&q=70",
+  "Haiti":                              "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?auto=format&fit=crop&w=1200&q=70",
+  "Martinique":                         "https://images.unsplash.com/photo-1505881502353-a1986add3762?auto=format&fit=crop&w=1200&q=70",
+  "Nicaragua":                          "https://images.unsplash.com/photo-1583309217394-d6cf5b3a3d80?auto=format&fit=crop&w=1200&q=70",
+  "Saint Croix":                        "https://images.unsplash.com/photo-1602002418082-a4443e081dd1?auto=format&fit=crop&w=1200&q=70",
+  "Saint Thomas":                       "https://images.unsplash.com/photo-1602002418082-a4443e081dd1?auto=format&fit=crop&w=1200&q=70",
+  "Saint Vincent and the Grenadines":   "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?auto=format&fit=crop&w=1200&q=70",
+};
+
 const countryHero = new Map();
 for (const c of countries) {
   const list = byCountry.get(c) || [];
   const liteapiFirst = list.map((r) => liteapiHero.get(r.resort_id)).find(Boolean);
   if (liteapiFirst) { countryHero.set(c, liteapiFirst); continue; }
-  const gpFirst = list.find((r) => r.photo_ref)?.photo_ref;
-  if (gpFirst) countryHero.set(c, gpFirst);
+  // No LiteAPI hero — use the stable Unsplash fallback, never the
+  // Google Places ref (those rot).
+  countryHero.set(c, COUNTRY_HERO_FALLBACK[c] || CARIBBEAN_FALLBACK);
 }
 
 // Priority chain for any resort: curated LiteAPI hero → Google Places
