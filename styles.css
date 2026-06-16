@@ -8659,6 +8659,24 @@ body.trip-detail-open #status { display: none !important; }
   display: grid; grid-template-columns: 1fr auto; gap: 14px;
   background: #fff; border: 1px solid var(--line-soft); border-radius: var(--r-md);
   padding: 14px 16px; transition: border-color .12s, box-shadow .12s;
+  align-items: center;
+}
+/* Grow to 3 columns when the renderer prepends a thumb (room photo / airline logo) */
+.rb-card:has(.rb-card-thumb) { grid-template-columns: 96px 1fr auto; }
+.rb-card-thumb {
+  margin: 0; width: 96px; height: 72px; border-radius: 10px; overflow: hidden;
+  background: var(--bg-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.rb-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rb-card-thumb-logo { width: 56px; height: 56px; background: #fff; border: 1px solid var(--line-soft); }
+.rb-card-thumb-logo img { object-fit: contain; padding: 8px; }
+.rb-card:has(.rb-card-thumb-logo) { grid-template-columns: 56px 1fr auto; }
+@media (max-width: 540px) {
+  .rb-card:has(.rb-card-thumb) { grid-template-columns: 72px 1fr auto; }
+  .rb-card-thumb { width: 72px; height: 56px; }
+  .rb-card:has(.rb-card-thumb-logo) { grid-template-columns: 44px 1fr auto; }
+  .rb-card-thumb-logo { width: 44px; height: 44px; }
+  .rb-card-thumb-logo img { padding: 6px; }
 }
 .rb-card.is-selected { border-color: var(--accent, #c08a3e); box-shadow: 0 0 0 3px rgba(192,138,62,.15); }
 .rb-card-body { min-width: 0; }

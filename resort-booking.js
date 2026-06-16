@@ -123,10 +123,18 @@
     search_id: null,
     rooms: [],
     flights: [],
+    roomPhotoById: {},  // matched_room_id -> first photo url (from catalog_rooms)
     selectedRoomId: null,
     selectedFlightId: null,
     party: null, // { adults, kid_ages, total }
   };
+
+  // Public CDN that exposes airline logos by IATA code — no auth, used by
+  // many travel sites. The renderer's onerror collapses gracefully when a
+  // code (e.g. a charter/code-share) isn't in the set.
+  const airlineLogo = (code) => code
+    ? `https://images.kiwi.com/airlines/64/${String(code).toUpperCase()}.png`
+    : null;
 
   // ---- Render helpers ---------------------------------------------------
   function setStatus(text, kind) {
@@ -200,7 +208,15 @@
         o.board_basis || o.meal_plan || null,
         o.refundable === true ? "Free cancellation" : (o.refundable === false ? "Non-refundable" : null),
       ].filter(Boolean).join(" · ");
+      // Thumb from catalog_rooms (looked up by matched_room_id). For
+      // synthetic/unmapped offers we'd have no thumb, so we collapse the
+      // figure on img error rather than render a broken-icon box.
+      const thumb = state.roomPhotoById[o.matched_room_id];
+      const thumbHtml = thumb
+        ? `<figure class="rb-card-thumb"><img src="${esc(thumb)}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'" /></figure>`
+        : "";
       return `<li class="rb-card rb-card-room${sel}" data-offer-id="${esc(o.offer_id)}">
+        ${thumbHtml}
         <div class="rb-card-body">
           <div class="rb-card-title">${esc(name)}</div>
           ${meta ? `<div class="rb-card-meta">${esc(meta)}</div>` : ""}
@@ -231,10 +247,19 @@
       const dur = fmtMin(o.total_duration_minutes);
       const stops = (Number(o.outbound_stops ?? 0)) + (Number(o.return_stops ?? 0));
       const stopsTxt = stops === 0 ? "Direct both ways" : `${stops} stop${stops === 1 ? "" : "s"} round-trip`;
-      const airline = o.outbound_carrier_name || o.airline_name || o.outbound_carrier_code || "";
+      // get_flight_offers trims to primary_airline_*; older fallbacks kept
+      // for any legacy payload shape (was rendering "Flight" generically
+      // because those old field names never existed on the response).
+      const airlineCode = o.primary_airline_code || o.outbound_carrier_code || "";
+      const airline = o.primary_airline_name || o.outbound_carrier_name || o.airline_name || airlineCode || "Flight";
+      const logo = airlineLogo(airlineCode);
+      const logoHtml = logo
+        ? `<figure class="rb-card-thumb rb-card-thumb-logo"><img src="${esc(logo)}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'" /></figure>`
+        : "";
       return `<li class="rb-card rb-card-flight${sel}" data-offer-id="${esc(o.offer_id)}">
+        ${logoHtml}
         <div class="rb-card-body">
-          <div class="rb-card-title">${esc(airline || "Flight")}</div>
+          <div class="rb-card-title">${esc(airline)}</div>
           <div class="rb-card-meta">${esc(`${dur} · ${stopsTxt}`)}</div>
         </div>
         <div class="rb-card-price">
@@ -402,6 +427,19 @@
 
     if (roomsRes.status === "fulfilled") {
       const offers = Array.isArray(roomsRes.value?.offers) ? roomsRes.value.offers : [];
+      // Build a matched_room_id -> first photo url lookup from the catalog
+      // the API returns alongside offers (LiteAPI room-content). renderRooms
+      // consults this when stamping the thumbnail.
+      const catalog = Array.isArray(roomsRes.value?.catalog_rooms) ? roomsRes.value.catalog_rooms : [];
+      state.roomPhotoById = {};
+      for (const cr of catalog) {
+        const id = cr?.room_id != null ? String(cr.room_id) : null;
+        if (!id) continue;
+        const ph = Array.isArray(cr.photos) ? cr.photos : [];
+        const first = ph.find((p) => p?.url || p?.hd_url) || ph[0];
+        const url = first?.url || first?.hd_url;
+        if (url) state.roomPhotoById[id] = url;
+      }
       // Strict fit on max_occupancy >= party total (matches the homepage logic).
       state.rooms = offers.filter((o) => {
         const m = Number(o.max_occupancy);
