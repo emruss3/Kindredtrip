@@ -560,6 +560,28 @@
   // reviews, room compare, flight tabs). That replaces the half-feature
   // in-page widget that used to render here (renderRooms/Flights/runFlow
   // below are kept as dead code for now in case we want to revive it).
+  // On resort pages, the topbar "Search trips" CTA defaults to /#search-form,
+  // which dumps the user at the homepage's empty form — losing context and
+  // their resort intent. Treat it as "search for THIS resort with the wizard
+  // form's current values" instead, which is what the user actually wants.
+  // (The form is pre-filled with sensible defaults, so even a fresh landing
+  // navigates straight into the trip-detail view via wireForm's handoff.)
+  function wireTopbarCta() {
+    document.querySelectorAll(".topbar-cta").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        const form = document.querySelector(".seo-wizard-form");
+        if (!form) return; // no wizard on this page — let default nav run
+        e.preventDefault();
+        // requestSubmit runs the same submit handler wireForm registers,
+        // which validates required fields and then navigates to the home-
+        // page handoff URL. Falls back to a dispatched event for older
+        // browsers without requestSubmit.
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.dispatchEvent(new Event("submit", { cancelable: true }));
+      });
+    });
+  }
+
   function wireForm() {
     const form = document.querySelector(".seo-wizard-form");
     if (!form) return;
@@ -615,6 +637,7 @@
   // ---- Boot -------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", () => {
     wireForm();
+    wireTopbarCta();
     bindEvents();
     hydrateFromUrl();
   });
