@@ -553,12 +553,18 @@
   }
 
   // ---- Wire wizard form -------------------------------------------------
+  // On submit (or auto-submit via hydrateFromUrl), hand off to the homepage
+  // with the search params + this resort's id. The homepage already supports
+  // ?resort_id=<uuid>&autostart=1 — it runs the full Search→pricing pipeline
+  // and auto-opens this resort's rich trip-detail view (photos, score, fit,
+  // reviews, room compare, flight tabs). That replaces the half-feature
+  // in-page widget that used to render here (renderRooms/Flights/runFlow
+  // below are kept as dead code for now in case we want to revive it).
   function wireForm() {
     const form = document.querySelector(".seo-wizard-form");
     if (!form) return;
-    form.addEventListener("submit", async (e) => {
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
-      // Strip browser/HTML defaults from the new GET URL — we handle everything in-page.
       const fd = new FormData(form);
       const origin = String(fd.get("origin") || "").trim().toUpperCase();
       const date_start = String(fd.get("date_start") || "");
@@ -569,24 +575,17 @@
         return;
       }
       const party = partyFromForm(form);
-      // Replace URL with the search params so refresh/share keeps state,
-      // WITHOUT navigating to /.
+      const submit = form.querySelector(".seo-wizard-submit");
+      if (submit) { submit.disabled = true; submit.textContent = "Loading your trip…"; }
       const qs = new URLSearchParams({
         origin, date_start, date_end,
         adults: String(party.adults),
         ...(party.kid_ages.length ? { kids: party.kid_ages.join(",") } : {}),
+        resort_id: RESORT_ID,
+        autostart: "1",
       });
-      history.replaceState({}, "", location.pathname + "?" + qs.toString());
-
-      const submit = form.querySelector(".seo-wizard-submit");
-      if (submit) { submit.disabled = true; submit.textContent = "Searching…"; }
-      try {
-        await runFlow({ origin, date_start, date_end, party });
-      } catch (err) {
-        setStatus(err?.message || "Something went wrong. Try again or refresh.", "error");
-      } finally {
-        if (submit) { submit.disabled = false; submit.textContent = "See live prices →"; }
-      }
+      // Hard nav — the homepage owns the full trip-detail experience.
+      window.location.assign("/?" + qs.toString());
     });
   }
 
