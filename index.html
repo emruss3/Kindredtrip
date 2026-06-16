@@ -3823,6 +3823,11 @@
             </div>
           </div>
         </div>
+        ${total > 0 ? `<div class="rh-alert">
+          <svg class="rh-alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="rh-alert-text">Prices for these dates change daily. We'll email you if your <b>#1-ranked trip</b> drops.</span>
+          <button type="button" class="rh-alert-cta" onclick="watchTopTrip('results_bar')">Set a price alert</button>
+        </div>` : ""}
         <div id="pricing-updater" class="pricing-updater"${updaterHidden ? " hidden" : ""}>
           <span class="pricing-updater-dot" aria-hidden="true"></span>
           <span>Refreshing flight prices — results will update as live fares land.</span>
@@ -4202,7 +4207,13 @@
           </div>
           ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
           <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
-          <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
+          <div class="card-sub-actions">
+            <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
+            <button class="btn-watch-link" onclick="event.stopPropagation(); watchTrip('${p.package_id}', 'card')" aria-label="Get a price-drop alert for this trip" title="Email me if this price drops">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Watch price
+            </button>
+          </div>
         </div>
       </article>
     `;
@@ -4267,7 +4278,13 @@
             </div>
             ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}
             <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
-            <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Add to compare"}</button>
+            <div class="card-sub-actions">
+              <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
+              <button class="btn-watch-link" onclick="event.stopPropagation(); watchTrip('${p.package_id}', 'card_hero')" aria-label="Get a price-drop alert for this trip" title="Email me if this price drops">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                Watch price
+              </button>
+            </div>
           </div>
         </div>
       </article>
@@ -7560,14 +7577,27 @@
       window.open(`mailto:?subject=${encodeURIComponent(tripShareSubject(pkg))}&body=${encodeURIComponent(tripShareBody(pkg))}`, "_self");
     }
   }
-  function watchTrip(packageId) {
+  // Watch the currently top-ranked result (first rendered card). Reads the
+  // package id off the top card's onclick so it always tracks whatever is #1
+  // under the current sort/filter — no need to thread the list through.
+  function watchTopTrip(source) {
+    const el = document.querySelector("#results-main .hero-card, #results-main .card");
+    const m = el && (el.getAttribute("onclick") || "").match(/openResortModal\('([^']+)'\)/);
+    if (m) watchTrip(m[1], source || "results_bar");
+    else if (allPackages[0]) watchTrip(allPackages[0].package_id, source || "results_bar");
+  }
+
+  function watchTrip(packageId, source) {
     // Funnel: peak-intent moment. Capture demand for price-drop alerts AND
     // the email address itself — they planned a 3-12-month-out trip, this
-    // is the only way to reach them again.
+    // is the only way to reach them again. `source` tells us which
+    // placement (card, booking toast, results bar, modal) actually drives
+    // email capture so we can double down on what works.
     const wp = allPackages.find((p) => p.package_id === packageId);
     trackEvent("watch_trip_click", {
       resort_id: wp?.resort_id || null,
       total_price: wp?.total_price ?? null,
+      source: source || "modal",
     });
     // Still keep the local-storage list as before, so a returning visitor
     // can see what they've watched.
@@ -7813,10 +7843,55 @@
       });
       if (data.redirect_url) {
         window.open(data.redirect_url, "_blank", "noopener,noreferrer");
+        // They left to book in a new tab but THIS tab is still here and
+        // they may not buy today (family trips book over days/weeks). Catch
+        // the email with a price-drop offer at the highest-intent moment.
+        showWatchToast(packageId);
       }
     } catch (err) {
       alert("Couldn't open booking link: " + err.message);
     }
+  }
+
+  // Bottom toast offering a price-drop watch right after a booking click.
+  // Reuses the existing watchTrip dialog + subscribe_watch_trip backend.
+  let __watchToastTimer = null;
+  function showWatchToast(packageId) {
+    // Don't nag if they've already engaged the watch flow for this trip.
+    try {
+      const watched = JSON.parse(localStorage.getItem("kt_watched_trips") || "[]");
+      if (watched.includes(packageId)) return;
+    } catch (_) { /* best-effort */ }
+    document.getElementById("kt-watch-toast")?.remove();
+    clearTimeout(__watchToastTimer);
+    const bp = allPackages.find((p) => p.package_id === packageId);
+    const name = bp?.resorts?.resort_name ? escapeHtml(bp.resorts.resort_name) : "this trip";
+    const el = document.createElement("div");
+    el.id = "kt-watch-toast";
+    el.className = "kt-watch-toast";
+    el.setAttribute("role", "status");
+    el.innerHTML = `
+      <div class="kt-watch-toast-body">
+        <svg class="kt-watch-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <div>
+          <div class="kt-watch-toast-title">Booking opened in a new tab.</div>
+          <div class="kt-watch-toast-sub">Not ready to commit? We'll email you if the price for ${name} drops.</div>
+        </div>
+      </div>
+      <div class="kt-watch-toast-actions">
+        <button type="button" class="kt-watch-toast-cta" onclick="watchTrip('${packageId}', 'booking_toast'); dismissWatchToast();">Watch price</button>
+        <button type="button" class="kt-watch-toast-x" aria-label="Dismiss" onclick="dismissWatchToast()">×</button>
+      </div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    __watchToastTimer = setTimeout(dismissWatchToast, 14000);
+  }
+  function dismissWatchToast() {
+    clearTimeout(__watchToastTimer);
+    const el = document.getElementById("kt-watch-toast");
+    if (!el) return;
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 250);
   }
 
   // Flight booking — opens an Aviasales search for the trip's route + dates
@@ -7842,6 +7917,7 @@
       });
       if (data.redirect_url) {
         window.open(data.redirect_url, "_blank", "noopener,noreferrer");
+        showWatchToast(packageId);
       } else {
         alert(data.error || "Flight booking link isn't available for this route yet.");
       }

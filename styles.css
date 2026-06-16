@@ -5510,6 +5510,124 @@ body.trip-detail-open #status { display: none !important; }
   .price-breakdown-inline { justify-content: flex-start; }
 }
 
+/* ---- Watch / price-alert capture (card sub-actions, toast, results bar) -- */
+.card-sub-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.btn-watch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sea-deep, #0D6F78);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--sea-deep, #0D6F78) 35%, transparent);
+  text-underline-offset: 3px;
+}
+.btn-watch-link svg { width: 13px; height: 13px; flex-shrink: 0; }
+.btn-watch-link:hover { text-decoration-color: var(--sea-deep, #0D6F78); }
+@media (max-width: 720px) { .card-sub-actions { justify-content: flex-start; } }
+
+/* Results-bar price-alert strip */
+.rh-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--sea-tint, #e9f4f5);
+  border: 1px solid color-mix(in srgb, var(--sea-deep, #0D6F78) 18%, transparent);
+  border-radius: 12px;
+}
+.rh-alert-icon { width: 17px; height: 17px; color: var(--sea-deep, #0D6F78); flex-shrink: 0; }
+.rh-alert-text { font-size: 13.5px; color: var(--ink-1); line-height: 1.35; flex: 1; min-width: 0; }
+.rh-alert-text b { color: var(--ink); font-weight: 700; }
+.rh-alert-cta {
+  flex-shrink: 0;
+  background: var(--sea-deep, #0D6F78);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.rh-alert-cta:hover { background: color-mix(in srgb, var(--sea-deep, #0D6F78) 88%, #000); }
+@media (max-width: 600px) {
+  .rh-alert { flex-wrap: wrap; }
+  .rh-alert-text { flex-basis: 100%; }
+  .rh-alert-cta { width: 100%; }
+}
+
+/* Post-booking price-drop toast (bottom of viewport) */
+.kt-watch-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 140%);
+  z-index: 90;
+  width: min(560px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  background: var(--ink, #0D2B45);
+  color: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.32);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.28s ease;
+}
+.kt-watch-toast.show { transform: translate(-50%, 0); opacity: 1; }
+.kt-watch-toast-body { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.kt-watch-toast-icon { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; color: #fff; opacity: 0.9; }
+.kt-watch-toast-title { font-size: 14px; font-weight: 600; line-height: 1.2; }
+.kt-watch-toast-sub { font-size: 12.5px; line-height: 1.4; color: rgba(255,255,255,0.78); margin-top: 2px; }
+.kt-watch-toast-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.kt-watch-toast-cta {
+  background: var(--coral, #E8765A);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kt-watch-toast-cta:hover { background: var(--coral-deep, #d3624a); }
+.kt-watch-toast-x {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.kt-watch-toast-x:hover { color: #fff; }
+@media (max-width: 600px) {
+  .kt-watch-toast { flex-direction: column; align-items: stretch; gap: 10px; }
+  .kt-watch-toast-actions { justify-content: space-between; }
+  .kt-watch-toast-cta { flex: 1; }
+}
+
 /* ---------- Simplified hero card ---------- */
 .hero-card-info { gap: 12px; padding: var(--s-7) var(--s-7); }
 .hero-card-info .card-signals { font-size: 14px; gap: 6px 16px; }
