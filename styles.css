@@ -8680,6 +8680,39 @@ body.trip-detail-open #status { display: none !important; }
 }
 .rb-card.is-selected { border-color: var(--accent, #c08a3e); box-shadow: 0 0 0 3px rgba(192,138,62,.15); }
 .rb-card-body { min-width: 0; }
+
+/* Direct-to-trip loader: shown when arriving from a /resort/<slug> deep-link
+   so the user lands in the trip detail without seeing the search grid. */
+.trip-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg, #faf6ef);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: ktFadeIn .2s ease;
+}
+@keyframes ktFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.trip-loading-inner { text-align: center; max-width: 420px; }
+.trip-loading-spinner {
+  width: 42px; height: 42px;
+  margin: 0 auto 20px;
+  border: 3px solid color-mix(in srgb, var(--sea-deep, #0D6F78) 22%, transparent);
+  border-top-color: var(--sea-deep, #0D6F78);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.trip-loading-title {
+  font-family: "Playfair Display", serif;
+  font-weight: 600;
+  font-size: clamp(20px, 3.4vw, 26px);
+  line-height: 1.2;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.trip-loading-sub { font-size: 14.5px; color: var(--ink-2); line-height: 1.5; }
 .rb-card-title { font-weight: 600; color: var(--ink); font-size: 15px; line-height: 1.3; }
 .rb-card-meta { font-size: 13px; color: var(--ink-3); margin-top: 4px; line-height: 1.45; }
 .rb-card-price { text-align: right; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 6px; min-width: 130px; }

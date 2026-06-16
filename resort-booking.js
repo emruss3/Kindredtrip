@@ -605,6 +605,11 @@
         ...(party.kid_ages.length ? { kids: party.kid_ages.join(",") } : {}),
         resort_id: RESORT_ID,
         autostart: "1",
+        // Scope the homepage search to this country (faster, and guarantees
+        // the resort's destination is in scope) and pass the name so the
+        // hand-off loader can say "Pricing your trip to <resort>…".
+        ...(COUNTRY ? { country: COUNTRY } : {}),
+        trip_label: RESORT_NAME,
       });
       // Hard nav — the homepage owns the full trip-detail experience.
       window.location.assign("/?" + qs.toString());

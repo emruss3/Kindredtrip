@@ -933,9 +933,16 @@
     const resortId = qp.get("resort_id");
     if (resortId) pendingAutoOpenResortId = resortId;
 
-    if (qp.get("autostart") === "1") {
+    const autostart = qp.get("autostart") === "1";
+    // Resort deep-link: go straight to the trip detail behind a loader,
+    // never showing the results grid.
+    if (resortId && autostart) {
+      directTripMode = true;
+      showTripLoadingOverlay(qp.get("trip_label"));
+    }
+    if (autostart) {
       // Defer one tick so all wizard inputs are settled before submit.
-      setTimeout(() => { try { runSearch(); } catch (e) { console.error("autostart runSearch failed:", e); } }, 0);
+      setTimeout(() => { try { runSearch(); } catch (e) { console.error("autostart runSearch failed:", e); hideTripLoadingOverlay(); } }, 0);
     }
   })();
 
@@ -1442,6 +1449,39 @@
   // live booking flow). Cleared after first use so refilters don't keep
   // re-opening it.
   let pendingAutoOpenResortId = null;
+
+  // Direct-to-trip mode: arrived from a /resort/<slug> deep-link
+  // (resort_id + autostart). We run the normal search behind a full-screen
+  // loader and open this resort's trip detail directly — the user never
+  // sees the results grid ("kicked back to search"). Falls back to revealing
+  // the grid if the resort can't be found / priced in time.
+  let directTripMode = false;
+  let directTripTimer = null;
+  function showTripLoadingOverlay(label) {
+    if (document.getElementById("trip-loading-overlay")) return;
+    const el = document.createElement("div");
+    el.id = "trip-loading-overlay";
+    el.className = "trip-loading-overlay";
+    el.innerHTML =
+      '<div class="trip-loading-inner">' +
+      '<div class="trip-loading-spinner" aria-hidden="true"></div>' +
+      '<div class="trip-loading-title">Pricing your trip' + (label ? " to " + escapeHtml(label) : "") + "…</div>" +
+      '<div class="trip-loading-sub">Live flights + hotel for your dates — just a few seconds.</div>' +
+      "</div>";
+    document.body.appendChild(el);
+    // The overlay is fixed + full-screen, so it blocks the page behind it;
+    // no need to lock body overflow (which would fight the page-mode trip
+    // detail's normal scroll once it opens).
+    // Safety valve: if the resort never surfaces (no flight route for these
+    // dates, slow pricing), reveal the normal results so the user isn't stuck.
+    clearTimeout(directTripTimer);
+    directTripTimer = setTimeout(() => hideTripLoadingOverlay(), 75000);
+  }
+  function hideTripLoadingOverlay() {
+    directTripMode = false;
+    clearTimeout(directTripTimer);
+    document.getElementById("trip-loading-overlay")?.remove();
+  }
 
   // Funnel state: true between search_started and the first results paint.
   // Used to fire search_abandoned if the user leaves during the wait.
@@ -3093,12 +3133,17 @@
     // hunt for the card. One-shot — cleared after firing.
     if (pendingAutoOpenResortId) {
       const target = allPackages.find((p) => p.resort_id === pendingAutoOpenResortId);
-      if (target) {
-        const id = pendingAutoOpenResortId;
+      // In direct-trip mode wait until the package is actually priced before
+      // opening, so the trip detail lands with live prices rather than a
+      // pending shell. (Outside direct mode keep the old eager behavior.)
+      const ready = target && (!directTripMode || !isPricesPending(target));
+      if (ready) {
         pendingAutoOpenResortId = null;
-        // Defer one tick so the just-rendered card is in the DOM for
-        // any scroll/focus the modal opener might do.
-        setTimeout(() => { try { openResortModal(target.package_id); } catch (e) { console.error("auto-open failed:", e); } }, 50);
+        setTimeout(() => {
+          try { openResortModal(target.package_id); }
+          catch (e) { console.error("auto-open failed:", e); }
+          finally { hideTripLoadingOverlay(); }
+        }, 50);
       }
     }
   }
