@@ -388,7 +388,13 @@
         child_ages: party.kid_ages,
         require_all_inclusive: false,
         require_kids_club: false,
-        // Server-side scope — saves the worker from pricing 974 properties.
+        require_direct_flight: false,
+        // Server-side scope — price ONLY this resort (Search v17 +
+        // process_search_batch v21 honour included_resort_ids and bypass the
+        // family-fit gating for an explicitly-requested resort). This makes
+        // the in-page flow create exactly one package and skips warming up the
+        // whole country, so live rooms/flights come back in a few seconds.
+        included_resort_ids: [RESORT_ID],
         included_countries: COUNTRY ? [COUNTRY] : [],
         session_id: SESSION_ID,
         is_internal: IS_INTERNAL,
@@ -553,19 +559,14 @@
   }
 
   // ---- Wire wizard form -------------------------------------------------
-  // On submit (or auto-submit via hydrateFromUrl), hand off to the homepage
-  // with the search params + this resort's id. The homepage already supports
-  // ?resort_id=<uuid>&autostart=1 — it runs the full Search→pricing pipeline
-  // and auto-opens this resort's rich trip-detail view (photos, score, fit,
-  // reviews, room compare, flight tabs). That replaces the half-feature
-  // in-page widget that used to render here (renderRooms/Flights/runFlow
-  // below are kept as dead code for now in case we want to revive it).
-  // On resort pages, the topbar "Search trips" CTA defaults to /#search-form,
-  // which dumps the user at the homepage's empty form — losing context and
-  // their resort intent. Treat it as "search for THIS resort with the wizard
-  // form's current values" instead, which is what the user actually wants.
-  // (The form is pre-filled with sensible defaults, so even a fresh landing
-  // navigates straight into the trip-detail view via wireForm's handoff.)
+  // On submit (or auto-submit via hydrateFromUrl) we run the full pipeline
+  // IN PAGE via runFlow() and render live rooms/flights/booking right below
+  // the wizard — the user stays on /resort/<slug>, never bounced to a search.
+  // runFlow scopes the server Search to included_resort_ids:[RESORT_ID], so
+  // it prices only this property and returns quickly.
+  // The topbar "Search trips" CTA on resort pages just triggers that same
+  // in-page submit (search for THIS resort with the wizard's current values)
+  // rather than dumping the user at the homepage's empty form.
   function wireTopbarCta() {
     document.querySelectorAll(".topbar-cta").forEach((el) => {
       el.addEventListener("click", (e) => {
@@ -573,9 +574,8 @@
         if (!form) return; // no wizard on this page — let default nav run
         e.preventDefault();
         // requestSubmit runs the same submit handler wireForm registers,
-        // which validates required fields and then navigates to the home-
-        // page handoff URL. Falls back to a dispatched event for older
-        // browsers without requestSubmit.
+        // which validates and then runs the in-page pipeline. Falls back to a
+        // dispatched event for older browsers without requestSubmit.
         if (typeof form.requestSubmit === "function") form.requestSubmit();
         else form.dispatchEvent(new Event("submit", { cancelable: true }));
       });
@@ -585,8 +585,10 @@
   function wireForm() {
     const form = document.querySelector(".seo-wizard-form");
     if (!form) return;
-    form.addEventListener("submit", (e) => {
+    let running = false;
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (running) return;
       const fd = new FormData(form);
       const origin = String(fd.get("origin") || "").trim().toUpperCase();
       const date_start = String(fd.get("date_start") || "");
@@ -598,21 +600,22 @@
       }
       const party = partyFromForm(form);
       const submit = form.querySelector(".seo-wizard-submit");
-      if (submit) { submit.disabled = true; submit.textContent = "Loading your trip…"; }
-      const qs = new URLSearchParams({
-        origin, date_start, date_end,
-        adults: String(party.adults),
-        ...(party.kid_ages.length ? { kids: party.kid_ages.join(",") } : {}),
-        resort_id: RESORT_ID,
-        autostart: "1",
-        // Scope the homepage search to this country (faster, and guarantees
-        // the resort's destination is in scope) and pass the name so the
-        // hand-off loader can say "Pricing your trip to <resort>…".
-        ...(COUNTRY ? { country: COUNTRY } : {}),
-        trip_label: RESORT_NAME,
-      });
-      // Hard nav — the homepage owns the full trip-detail experience.
-      window.location.assign("/?" + qs.toString());
+      const origLabel = submit ? submit.textContent : "";
+      if (submit) { submit.disabled = true; submit.textContent = "Finding live prices…"; }
+      running = true;
+      // Scroll the soon-to-appear results into view so the loading status is
+      // visible immediately on mobile (the wizard can fill the viewport).
+      ensureResultsHost();
+      try {
+        await runFlow({ origin, date_start, date_end, party });
+        $("rb-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (err) {
+        console.error("resort-booking runFlow failed:", err);
+        setStatus(err?.message || "Something went wrong pricing this trip. Please try again.", "warn");
+      } finally {
+        running = false;
+        if (submit) { submit.disabled = false; submit.textContent = origLabel; }
+      }
     });
   }
 
