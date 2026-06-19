@@ -527,6 +527,27 @@ function resortPage(r) {
     .filter((s) => s.resort_id !== r.resort_id)
     .slice(0, 8);
 
+  // Resort-level FAQ (visible + FAQPage schema) for long-tail queries.
+  const faq = resortFaq(r);
+  const faqLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map(([q, a]) => ({
+      "@type": "Question", name: q,
+      acceptedAnswer: { "@type": "Answer", text: a },
+    })),
+  };
+
+  // Theme pages this resort qualifies for — cross-link so the internal graph
+  // reinforces both the resort page and the curated theme hubs (and only link
+  // a country theme page when it actually got published, i.e. >= THEME_MIN).
+  const countryThemes = themesForCountry(r.country);
+  const matchedThemes = THEMES.filter((t) => t.match(r)).map((t) => ({
+    t,
+    global: themeGlobalPath(t),
+    country: countryThemes.some((x) => x.slug === t.slug) ? themeCountryPath(t, r.country) : null,
+  }));
+
   const body = `
 ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(ownPhoto ? `${r.resort_name} — family resort in ${r.country}` : `${r.country} Caribbean coastline — illustrative photo`)}" loading="eager" />${ownPhoto ? "" : `<div class="seo-hero-fallback-note">Illustrative ${esc(r.country)} photo — partner hasn't supplied a hero image for ${esc(r.resort_name)} yet.</div>`}</div>` : ""}
 <h1>${esc(r.resort_name)}</h1>
@@ -601,6 +622,16 @@ ${shownReviews.map((rv) => {
 }).join("")}
 </ul>` : ""}
 
+${faq.length ? `<h2>${esc(r.resort_name)} family vacation FAQ</h2>
+<div class="seo-faq">
+${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("\n")}
+</div>` : ""}
+
+${matchedThemes.length ? `<h2>${esc(r.resort_name)} also appears in</h2>
+<ul class="seo-link-grid">
+${matchedThemes.map((m) => `<li><a href="${m.country || m.global}">${esc(m.country ? m.t.countryH(r.country) : m.t.globalH)}</a></li>`).join("")}
+</ul>` : ""}
+
 ${siblings.length ? `<h2>More family resorts in ${esc(r.country)}</h2>
 <ul class="seo-link-grid">
 ${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(s.resort_name)}</a>${s.stars ? `<span class="seo-link-meta">${s.stars}★</span>` : ""}</li>`).join("")}
@@ -616,7 +647,7 @@ ${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(s.resort_name)}</a>$
     imageAlt: ownPhoto
       ? `${r.resort_name} — family resort in ${r.country}`
       : `${r.country} Caribbean coastline — illustrative photo`,
-    jsonld: [hotelLd, crumbLd],
+    jsonld: [hotelLd, faqLd, crumbLd],
     breadcrumbTrail: [
       { name: "Home", url: "/" },
       { name: "Destinations", url: "/caribbean" },
@@ -653,6 +684,62 @@ function countryFaq(country, list) {
     [`Is ${country} good for a family with a toddler or infant?`,
      `${infant} ${country} resorts we track flag infant-friendly facilities. KindredTrips lets you filter by kids-club minimum age, connecting rooms, and family-room occupancy so a resort actually works for young children.`],
   ];
+  return qa;
+}
+
+// Per-resort FAQ — answers the long-tail questions families actually search
+// ("does X have a kids club", "how far is X from the airport", "can X sleep a
+// family of 5", "how much is a trip to X"). Only emits a Q when we have real
+// data to answer it, so we never publish thin/empty FAQ entries. Drives both a
+// visible <details> block and FAQPage JSON-LD on every resort page.
+function resortFaq(r) {
+  const name = r.resort_name;
+  const where = r.area && r.area !== r.country ? `${r.area}, ${r.country}` : r.country;
+  const qa = [];
+
+  if (r.kids_club) {
+    const ages = r.kc_min != null && r.kc_max != null ? ` for ages ${r.kc_min}–${r.kc_max}` : "";
+    qa.push([
+      `Does ${name} have a kids club?`,
+      `Yes — ${name} runs a supervised kids club${ages}. In the KindredTrips search you can require a kids club and set its minimum age so the resort actually fits your children.`,
+    ]);
+  }
+
+  const sleeps = Number(r.family_max || r.sleeps || 0);
+  if (sleeps >= 5) {
+    qa.push([
+      `Can ${name} sleep a family of ${sleeps >= 6 ? "five or six" : "five"}?`,
+      `Yes — ${name} has family rooms or suites that sleep up to ${sleeps}, so a larger family can book one room instead of two. KindredTrips prices the room that fits your whole party.`,
+    ]);
+  }
+
+  if (r.transfer_min || r.airport_iata) {
+    const ap = r.airport_iata ? `${r.airport_iata}` : "the nearest airport";
+    const mins = r.transfer_min ? `about ${r.transfer_min} minutes` : "a short transfer";
+    qa.push([
+      `How far is ${name} from the airport?`,
+      `${name} is ${mins} from ${ap}. KindredTrips books your flights into ${ap}, so the trip cost you see already includes getting your family there.`,
+    ]);
+  }
+
+  if (r.on_beach || r.water_park || r.pool) {
+    const feats = [
+      r.on_beach ? "sits directly on the beach" : null,
+      r.water_park ? "has an on-site water park" : (r.pool ? "has pools for families" : null),
+    ].filter(Boolean);
+    qa.push([
+      `What is there for kids to do at ${name}?`,
+      `${name} ${feats.join(" and ")}${r.kids_club ? ", plus a supervised kids club" : ""}. ${name} is in ${where}.`,
+    ]);
+  }
+
+  // Always answer the cost question — it's the highest-intent query and our
+  // core value prop. No fixed number (rates are live), so we explain the model.
+  qa.push([
+    `How much does a family vacation to ${name} cost?`,
+    `It depends on your home airport, dates, and party size. KindredTrips prices a complete trip to ${name} — live flights plus live hotel rates for your exact family — and ranks it against every other Caribbean resort by total cost. Enter your details above to see the real number, with no fees or markup.`,
+  ]);
+
   return qa;
 }
 
@@ -744,7 +831,7 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></de
 `;
 
   return shell({
-    title: `Family Resorts in ${country} (${total}) — Ranked by Trip Cost | KindredTrips`,
+    title: `${country} Family Resorts — Ranked by Trip Cost | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
     image: toAbs(hero),
@@ -808,7 +895,7 @@ ${rows.map(({ c, n, ph }) => `<li class="seo-card">
 </ul>
 `;
   return shell({
-    title: `Caribbean Family Vacation Destinations — ${countries.length} Countries, ${fmtInt(total)} Resorts | KindredTrips`,
+    title: `Caribbean Family Vacation Destinations | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
     jsonld: [collectionLd, crumbLd],
@@ -960,7 +1047,7 @@ ${otherThemes.map((x) => `<li><a href="${themeCountryPath(x, country)}">${esc(x.
 </ul>` : ""}
 `;
   return shell({
-    title: `${title} — Ranked by Trip Cost | KindredTrips`,
+    title: `${title} | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
     image: toAbs(hero),
