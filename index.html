@@ -1420,6 +1420,16 @@
   }
   window.KT_trackEvent = trackEvent;
 
+  // Manual recovery: re-fetch packages + restart phase-2 polling without
+  // resubmitting the Search. Surfaces as the "tap to refresh" button on
+  // the pricing widget when the server reports settled+0-live (stale
+  // read / propagation race).
+  window.ktRefreshPrices = function () {
+    if (!lastSearchId) return;
+    try { refetchPackages(); } catch (e) { console.error("[ktRefreshPrices] refetch failed:", e); }
+    try { pollUntilFlightsReal().catch((e) => console.error("[ktRefreshPrices] poll failed:", e)); } catch (e) { console.error("[ktRefreshPrices] start failed:", e); }
+  };
+
   // Honest price label. A package is "live" only when BOTH suppliers are
   // LiteAPI (real bookable rates). Anything else is still an estimate while
   // pricing settles — say so, instead of the old no-op `? "Live price" :
@@ -2639,9 +2649,19 @@
         console.log(`[kt:pricing] +${Math.round((Date.now()-t2)/1000)}s live=${live} total=${total} settled=${settled} shown=${allPackages.length}`);
 
         // Primary exit: server confirms the whole pipeline settled (every
-        // hotel terminal AND flights done). At this point refetchPackages
-        // has already rendered the final live set this poll.
-        if (settled) return;
+        // hotel terminal AND flights done) AND at least one live trip
+        // exists. Belt-and-suspenders on `live > 0`: an early settled=true
+        // read can arrive before the offer-writes have indexed (or against
+        // a still-propagating function deploy), in which case the bar would
+        // freeze on "0 live trips ready" forever. Keep polling until either
+        // live > 0 OR the hard timeout, so a transient stale read self-heals.
+        if (settled && live > 0) return;
+
+        // Settled+0-live edge case: bump grace clock so we keep polling for
+        // a bit before giving up. Don't return here.
+        if (settled && live === 0 && total > 0) {
+          // No-op; loop continues below.
+        }
 
         // Stagnation exit — ONLY once we actually have live trips on screen
         // and the live count has plateaued. We deliberately do NOT bail on
@@ -2836,6 +2856,15 @@
     const showTip = pct < 100;
     const tipHtml = showTip ? `<div class="pricing-progress-tip" id="pricing-progress-tip">${escapeHtml(PROGRESS_TIPS[0])}</div>` : "";
 
+    // Recovery affordance: when the server reports settled but zero live
+    // (a stale read or a propagation race), pricing has actually finished —
+    // but the user is staring at empty cards. Surface a one-click refetch
+    // so they can self-heal without a full page reload.
+    const stuckOnZero = settled && live === 0 && total > 0;
+    const refreshBtn = stuckOnZero
+      ? `<button type="button" class="kt-refresh-prices" onclick="window.ktRefreshPrices && window.ktRefreshPrices()">Prices look ready but didn't load — tap to refresh</button>`
+      : "";
+
     widget.innerHTML = `
       <div class="pricing-progress-head">
         <span class="pricing-progress-dot" aria-hidden="true"></span>
@@ -2844,6 +2873,7 @@
       </div>
       <div class="pricing-progress-bar"><div class="pricing-progress-fill" style="width: ${pct}%"></div></div>
       <div class="pricing-progress-counters">${counters}</div>
+      ${refreshBtn}
       ${tipHtml}
     `;
 
