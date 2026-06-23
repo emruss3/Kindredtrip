@@ -1403,6 +1403,8 @@
     "Search",
     "process_search_batch",
     "start_pricing",
+    "price_flights_worker",   // p50 30s, max 48s — biggest cold-start tax
+    "top_up_hotels_worker",   // p50 3.5s, fires repeatedly during phase 2
     "get_packages",
     "get_hotel_offers",
     "get_flight_offers",
@@ -2326,6 +2328,16 @@
   })();
 
   async function runSearch() {
+    // Phase-level timing so we can pinpoint where any future user-perceived
+    // slowness lives. Open DevTools → Performance panel → recorded marks, or
+    // `performance.getEntriesByType("mark").filter(m => m.name.startsWith("kt:"))`.
+    // Adds zero overhead in production; the marks are tiny.
+    const t0 = performance.now();
+    const mark = (name) => {
+      try { performance.mark("kt:" + name); } catch {}
+      console.log(`[kt:perf] ${name} +${Math.round(performance.now() - t0)}ms`);
+    };
+    mark("search_submit");
     const submitBtn = document.getElementById("submit-btn");
     submitBtn.disabled = true;
 
@@ -2393,7 +2405,9 @@
       lastSearchSummary = body;
       updateCompactSearch(body);
 
+      mark("search_call_start");
       const search = await callFn("Search", { method: "POST", body: JSON.stringify(body) });
+      mark("search_call_done");
       lastSearchId = search.search_id;
       if (!lastSearchId) throw new Error("No search_id returned");
       // Funnel: search created. Mark the search as "in flight" so an
@@ -2425,15 +2439,25 @@
       //     stuck worker (process_search_batch should always finish well
       //     under this even fully cold).
       let pkgData = null;
-      const POLL_INTERVAL_MS = 1500;
+      // process_search_batch writes the first package row within 100-500ms
+      // when warm. Sleeping 1.5s BEFORE the first check (the old behaviour)
+      // burned that whole window on every search. Now: hit immediately,
+      // then poll fast (400ms) for the first second, then back off to 1.5s.
       const MAX_WALL_MS = 150000;
       const started = Date.now();
+      let iter = 0;
       while (true) {
-        await sleep(POLL_INTERVAL_MS);
+        if (iter > 0) {
+          const elapsedSoFar = Date.now() - started;
+          // Tight cadence for the first ~2.5s, then standard 1.5s polling.
+          const interval = elapsedSoFar < 2500 ? 400 : 1500;
+          await sleep(interval);
+        }
+        iter++;
         pkgData = await callFn(`get_packages?search_id=${lastSearchId}&limit=1`, { method: "GET" });
         const total = pkgData?.summary?.total_packages ?? 0;
         const jobStatus = pkgData?.job?.status ?? null;
-        if (total > 0) break;
+        if (total > 0) { mark(`first_pkg_iter${iter}`); break; }
         const elapsed = Date.now() - started;
         // Worker has explicitly finished and there are zero packages →
         // true no-results case.
@@ -2447,14 +2471,15 @@
         if (pkgData?.job?.error) {
           throw new Error(`Search failed: ${pkgData.job.error}`);
         }
-        // Keep the user informed during long cold-start runs instead of a
-        // static spinner. The first window of a cold worker can sit at 0
-        // packages for 30-60s before the first batch lands.
-        if (elapsed > 15000 && (elapsed - 15000) % 6000 < POLL_INTERVAL_MS) {
-          const note = jobStatus === "running"
-            ? "Checking live fares from your airport to every island…"
-            : "Checking live fares from your airport to every island…";
-          setStatus(note, { spinner: true });
+        // Surface progress messages earlier than before (was 15s) so the
+        // user gets a reassuring update instead of staring at a static
+        // spinner. Cold start of process_search_batch can sit at 0
+        // packages for 5-30s, and a brand-new origin/dates pair adds
+        // another 30-45s of flight-quote latency.
+        if (elapsed > 5000 && elapsed < 15000) {
+          setStatus("Checking live fares from your airport to every island…", { spinner: true });
+        } else if (elapsed >= 15000) {
+          setStatus("First-time searches can take up to a minute while live flight quotes load. Subsequent searches are much faster.", { spinner: true });
         }
         if (elapsed >= MAX_WALL_MS) {
           throw new Error("The search is taking longer than expected. Refresh and try again — the workers are warm now and the next attempt should be much faster.");
@@ -2485,6 +2510,7 @@
             return p;
           });
           renderResults();
+          mark(`prepaint_rendered_${initial.packages.length}`);
         }
       } catch (e) {
         console.error("[pre-paint] failed:", e);
@@ -2503,6 +2529,7 @@
       const { pricingError } = await renderWithProgressivePricing(
         pricingPromise, pkgData.summary.total_packages
       );
+      mark("phase1_done");
 
       // Always try to render whatever did get priced. process_search_batch
       // writes packages with NULL prices; start_pricing fills them in. Even
@@ -2559,13 +2586,23 @@
   }
 
   // -------- Two-phase pricing: poll for real flight prices --------
+  // Used to be open-ended (HARD_TIMEOUT_MS=180s, STAGNANT_AFTER_MS=30s) which
+  // meant the pricing-updater widget could hang around for 1-3 minutes after
+  // results were already perfectly usable. That's where the "first search
+  // takes 2-3 min to run" perception came from — cards were rendered, but the
+  // sticky widget kept claiming "still pricing".
+  //
+  // Tightened: hard cap at 45s, stagnation cap at 12s, plus an explicit
+  // early-exit when ≥90% of packages have hotel prices (the cards beyond
+  // top ~50 are off-screen anyway — no point waiting for them to settle).
   let activePollId = 0;
   async function pollUntilFlightsReal() {
     const myPollId = ++activePollId;
     const startedAt = Date.now();
-    const HARD_TIMEOUT_MS = 180_000;   // 3 minutes
-    const STAGNANT_AFTER_MS = 30_000;  // give it 30s of grace
+    const HARD_TIMEOUT_MS = 45_000;     // was 180_000 — pricing-widget cap
+    const STAGNANT_AFTER_MS = 12_000;   // was 30_000 — stop waiting on stragglers sooner
     const POLL_INTERVAL_MS = 3_000;
+    const RENDERABLE_RATIO = 0.9;       // 90% of cards have hotel prices = "settled enough"
     let lastLiveCount = -1;
     let stagnantChecks = 0;
 
@@ -2597,11 +2634,17 @@
         // when that flips — no need for the stagnation timer.
         if (data?.summary?.pricing_settled) return;
 
+        // Early exit: enough cards are renderable that the user has a
+        // usable result set. The remaining stragglers can upgrade in
+        // the background without us pinning the loading widget open.
+        const totalPkgs = Number(data?.summary?.total_packages) || 0;
+        const withHotel = Number(data?.summary?.with_hotel_price) || 0;
+        if (totalPkgs > 0 && withHotel / totalPkgs >= RENDERABLE_RATIO) {
+          return;
+        }
+
         const total = allPackages.length;
         if (total === 0) continue;
-        // With strict_live_only=true every returned package is fully
-        // live, so the meaningful progress signal is allPackages.length
-        // growing as the top-up worker upgrades mock packages.
         const live = total;
 
         // Fallback stagnation: in case pricing_settled never flips (a
@@ -2646,9 +2689,19 @@
     showPricingProgress(null, { totalEstimate });
 
     const POLL_INTERVAL_MS = 1500;
-    const HARD_CAP_MS = 120_000;  // 2 min safety cap; phase 1 typically finishes in 30-60s
+    // Tightened: phase 1 used to wait up to 120s for start_pricing to return.
+    // In practice start_pricing finishes its hotel batch loop in ~15-30s but
+    // can keep working on offer writes for another 12s. We no longer need to
+    // BLOCK the user on either — we exit as soon as ≥80% of cards have hotel
+    // prices (rendered + interactive) and let the remainder upgrade in the
+    // background via pollUntilFlightsReal phase 2.
+    const HARD_CAP_MS = 60_000;       // hard safety cap (down from 120s)
+    const RENDER_READY_RATIO = 0.8;   // exit when 80% of cards are renderable
     const start = Date.now();
 
+    // Limit the poll payload to top 60 packages — that's everything the user
+    // can possibly see in their first scroll, and skips the expensive
+    // hotel_rate_offers fan-out for the long tail (8.3s observed in prod).
     while (!done && Date.now() - start < HARD_CAP_MS) {
       await sleep(POLL_INTERVAL_MS);
       if (myPollId !== activePollId) return { pricingError: null };
@@ -2656,7 +2709,7 @@
 
       try {
         const data = await callFn(
-          `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
+          `get_packages?search_id=${lastSearchId}&limit=60&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
           { method: "GET" }
         );
         if (myPollId !== activePollId) return { pricingError: null };
@@ -2675,6 +2728,12 @@
           renderResults(); // this wipes results-main, so re-inject the widget below
         }
         showPricingProgress(summary, { totalEstimate });
+
+        // Early exit: enough cards have hotel prices to be visually useful.
+        // pollUntilFlightsReal (phase 2) will keep upgrading the rest.
+        if (total > 0 && priced / total >= RENDER_READY_RATIO) {
+          return { pricingError };
+        }
       } catch (e) {
         console.error("[pricing progress] poll error:", e);
       }
@@ -2844,8 +2903,12 @@
   // Silent refetch — fetches packages, re-renders, returns the response data.
   // Used by both fetchAndRender (with status text) and the pricing poll (silent).
   async function refetchPackages() {
+    // limit=60 covers what the user can scroll to before pricing settles
+    // anyway. Was 1000 — which makes get_packages fan out across the full
+    // hotel_rate_offers index (5500+ rows for a 459-package search) and
+    // produced an 8.3s response time observed in production logs.
     let data = await callFn(
-      `get_packages?search_id=${lastSearchId}&limit=1000&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
+      `get_packages?search_id=${lastSearchId}&limit=60&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
     // First-run resilience. The strict-live query returns nothing while
