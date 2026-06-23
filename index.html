@@ -1428,58 +1428,16 @@
     return isLivePkg ? "Live partner rate" : "Estimate · confirming";
   }
 
-  // Pre-warm the edge-function chain so the first search doesn't eat
-  // cold-start latency. Supabase functions go idle after ~5-15 min of
-  // no traffic; the first invocation has to spin up a fresh isolate
-  // (~2-5s per fn). The Search → process_search_batch → start_pricing
-  // chain is FOUR cold starts in a row, which historically pushed the
-  // first search past the polling timeout and showed a false "No
-  // resorts match" error.
+  // Edge-function warming is handled SERVER-SIDE by the pg_cron job
+  // `keep_edge_functions_warm` (every 4 min), which keeps the whole
+  // search-pipeline isolate set hot 24/7 so the first visitor of any
+  // quiet period doesn't pay a cold-start chain.
   //
-  // OPTIONS preflights load the V8 isolate without running the handler
-  // body, so they warm the worker cheaply (each is ~200 bytes wire).
-  // Fired idle so they don't compete with initial paint, and on first
-  // wizard interaction as a safety net for users who arrive and submit
-  // before the idle callback fires.
-  const _EDGE_FNS_TO_WARM = [
-    "Search",
-    "process_search_batch",
-    "start_pricing",
-    "price_flights_worker",   // p50 30s, max 48s — biggest cold-start tax
-    "top_up_hotels_worker",   // p50 3.5s, fires repeatedly during phase 2
-    "get_packages",
-    "get_hotel_offers",
-    "get_flight_offers",
-  ];
-  let _warmed = false;
-  function warmupEdgeFunctions() {
-    if (_warmed) return;
-    _warmed = true;
-    for (const fn of _EDGE_FNS_TO_WARM) {
-      // No await — pure fire-and-forget. keepalive lets the request
-      // finish even if the user navigates immediately after triggering.
-      fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
-        method: "OPTIONS",
-        keepalive: true,
-        headers: { "x-warmup": "1" },
-      }).catch(() => {});
-    }
-  }
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(warmupEdgeFunctions, { timeout: 1500 });
-  } else {
-    setTimeout(warmupEdgeFunctions, 200);
-  }
-  // Belt-and-suspenders: warm again the instant a user touches the
-  // wizard, in case the idle callback hasn't fired yet.
-  ["focusin", "pointerdown"].forEach((evt) => {
-    document.addEventListener(evt, function once(e) {
-      if (e.target.closest && e.target.closest("#search-form, #search-popover")) {
-        warmupEdgeFunctions();
-        document.removeEventListener(evt, once);
-      }
-    }, { passive: true });
-  });
+  // The old CLIENT-side warmup was removed: it sent an `x-warmup` request
+  // header that the functions' CORS allow-list doesn't permit, so the
+  // browser blocked every warmup at preflight — it never actually warmed
+  // anything and just spammed the console with CORS errors. The server
+  // cron supersedes it entirely (and isn't subject to CORS).
 
   let lastSearchId = null;
   let lastSearchSummary = null;
