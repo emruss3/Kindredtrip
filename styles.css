@@ -3581,21 +3581,6 @@ body.trip-detail-open #status { display: none !important; }
 .pricing-progress-counters .live-count { color: #1f6c43; }
 .pricing-progress-counters .live-count b { color: #1f6c43; }
 .pricing-progress-label { display: none; } /* legacy class kept for older render paths */
-
-/* Recovery affordance: when settled+0-live (stale read / propagation race) */
-.kt-refresh-prices {
-  display: inline-block;
-  margin-top: 10px;
-  padding: 10px 16px;
-  background: #f97316;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font: 600 14px/1.2 var(--font-sans, system-ui);
-  cursor: pointer;
-}
-.kt-refresh-prices:hover { background: #ea580c; }
-.kt-refresh-prices:active { transform: translateY(1px); }
 .pricing-progress-dot {
   width: 8px;
   height: 8px;

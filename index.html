@@ -1420,16 +1420,6 @@
   }
   window.KT_trackEvent = trackEvent;
 
-  // Manual recovery: re-fetch packages + restart phase-2 polling without
-  // resubmitting the Search. Surfaces as the "tap to refresh" button on
-  // the pricing widget when the server reports settled+0-live (stale
-  // read / propagation race).
-  window.ktRefreshPrices = function () {
-    if (!lastSearchId) return;
-    try { refetchPackages(); } catch (e) { console.error("[ktRefreshPrices] refetch failed:", e); }
-    try { pollUntilFlightsReal().catch((e) => console.error("[ktRefreshPrices] poll failed:", e)); } catch (e) { console.error("[ktRefreshPrices] start failed:", e); }
-  };
-
   // Honest price label. A package is "live" only when BOTH suppliers are
   // LiteAPI (real bookable rates). Anything else is still an estimate while
   // pricing settles — say so, instead of the old no-op `? "Live price" :
@@ -2655,7 +2645,7 @@
         // a still-propagating function deploy), in which case the bar would
         // freeze on "0 live trips ready" forever. Keep polling until either
         // live > 0 OR the hard timeout, so a transient stale read self-heals.
-        if (settled && live > 0) return;
+        if (settled && live > 0) { hidePricingProgress(); return; }
 
         // Settled+0-live edge case: bump grace clock so we keep polling for
         // a bit before giving up. Don't return here.
@@ -2672,7 +2662,7 @@
         // hard timeout fires.
         if (live > 0 && live === lastLiveCount) {
           stagnantChecks++;
-          if (stagnantChecks >= 3 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
+          if (stagnantChecks >= 3 && Date.now() - startedAt > STAGNANT_AFTER_MS) { hidePricingProgress(); return; }
         } else {
           stagnantChecks = 0;
           lastLiveCount = live;
@@ -2690,6 +2680,17 @@
     const el = document.getElementById("pricing-updater");
     if (!el) return;
     el.hidden = !on;
+  }
+
+  // Cleanly tear down the big pricing-progress widget once results are in,
+  // so the page doesn't sit at a persistent "100% · N live trips ready" bar
+  // that reads as "stuck". The results header ("N of M trips") is the
+  // post-pricing indicator from here on.
+  function hidePricingProgress() {
+    const slot = document.getElementById("pricing-progress-slot");
+    if (slot) slot.hidden = true;
+    document.body.classList.remove("kt-pricing-active");
+    stopProgressTipRotation();
   }
 
   // -------- Phase 1 progress: progressively render cards while start_pricing runs --------
@@ -2856,15 +2857,6 @@
     const showTip = pct < 100;
     const tipHtml = showTip ? `<div class="pricing-progress-tip" id="pricing-progress-tip">${escapeHtml(PROGRESS_TIPS[0])}</div>` : "";
 
-    // Recovery affordance: when the server reports settled but zero live
-    // (a stale read or a propagation race), pricing has actually finished —
-    // but the user is staring at empty cards. Surface a one-click refetch
-    // so they can self-heal without a full page reload.
-    const stuckOnZero = settled && live === 0 && total > 0;
-    const refreshBtn = stuckOnZero
-      ? `<button type="button" class="kt-refresh-prices" onclick="window.ktRefreshPrices && window.ktRefreshPrices()">Prices look ready but didn't load — tap to refresh</button>`
-      : "";
-
     widget.innerHTML = `
       <div class="pricing-progress-head">
         <span class="pricing-progress-dot" aria-hidden="true"></span>
@@ -2873,7 +2865,6 @@
       </div>
       <div class="pricing-progress-bar"><div class="pricing-progress-fill" style="width: ${pct}%"></div></div>
       <div class="pricing-progress-counters">${counters}</div>
-      ${refreshBtn}
       ${tipHtml}
     `;
 
