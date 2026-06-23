@@ -3289,16 +3289,11 @@
         <p>We're pricing flights and rooms for your dates across 34 Caribbean destinations. First results usually appear within ~30 seconds.</p>
       </div>`;
     }
-    // Pricing-in-progress: rows exist but no package has a full round-trip
-    // flight yet (we hide outbound-only / mock trips from results). Show
-    // the same "still pricing" message instead of the filter-loosening UI.
-    const anyRoundTrip = allPackages.some(hasBothFlightLegs);
-    if (!anyRoundTrip) {
-      return `<div class="empty">
-        <h3>Finding live round-trip flights…</h3>
-        <p>Resorts loaded; we're now pricing live outbound + return fares from your airport. Trips appear as both legs confirm — usually within ~30 seconds.</p>
-      </div>`;
-    }
+    // Reaching here means rows exist but ALL were filtered out by the
+    // active must-haves / sidebar filters (pending cards stay visible via
+    // isPricesPending, so a non-empty list never hits the empty state during
+    // pricing). So this is a genuine "your filters match nothing" — show the
+    // one-click loosen options below, not a fake "still loading" message.
 
     // Detect which constraints are likely causing the zero-result state
     // and offer one-click "loosen this" buttons. We only show fixes that
