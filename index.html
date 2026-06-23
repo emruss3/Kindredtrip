@@ -2586,23 +2586,29 @@
   }
 
   // -------- Two-phase pricing: poll for real flight prices --------
-  // Used to be open-ended (HARD_TIMEOUT_MS=180s, STAGNANT_AFTER_MS=30s) which
-  // meant the pricing-updater widget could hang around for 1-3 minutes after
-  // results were already perfectly usable. That's where the "first search
-  // takes 2-3 min to run" perception came from — cards were rendered, but the
-  // sticky widget kept claiming "still pricing".
+  // History of why this loop is shaped like it is:
+  //  - Originally HARD_TIMEOUT_MS=180s left the pricing widget pinned for
+  //    minutes after results were usable -> looked "stuck".
+  //  - Then I added a 0.9 early-exit on `with_hotel_price/total` (88s -> 30s).
+  //    But that counts BOTH live AND mock prices. start_pricing fills mock
+  //    rows fast for the long tail, so the gate fired BEFORE the LiteAPI
+  //    upgrade landed — the loop exited with `live_packages=0`, and the
+  //    UI froze on prepaint cards even though the top-up worker kept
+  //    converting mock->live in the background. That's the "0 live trips
+  //    ready" / "Finding live prices…" bug from the ALB screenshot.
   //
-  // Tightened: hard cap at 45s, stagnation cap at 12s, plus an explicit
-  // early-exit when ≥90% of packages have hotel prices (the cards beyond
-  // top ~50 are off-screen anyway — no point waiting for them to settle).
+  // Correct gate: hotel_terminal (live + no_fit + perm_mock) / total. That
+  // counts packages whose hotel state is FINAL. Mocks-with-liteapi-id are
+  // explicitly excluded so we wait for the top-up upgrade. pricing_settled
+  // is still the primary signal; the ratio is a "good enough" fallback.
   let activePollId = 0;
   async function pollUntilFlightsReal() {
     const myPollId = ++activePollId;
     const startedAt = Date.now();
-    const HARD_TIMEOUT_MS = 45_000;     // was 180_000 — pricing-widget cap
-    const STAGNANT_AFTER_MS = 12_000;   // was 30_000 — stop waiting on stragglers sooner
+    const HARD_TIMEOUT_MS = 90_000;     // 90s cap (was 45 — too tight for fresh-city flight pricing)
+    const STAGNANT_AFTER_MS = 20_000;   // grace before stagnation can bail
     const POLL_INTERVAL_MS = 3_000;
-    const RENDERABLE_RATIO = 0.9;       // 90% of cards have hotel prices = "settled enough"
+    const TERMINAL_RATIO = 0.95;        // 95% of packages reached a terminal hotel state
     let lastLiveCount = -1;
     let stagnantChecks = 0;
 
@@ -2621,25 +2627,22 @@
         }
         if (myPollId !== activePollId) return;
 
-        // Keep the big progress widget visible during phase 2 (top-up
-        // worker) so the user sees flights / rooms count climbing.
         if (data?.summary) {
           showPricingProgress(data.summary);
           updateResultStatus(data);
         }
 
-        // get_packages v15 reports `pricing_settled` once the hotel
-        // pipeline has terminal-stamped every package (live, no_fit, or
-        // permanently-mock) AND flights are priced. Exit immediately
-        // when that flips — no need for the stagnation timer.
+        // Primary exit: server confirms the whole pipeline settled (every
+        // hotel is terminal AND flights are done).
         if (data?.summary?.pricing_settled) return;
 
-        // Early exit: enough cards are renderable that the user has a
-        // usable result set. The remaining stragglers can upgrade in
-        // the background without us pinning the loading widget open.
+        // Fallback exit: nearly every package has a terminal hotel state
+        // (live, no_fit, or perm-mock with no liteapi id). NOT the same as
+        // with_hotel_price/total — that would include mock-with-id rows
+        // the top-up worker is still upgrading to live.
         const totalPkgs = Number(data?.summary?.total_packages) || 0;
-        const withHotel = Number(data?.summary?.with_hotel_price) || 0;
-        if (totalPkgs > 0 && withHotel / totalPkgs >= RENDERABLE_RATIO) {
+        const terminal = Number(data?.summary?.hotel_terminal) || 0;
+        if (totalPkgs > 0 && terminal / totalPkgs >= TERMINAL_RATIO) {
           return;
         }
 
@@ -2647,9 +2650,8 @@
         if (total === 0) continue;
         const live = total;
 
-        // Fallback stagnation: in case pricing_settled never flips (a
-        // stuck top_up chain, an API error mid-stream), bail when live
-        // count hasn't grown for two consecutive polls after the grace.
+        // Stagnation: live count hasn't grown in two consecutive polls AND
+        // we're past the grace window. Bail with whatever we have.
         if (live === lastLiveCount) {
           stagnantChecks++;
           if (stagnantChecks >= 2 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
@@ -2661,8 +2663,6 @@
     } finally {
       if (myPollId === activePollId) {
         showPricingUpdater(false);
-        // Widget stays — its final-state counters serve as a persistent
-        // header showing engine results.
       }
     }
   }
@@ -2689,19 +2689,16 @@
     showPricingProgress(null, { totalEstimate });
 
     const POLL_INTERVAL_MS = 1500;
-    // Tightened: phase 1 used to wait up to 120s for start_pricing to return.
-    // In practice start_pricing finishes its hotel batch loop in ~15-30s but
-    // can keep working on offer writes for another 12s. We no longer need to
-    // BLOCK the user on either — we exit as soon as ≥80% of cards have hotel
-    // prices (rendered + interactive) and let the remainder upgrade in the
-    // background via pollUntilFlightsReal phase 2.
-    const HARD_CAP_MS = 60_000;       // hard safety cap (down from 120s)
-    const RENDER_READY_RATIO = 0.8;   // exit when 80% of cards are renderable
+    // Phase 1 is the "first render of live cards" window. Exit conditions:
+    //   (a) start_pricing returned (pricingPromise resolved)
+    //   (b) HARD_CAP_MS safety net
+    // We deliberately do NOT bail on `with_hotel_price/total >= 0.8` here
+    // anymore — that counted mock prices as "ready" and caused phase 1 to
+    // exit before any LIVE cards had landed, leaving the UI on prepaint
+    // skeletons. Phase 2 (pollUntilFlightsReal) handles the live upgrade.
+    const HARD_CAP_MS = 60_000;
     const start = Date.now();
 
-    // Limit the poll payload to top 60 packages — that's everything the user
-    // can possibly see in their first scroll, and skips the expensive
-    // hotel_rate_offers fan-out for the long tail (8.3s observed in prod).
     while (!done && Date.now() - start < HARD_CAP_MS) {
       await sleep(POLL_INTERVAL_MS);
       if (myPollId !== activePollId) return { pricingError: null };
@@ -2715,11 +2712,7 @@
         if (myPollId !== activePollId) return { pricingError: null };
 
         const summary = data.summary || {};
-        // Phase 1 tracks HOTEL pricing progress (with_hotel_price grows
-        // incrementally as start_pricing resolves rooms). fully_priced
-        // requires both flight + hotel and stays near 0 until the very end.
         const priced = summary.with_hotel_price || 0;
-        const total = summary.total_packages || totalEstimate;
 
         if (priced > 0) {
           // Progressive render: swap skeleton for whatever's priced so far.
@@ -2728,12 +2721,6 @@
           renderResults(); // this wipes results-main, so re-inject the widget below
         }
         showPricingProgress(summary, { totalEstimate });
-
-        // Early exit: enough cards have hotel prices to be visually useful.
-        // pollUntilFlightsReal (phase 2) will keep upgrading the rest.
-        if (total > 0 && priced / total >= RENDER_READY_RATIO) {
-          return { pricingError };
-        }
       } catch (e) {
         console.error("[pricing progress] poll error:", e);
       }
