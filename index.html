@@ -2682,17 +2682,6 @@
     el.hidden = !on;
   }
 
-  // Cleanly tear down the big pricing-progress widget once results are in,
-  // so the page doesn't sit at a persistent "100% · N live trips ready" bar
-  // that reads as "stuck". The results header ("N of M trips") is the
-  // post-pricing indicator from here on.
-  function hidePricingProgress() {
-    const slot = document.getElementById("pricing-progress-slot");
-    if (slot) slot.hidden = true;
-    document.body.classList.remove("kt-pricing-active");
-    stopProgressTipRotation();
-  }
-
   // -------- Phase 1 progress: progressively render cards while start_pricing runs --------
   // Returns { pricingError } — caller decides how to surface it. The function
   // itself does NOT throw on a start_pricing failure: it tears down the
