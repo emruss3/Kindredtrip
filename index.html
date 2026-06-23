@@ -3163,14 +3163,9 @@
   function renderResults() {
     const filtered = applyClientSort(
       allPackages
-        // Hard rule: never render a trip card unless we have a confirmed
-        // round-trip flight (both outbound and return legs). Drops:
-        //   - pre-paint skeletons that have no flight pricing yet
-        //   - mock-priced cards (no real leg data)
-        //   - live trips that priced as oneway_outbound (return leg missing)
-        // Cards re-appear automatically as polling upgrades the flight
-        // pricing to a live round-trip basis.
-        .filter(hasBothFlightLegs)
+        // Both-legs rule is enforced by isPricesPending() (pending card),
+        // not by dropping rows here — dropping blanked the screen on fresh
+        // cities while flights priced. See note above renderResults.
         .filter(packageMeetsSearchRequirements)
         .filter(packageMatchesFilters)
     );
