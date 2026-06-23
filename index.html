@@ -3163,6 +3163,14 @@
   function renderResults() {
     const filtered = applyClientSort(
       allPackages
+        // Hard rule: never render a trip card unless we have a confirmed
+        // round-trip flight (both outbound and return legs). Drops:
+        //   - pre-paint skeletons that have no flight pricing yet
+        //   - mock-priced cards (no real leg data)
+        //   - live trips that priced as oneway_outbound (return leg missing)
+        // Cards re-appear automatically as polling upgrades the flight
+        // pricing to a live round-trip basis.
+        .filter(hasBothFlightLegs)
         .filter(packageMeetsSearchRequirements)
         .filter(packageMatchesFilters)
     );
@@ -3284,6 +3292,16 @@
       return `<div class="empty">
         <h3>Finding live prices for your family…</h3>
         <p>We're pricing flights and rooms for your dates across 34 Caribbean destinations. First results usually appear within ~30 seconds.</p>
+      </div>`;
+    }
+    // Pricing-in-progress: rows exist but no package has a full round-trip
+    // flight yet (we hide outbound-only / mock trips from results). Show
+    // the same "still pricing" message instead of the filter-loosening UI.
+    const anyRoundTrip = allPackages.some(hasBothFlightLegs);
+    if (!anyRoundTrip) {
+      return `<div class="empty">
+        <h3>Finding live round-trip flights…</h3>
+        <p>Resorts loaded; we're now pricing live outbound + return fares from your airport. Trips appear as both legs confirm — usually within ~30 seconds.</p>
       </div>`;
     }
 
