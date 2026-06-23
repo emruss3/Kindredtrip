@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v18_kids_club_is_family_filter";
+const VERSION = "process_search_batch_v20_infant_occupancy_and_crib";
 
 // v18 (2026-06-23): the audience='Family' pre-filter was silently dropping
 // ~283 resorts (275 'Adults Only' + 8 blank-audience) on every search,
@@ -119,6 +119,13 @@ serve(async (req) => {
     const childAges = parseChildAges(search.child_ages);
     const familySize = Number(search.adults ?? 2) + childAges.length;
     const hasInfant = childAges.some((a) => a < 2);
+    // v19: room-occupancy requirement EXCLUDES infants (<2). Most hotels don't
+    // count an under-2 toward room occupancy (lap/crib), so the coarse cap
+    // gate below must not drop a resort that can sleep adults + older kids.
+    // The infant is still surfaced with an "on lap / in a crib" callout in
+    // the trip-detail room list. (familySize, incl. infants, is kept for
+    // anything that genuinely scales with headcount.)
+    const roomFamilySize = Number(search.adults ?? 2) + childAges.filter((a) => a >= 2).length;
 
     let resorts: any[] = [];
     let survivors: any[] = [];
@@ -184,11 +191,20 @@ serve(async (req) => {
           return false;
         }
         if (search.require_kids_club && !hasKidsClubSignal(r)) { droppedKidsClub++; return false; }
-        if (hasInfant && r.cap_child_allowed === false) { droppedInfant++; return false; }
-        if (familySize >= 5) {
+        // v19: cap_child_allowed=false is unreliable (310 of 597 family resorts
+        // carry it, 218 of which HAVE a kids club, 0 have accepts_infants=true —
+        // it's a default, not a real "no children" policy). Only drop an
+        // infant family's resort when the no-children signal is CORROBORATED:
+        // no kids-club signal AND not family-audience. The infant is otherwise
+        // surfaced with a "verify with hotel" callout in the room list.
+        if (hasInfant && r.cap_child_allowed === false
+            && !hasKidsClubSignal(r) && r.audience !== "Family") {
+          droppedInfant++; return false;
+        }
+        if (roomFamilySize >= 5) {
           const hasCap = r.cap_fetched_at != null;
           if (hasCap) {
-            const occOk = (r.cap_max_room_occupancy ?? 0) >= familySize;
+            const occOk = (r.cap_max_room_occupancy ?? 0) >= roomFamilySize;
             const altOk = r.cap_has_connecting === true || r.cap_has_suite === true || r.cap_has_villa === true;
             if (!occOk && !altOk) { droppedFamilySize++; return false; }
           }

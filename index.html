@@ -6607,7 +6607,7 @@
     const infCountForCard = partyInfantCount();
     const fitTag = partyTotal > 0
       ? (infantRelaxed
-          ? `<div class="rv-fit rv-infant-relax">⚠ Sleeps ${partyTotal - infCountForCard} in beds — ${infCountForCard} infant${infCountForCard === 1 ? "" : "s"} on lap or in a crib. Verify with hotel before booking.</div>`
+          ? `<div class="rv-fit rv-infant-relax">⚠ Sleeps ${partyTotal - infCountForCard} in beds — your ${infCountForCard === 1 ? "infant isn't counted toward room occupancy and will need a crib" : `${infCountForCard} infants aren't counted toward room occupancy and will need cribs`}. Request ${infCountForCard === 1 ? "one" : "them"} from the hotel (some charge a small fee) and confirm before booking.</div>`
           : `<div class="rv-fit fits">✓ Fits your family</div>`)
       : "";
 
