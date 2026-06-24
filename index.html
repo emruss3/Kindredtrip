@@ -2715,7 +2715,7 @@
 
       try {
         const data = await callFn(
-          `get_packages?search_id=${lastSearchId}&limit=60&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
+          `get_packages?search_id=${lastSearchId}&limit=500&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
           { method: "GET" }
         );
         if (myPollId !== activePollId) return { pricingError: null };
@@ -2903,12 +2903,17 @@
   // Silent refetch — fetches packages, re-renders, returns the response data.
   // Used by both fetchAndRender (with status text) and the pricing poll (silent).
   async function refetchPackages() {
-    // limit=60 covers what the user can scroll to before pricing settles
-    // anyway. Was 1000 — which makes get_packages fan out across the full
-    // hotel_rate_offers index (5500+ rows for a 459-package search) and
-    // produced an 8.3s response time observed in production logs.
+    // limit=500: comfortably covers a settled search's live set (~200-450
+    // typical) so the results page shows every live trip, not just a cap.
+    // The earlier limit=60 cap was a workaround for a slow get_packages
+    // (8.3s observed) caused by the hotel_rate_offers fan-out hitting
+    // PostgREST's default 1000-row truncation. get_packages v20 fixed both
+    // the truncation (explicit .limit(100000) + smaller chunks) and the
+    // huge IN-clause (supplier filters alone when large), so the cap is
+    // no longer needed and was confusing users with "55 of 60 trips" when
+    // the server actually had 194 live trips ready.
     let data = await callFn(
-      `get_packages?search_id=${lastSearchId}&limit=60&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
+      `get_packages?search_id=${lastSearchId}&limit=500&only_priced=true&strict_live_only=true&sort_by=${lastSortBy}`,
       { method: "GET" }
     );
     // First-run resilience. The strict-live query returns nothing while
