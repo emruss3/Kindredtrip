@@ -2605,8 +2605,13 @@
   async function pollUntilFlightsReal() {
     const myPollId = ++activePollId;
     const startedAt = Date.now();
-    const HARD_TIMEOUT_MS = 90_000;     // hard cap
-    const STAGNANT_AFTER_MS = 25_000;   // grace before stagnation can bail
+    const HARD_TIMEOUT_MS = 165_000;    // hard cap — top_up upgrades hotels
+                                        // mock->live over 60-120s on big
+                                        // searches; live count climbs the
+                                        // whole time, so cap generously.
+                                        // The plateau check exits well before
+                                        // this once live stops growing.
+    const STAGNANT_AFTER_MS = 25_000;   // grace before a plateau can bail
     const POLL_INTERVAL_MS = 2_500;
     let lastLiveCount = -1;
     let stagnantChecks = 0;
@@ -2638,32 +2643,28 @@
         const settled = data?.summary?.pricing_settled === true;
         console.log(`[kt:pricing] +${Math.round((Date.now()-t2)/1000)}s live=${live} total=${total} settled=${settled} shown=${allPackages.length}`);
 
-        // Primary exit: server confirms the whole pipeline settled (every
-        // hotel terminal AND flights done) AND at least one live trip
-        // exists. Belt-and-suspenders on `live > 0`: an early settled=true
-        // read can arrive before the offer-writes have indexed (or against
-        // a still-propagating function deploy), in which case the bar would
-        // freeze on "0 live trips ready" forever. Keep polling until either
-        // live > 0 OR the hard timeout, so a transient stale read self-heals.
-        if (settled && live > 0) { hidePricingProgress(); return; }
-
-        // Settled+0-live edge case: bump grace clock so we keep polling for
-        // a bit before giving up. Don't return here.
-        if (settled && live === 0 && total > 0) {
-          // No-op; loop continues below.
-        }
-
-        // Stagnation exit — ONLY once we actually have live trips on screen
-        // and the live count has plateaued. We deliberately do NOT bail on
-        // a "terminal ratio" anymore: no_fit / perm-mock packages reach a
-        // terminal state quickly and used to trip an early exit BEFORE any
-        // live trip rendered, freezing the UI on pending cards (the
-        // "0 live trips ready" bug). Never exit while live === 0 unless the
-        // hard timeout fires.
+        // EXIT ONLY WHEN THE LIVE COUNT HAS PLATEAUED — never on `settled`
+        // alone. Audit finding: pricing_settled flips true (all hotels in a
+        // terminal state + all flights priced) while top_up_hotels_worker is
+        // STILL upgrading hotels mock->live and writing their offer rows in
+        // the background. live_packages keeps climbing for 60-120s after
+        // settled=true (observed live 37 -> 226 on one BNA search). Exiting
+        // on settled froze the UI at the early count. So we keep polling and
+        // re-rendering — cards keep appearing — until live stops growing.
+        //
+        // Plateau = live unchanged for N consecutive polls past the grace
+        // window. settled lets us confirm with a shorter plateau (the server
+        // says no more hotel work is queued); unsettled requires a longer
+        // plateau in case a top_up batch is mid-flight.
         if (live > 0 && live === lastLiveCount) {
           stagnantChecks++;
-          if (stagnantChecks >= 3 && Date.now() - startedAt > STAGNANT_AFTER_MS) { hidePricingProgress(); return; }
+          const needed = settled ? 2 : 4;
+          if (stagnantChecks >= needed && Date.now() - startedAt > STAGNANT_AFTER_MS) {
+            hidePricingProgress();
+            return;
+          }
         } else {
+          // live changed (usually grew) — reset the plateau counter and keep going.
           stagnantChecks = 0;
           lastLiveCount = live;
         }
