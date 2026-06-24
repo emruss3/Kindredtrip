@@ -1,10 +1,10 @@
 # KindredTrips
 
-> Caribbean family vacation discovery tool. Multi-destination cross-product search ranking flight + hotel combinations across every Caribbean airport and 974 family-friendly resorts.
+> Caribbean family vacation discovery tool. Multi-destination cross-product search ranking flight + hotel combinations across every Caribbean airport and 900+ family-friendly resorts.
 
 ## What KindredTrips does
 
-KindredTrips is a search and ranking tool for American families planning Caribbean vacations. Unlike traditional online travel agencies (Booking.com, Expedia, Kayak), we let users skip picking a destination first. We compare across all 35 Caribbean countries and 79 destination airports simultaneously, then rank results by total flight + hotel cost adjusted for family-fit factors.
+KindredTrips is a search and ranking tool for American families planning Caribbean vacations. Unlike traditional online travel agencies (Booking.com, Expedia, Kayak), we let users skip picking a destination first. We compare across all 34 Caribbean destinations and 79 destination airports simultaneously, then rank results by total flight + hotel cost adjusted for family-fit factors.
 
 ## What makes us different
 
@@ -15,8 +15,8 @@ KindredTrips is a search and ranking tool for American families planning Caribbe
 
 ## Coverage
 
-- 974 family-friendly Caribbean resorts
-- 35 Caribbean countries: Mexico, Dominican Republic, Bahamas, Jamaica, Cuba, Aruba, Turks & Caicos, Barbados, Saint Lucia, Antigua, Curacao, Puerto Rico, Costa Rica, Belize, and others
+- 900+ family-friendly Caribbean resorts
+- 34 Caribbean destinations: Mexico, Dominican Republic, Bahamas, Jamaica, Aruba, Turks & Caicos, Barbados, Saint Lucia, Antigua, Curacao, Puerto Rico, Costa Rica, Belize, and others
 - 79 destination airports
 - 50+ US origin airports plus major Canadian hubs
 
@@ -28,7 +28,7 @@ American families with children ages 0-12 planning Caribbean vacations, typicall
 
 1. User enters origin airport, travel dates, and family composition (adults, kids' ages)
 2. User toggles required amenities (kids club, all-inclusive, direct flights, connecting rooms)
-3. KindredTrips searches every flight + hotel combination across all 35 Caribbean countries
+3. KindredTrips searches every flight + hotel combination across all 34 Caribbean destinations
 4. Results are ranked by total trip cost and family-fit score
 5. User clicks through to a partner booking site (Booking.com, airline sites, etc.) to complete the booking
 
@@ -61,14 +61,24 @@ Cheapest Caribbean family vacations from US origins typically come from Mexico (
 
 ### Can I find Caribbean resorts with connecting rooms?
 
-Yes — KindredTrips has a "connecting rooms guaranteed" filter that surfaces resorts where adjoining rooms can be confirmed at booking, not just requested.
+Yes — KindredTrips has a "connecting rooms" filter that surfaces resorts that offer adjoining rooms. Connecting rooms are requested at booking and subject to availability; we don't claim them as guaranteed because hotel partners can't guarantee a specific room assignment in advance.
 
 ## Pages
 
 - [Homepage and search](https://kindredtrips.com/)
+- [All Caribbean destinations](https://kindredtrips.com/caribbean) — browse 900+ family resorts across 34 destinations
 - [About KindredTrips](https://kindredtrips.com/about.html)
 - [Privacy policy](https://kindredtrips.com/privacy.html)
 - [Contact](https://kindredtrips.com/contact.html)
+
+## Browsable destination & resort pages
+
+KindredTrips publishes an indexable page for every destination and every resort in the catalogue, generated from structured family-fit data:
+
+- Destination hubs at `https://kindredtrips.com/caribbean/<country>` (e.g. `/caribbean/aruba`, `/caribbean/jamaica`) list every family resort we track in that country, with kids-club / beachfront / water-park counts and a destination FAQ.
+- Resort pages at `https://kindredtrips.com/resort/<resort-name>` give each property's family-fit summary: star class, guest rating, kids-club age range, beachfront and water-park status, connecting rooms, and family-room occupancy.
+
+A full list of these URLs is in the sitemap: https://kindredtrips.com/sitemap.xml
 
 ## Technical
 
