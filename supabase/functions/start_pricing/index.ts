@@ -1,23 +1,25 @@
-// start_pricing v8
+// start_pricing
 //
-// Changes from v7:
-//   - Parallelize hotel batches with concurrency = 3. Sequential at
-//     ~1.2s/batch hit the 25s budget after ~20 batches, so ~65% of
-//     packages stayed mock-priced. With concurrency 3, the same 20
-//     batches finish in ~8s, which means almost every package gets a
-//     real liteapi price (and therefore real room options + the "Live
-//     price" badge instead of "Estimated").
-//   - Drop waitUntil for rate-offer writes. Edge-runtime kept dropping
-//     them mid-flight, so ~38% of liteapi packages had no persisted
-//     hotel_rate_offers rows, and the frontend room options section
-//     came back empty. We now write synchronously, with a 12s budget
-//     guard that bails cleanly if the inserts run long.
-//   - Tighten LITEAPI_TIMEOUT_S 4 → 3 to fail fast on slow hotels.
+// v18 (2026-06-23): removed the infant 'banned_children' hard-drop
+// (cap_child_allowed=false). That field is unreliable data (310/597 family
+// resorts carry it, 218 with kids clubs). The child-policy gate now lives
+// ONCE in process_search_batch v20 (corroborated: no kids-club AND not
+// Family); start_pricing must not re-drop what passed, or those packages
+// would exist but never get priced.
+//
+// v17 (2026-06-23): room-occupancy requirement EXCLUDES infants (<2).
+// Most hotels don't count an under-2 toward room occupancy (lap/crib),
+// so a 2A+2K+1-infant family fits a room that sleeps 4. We still send the
+// full child ages to LiteAPI (each hotel applies its own infant policy);
+// roomPartySize (adults + kids>=2) is what our fit-filter and pre-filter
+// use. The trip-detail room list adds an '⚠ infant needs a crib — verify
+// with hotel' callout on any room that only fits because the infant isn't
+// counted. (familySize, incl. infants, is kept for mock price scaling.)
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v16_pkg_scoped_offer_id";
+const VERSION = "start_pricing_v18_infant_occupancy";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -42,10 +44,7 @@ function findApiKey(): string | null {
   return null;
 }
 
-// Stable short hash of a string. Deterministic, collision-resistant enough
-// for our offer count (< 50k offers per day across all searches).
 function shortHash(s: string): string {
-  // 64-bit FNV-1a, hex encoded = 16 chars
   let h1 = 0xcbf29ce4, h2 = 0x84222325;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -95,9 +94,9 @@ function mockHotelNightlyTier(rating: number | null): number {
 
 type ExtractedRateOffer = {
   offer_id: string;
-  raw_offer_id_full: string;  // for storing the full liteapi offer id in raw_offer
+  raw_offer_id_full: string;
   room_type_id: string | null;
-  mapped_room_id: string | null;  // LiteAPI rate.mappedRoomId → joins to resort_rooms.room_id
+  mapped_room_id: string | null;
   room_name: string | null;
   rate_id: string | null;
   max_occupancy: number | null;
@@ -131,60 +130,40 @@ type ExtractedRateOffer = {
 function extractRateOffers(hotel: any, hotelId: string, nights: number): ExtractedRateOffer[] {
   const out: ExtractedRateOffer[] = [];
   const roomTypes: any[] = Array.isArray(hotel?.roomTypes) ? hotel.roomTypes : [];
-
   for (const rt of roomTypes) {
     const liteOfferId = String(rt?.offerId ?? "");
     if (!liteOfferId) continue;
-
     const priceType = rt?.priceType ?? null;
     const rateType = rt?.rateType ?? null;
     const paymentTypes: string[] = Array.isArray(rt?.paymentTypes) ? rt.paymentTypes : [];
     const supplier = rt?.supplier ?? null;
     const roomTypeId = rt?.roomTypeId ?? null;
-    // mappedRoomId is the documented crosswalk to /data/hotel rooms[].id
-    // (resort_rooms.room_id). Per LiteAPI it can sit on the roomType
-    // wrapper; per-rate is preferred when present (see loop below).
     const wrapperMappedRoomId = rt?.mappedRoomId ?? null;
-
     const rates: any[] = Array.isArray(rt?.rates) ? rt.rates : [];
     for (const rate of rates) {
       const total = Number(rate?.retailRate?.total?.[0]?.amount ?? 0);
       if (!total) continue;
-
       const ssp = Number(rate?.retailRate?.suggestedSellingPrice?.[0]?.amount ?? NaN);
       const init = Number(rate?.retailRate?.initialPrice?.[0]?.amount ?? NaN);
       const commAmt = Number(rate?.commission?.[0]?.amount ?? NaN);
       const currency = String(rate?.retailRate?.total?.[0]?.currency ?? "USD");
-
       const boardType = String(rate?.boardType ?? "").toUpperCase() || null;
       const boardName = rate?.boardName ?? null;
       const isAI = boardType === "AI" || (boardName && /all\s+inclusive/i.test(String(boardName)));
-
       const refundableTag = rate?.cancellationPolicies?.refundableTag ?? null;
       const refundable = refundableTag === "RFN" ? true : (refundableTag === "NRFN" ? false : null);
       const policies: any[] = Array.isArray(rate?.cancellationPolicies?.cancelPolicyInfos)
         ? rate.cancellationPolicies.cancelPolicyInfos : [];
       const firstPolicy = policies[0] ?? null;
-
       const perks: string[] = Array.isArray(rate?.perks)
         ? rate.perks.map((p: any) => typeof p === "string" ? p : (p?.name ?? p?.label ?? null)).filter(Boolean)
         : [];
       const promos = rate?.promotions;
       const hasPromotions = promos != null && (Array.isArray(promos) ? promos.length > 0 : Boolean(promos));
-
-      // Stable short id from hotel+rate identifiers. 16 hex chars guaranteed unique.
       const rateId = String(rate?.rateId ?? "r0");
       const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
-      // Per-rate mappedRoomId wins; fall back to the roomType wrapper.
-      // Coerce to string so the join against resort_rooms.room_id (text)
-      // doesn't get tripped up by a numeric LiteAPI id.
       const mappedRoomIdRaw = rate?.mappedRoomId ?? wrapperMappedRoomId ?? null;
       const mappedRoomId = mappedRoomIdRaw != null ? String(mappedRoomIdRaw) : null;
-
-      // v5: trimmed raw_offer. We only need enough to replay or prebook later;
-      // the full LiteAPI rate JSON is large and not used downstream. Store just
-      // the LiteAPI identifiers + a couple of human-readable flags. This cuts
-      // hotel_rate_offers memory + storage by ~10× per row.
       const trimmedRaw = {
         _liteapi_offer_id: liteOfferId,
         _liteapi_room_type_id: roomTypeId,
@@ -194,7 +173,6 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
         board_name: boardName,
         refundable_tag: refundableTag,
       };
-
       out.push({
         offer_id: offerId,
         raw_offer_id_full: liteOfferId,
@@ -231,8 +209,6 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): Extract
       });
     }
   }
-
-  // Dedupe duplicates that differ only by cancellation date
   const seen = new Set<string>();
   const deduped: ExtractedRateOffer[] = [];
   out.sort((a, b) => a.total_price - b.total_price);
@@ -274,37 +250,21 @@ function buildResortPreFilter(
   search: any, familySize: number, hasInfant: boolean,
 ): { description: string; willApply: string[] } {
   const filters: string[] = [];
-  if (familySize >= 5) {
-    filters.push(`occupancy>=${familySize} OR connecting=true OR has_suite=true OR has_villa=true OR no-cap-data`);
-  }
-  if (search.require_kids_club) {
-    filters.push("cap_has_kids_club=true OR no-cap-data");
-  }
-  if (search.require_connecting_rooms) {
-    filters.push("cap_has_connecting=true OR no-cap-data");
-  }
-  if (hasInfant) {
-    filters.push("cap_child_allowed != false");
-  }
-  return {
-    description: filters.length ? filters.join("; ") : "none",
-    willApply: filters,
-  };
+  if (familySize >= 5) filters.push(`occupancy>=${familySize} OR connecting=true OR has_suite=true OR has_villa=true OR no-cap-data`);
+  if (search.require_kids_club) filters.push("cap_has_kids_club=true OR no-cap-data");
+  if (search.require_connecting_rooms) filters.push("cap_has_connecting=true OR no-cap-data");
+  return { description: filters.length ? filters.join("; ") : "none", willApply: filters };
 }
 
 serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ version: VERSION, error: "POST only" }), { status: 405, headers });
-  }
+  if (req.method !== "POST") return new Response(JSON.stringify({ version: VERSION, error: "POST only" }), { status: 405, headers });
 
   try {
     const body = await req.json().catch(() => ({}));
     const search_id = String(body.search_id ?? "");
-    if (!search_id) {
-      return new Response(JSON.stringify({ version: VERSION, error: "search_id required" }), { status: 400, headers });
-    }
+    if (!search_id) return new Response(JSON.stringify({ version: VERSION, error: "search_id required" }), { status: 400, headers });
 
     const apiKey = findApiKey();
     if (!apiKey) throw new Error("LiteAPI key missing");
@@ -313,8 +273,7 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: search, error: sErr } = await sb.from("searches")
-      .select("*").eq("search_id", search_id).maybeSingle();
+    const { data: search, error: sErr } = await sb.from("searches").select("*").eq("search_id", search_id).maybeSingle();
     if (sErr) throw sErr;
     if (!search) return new Response(JSON.stringify({ version: VERSION, error: "search not found" }), { status: 404, headers });
 
@@ -325,11 +284,13 @@ serve(async (req) => {
     const children = olderChildAges.length;
     const infants = infantAges.length;
     const familySize = adults + childAges.length;
+    // v17: infants (<2) are NOT counted toward room occupancy.
+    const roomPartySize = adults + olderChildAges.length;
     const hasInfant = infants > 0;
     const nights = nightsBetween(search.date_start, search.date_end);
     const paxSig = `${adults}:${children}:${infants}`;
 
-    const preFilter = buildResortPreFilter(search, familySize, hasInfant);
+    const preFilter = buildResortPreFilter(search, roomPartySize, hasInfant);
 
     const { data: pkgsRaw, error: pErr } = await sb.from("packages")
       .select(`
@@ -342,41 +303,28 @@ serve(async (req) => {
       `)
       .eq("search_id", search_id);
     if (pErr) throw pErr;
-    if (!pkgsRaw?.length) {
-      return new Response(JSON.stringify({ version: VERSION, packages_priced: 0 }), { status: 200, headers });
-    }
+    if (!pkgsRaw?.length) return new Response(JSON.stringify({ version: VERSION, packages_priced: 0 }), { status: 200, headers });
 
-    let droppedBy: Record<string, number> = {
-      occupancy_too_small: 0,
-      no_kids_club: 0,
-      no_connecting: 0,
-      banned_children: 0,
-    };
-
+    let droppedBy: Record<string, number> = { occupancy_too_small: 0, no_kids_club: 0, no_connecting: 0 };
     const pkgs = pkgsRaw.filter((p: any) => {
       const r = p.resorts;
       if (!r) return false;
       const hasCapData = r.cap_fetched_at != null;
-      if (hasInfant && r.cap_child_allowed === false) { droppedBy.banned_children++; return false; }
-      if (familySize >= 5 && hasCapData) {
-        const occOk = (r.cap_max_room_occupancy ?? 0) >= familySize;
+      // v18: NO cap_child_allowed drop here — process_search_batch owns the
+      // (corroborated) child-policy gate; re-dropping would leave packages
+      // unpriced.
+      if (roomPartySize >= 5 && hasCapData) {
+        const occOk = (r.cap_max_room_occupancy ?? 0) >= roomPartySize;
         const altOk = r.cap_has_connecting === true || r.cap_has_suite === true || r.cap_has_villa === true;
         if (!occOk && !altOk) { droppedBy.occupancy_too_small++; return false; }
       }
-      if (search.require_kids_club && hasCapData && r.cap_has_kids_club === false) {
-        droppedBy.no_kids_club++; return false;
-      }
-      if (search.require_connecting_rooms && hasCapData && r.cap_has_connecting !== true) {
-        droppedBy.no_connecting++; return false;
-      }
+      if (search.require_kids_club && hasCapData && r.cap_has_kids_club === false) { droppedBy.no_kids_club++; return false; }
+      if (search.require_connecting_rooms && hasCapData && r.cap_has_connecting !== true) { droppedBy.no_connecting++; return false; }
       return true;
     });
 
     const dropped = pkgsRaw.length - pkgs.length;
-
-    const uniqueDestinations = Array.from(new Set(
-      pkgs.map((p: any) => p.dest_airport_iata).filter(Boolean)
-    )) as string[];
+    const uniqueDestinations = Array.from(new Set(pkgs.map((p: any) => p.dest_airport_iata).filter(Boolean))) as string[];
 
     const { data: cacheHits } = await sb.from("v_flight_cache_lookup")
       .select("*")
@@ -385,7 +333,6 @@ serve(async (req) => {
       .eq("return_date", search.date_end)
       .eq("pax_signature", paxSig)
       .in("dest_iata", uniqueDestinations);
-
     const cachedByDest = new Map<string, any>();
     for (const c of cacheHits ?? []) cachedByDest.set(c.dest_iata, c);
 
@@ -395,26 +342,17 @@ serve(async (req) => {
         return {
           search_id, origin_iata: search.origin_iata, dest_iata: dest,
           departure_date: search.date_start, return_date: search.date_end,
-          adults, children, infants,
-          status: "done",
-          fetched_at: new Date().toISOString(),
-          offers_count: cached.offers_count ?? 0,
-          cheapest_offer_id: cached.cheapest_offer_id,
-          cheapest_total: cached.cheapest_total,
-          cheapest_nonstop_offer_id: cached.cheapest_nonstop_offer_id,
-          cheapest_nonstop_total: cached.cheapest_nonstop_total,
-          cheapest_refundable_offer_id: cached.cheapest_refundable_offer_id,
-          cheapest_refundable_total: cached.cheapest_refundable_total,
+          adults, children, infants, status: "done",
+          fetched_at: new Date().toISOString(), offers_count: cached.offers_count ?? 0,
+          cheapest_offer_id: cached.cheapest_offer_id, cheapest_total: cached.cheapest_total,
+          cheapest_nonstop_offer_id: cached.cheapest_nonstop_offer_id, cheapest_nonstop_total: cached.cheapest_nonstop_total,
+          cheapest_refundable_offer_id: cached.cheapest_refundable_offer_id, cheapest_refundable_total: cached.cheapest_refundable_total,
         };
       }
       return {
         search_id, origin_iata: search.origin_iata, dest_iata: dest,
         departure_date: search.date_start, return_date: search.date_end,
-        adults, children, infants,
-        status: "pending",
-        offers_count: 0,  // explicit — PostgREST sends NULL for omitted keys
-                          // when batching with rows that DO include them,
-                          // which violates the NOT NULL constraint
+        adults, children, infants, status: "pending", offers_count: 0,
       };
     });
 
@@ -422,14 +360,10 @@ serve(async (req) => {
       .upsert(routeRows, { onConflict: "search_id,dest_iata" })
       .select("route_id, dest_iata, status, cheapest_offer_id, cheapest_total");
     if (rErr) throw rErr;
-
     const routeByDest = new Map<string, any>();
     for (const r of insertedRoutes ?? []) routeByDest.set(r.dest_iata, r);
 
-    const liteapiHotelIds = Array.from(new Set(
-      pkgs.map((p: any) => p.resorts?.liteapi_hotel_id).filter(Boolean)
-    )) as string[];
-
+    const liteapiHotelIds = Array.from(new Set(pkgs.map((p: any) => p.resorts?.liteapi_hotel_id).filter(Boolean))) as string[];
     const hotelDataById = new Map<string, any>();
     const hotelOccupancies = [{ adults, children: childAges }];
 
@@ -438,61 +372,32 @@ serve(async (req) => {
     let hotelRateLimitHit = false;
     let wallTimeBudgetHit = false;
 
-    // v5: wall-clock guard on the LiteAPI batch loop. If we're at risk of
-    // hitting Cloudflare's wall-clock (the cause of the 546 in v4), we stop
-    // fetching new hotel data and let any unfetched packages fall through
-    // to the mock pricer. We always return a 200 instead of being killed.
-    // v8: parallel batches with bounded concurrency. Sequential was hitting
-    // the 22s budget after ~20 batches; concurrency=3 finishes the same
-    // work in ~8s. If we hit a 429 anywhere in flight, we still abort the
-    // remaining waves but keep what already succeeded.
     const liteapiLoopStart = Date.now();
     const allBatches: string[][] = [];
-    for (let i = 0; i < liteapiHotelIds.length; i += HOTEL_BATCH_SIZE) {
-      allBatches.push(liteapiHotelIds.slice(i, i + HOTEL_BATCH_SIZE));
-    }
+    for (let i = 0; i < liteapiHotelIds.length; i += HOTEL_BATCH_SIZE) allBatches.push(liteapiHotelIds.slice(i, i + HOTEL_BATCH_SIZE));
 
     for (let w = 0; w < allBatches.length; w += HOTEL_BATCH_CONCURRENCY) {
-      if (Date.now() - liteapiLoopStart > WALL_CLOCK_BUDGET_MS) {
-        wallTimeBudgetHit = true;
-        break;
-      }
+      if (Date.now() - liteapiLoopStart > WALL_CLOCK_BUDGET_MS) { wallTimeBudgetHit = true; break; }
       const wave = allBatches.slice(w, w + HOTEL_BATCH_CONCURRENCY);
       hotelBatchesAttempted += wave.length;
-      const results = await Promise.all(
-        wave.map((batch) =>
-          fetchHotelRatesBatch(apiKey, batch, search.date_start, search.date_end, hotelOccupancies)
-        )
-      );
+      const results = await Promise.all(wave.map((batch) => fetchHotelRatesBatch(apiKey, batch, search.date_start, search.date_end, hotelOccupancies)));
       let hit429 = false;
       for (const res of results) {
-        if (res.error) {
-          hotelLastError = res.error;
-          if (res.status === 429) { hit429 = true; }
-        } else {
-          hotelBatchesSucceeded++;
-          for (const h of res.hotels) {
-            const id = String(h?.hotelId ?? "");
-            if (id) hotelDataById.set(id, h);
-          }
-        }
+        if (res.error) { hotelLastError = res.error; if (res.status === 429) hit429 = true; }
+        else { hotelBatchesSucceeded++; for (const h of res.hotels) { const id = String(h?.hotelId ?? ""); if (id) hotelDataById.set(id, h); } }
       }
       if (hit429) { hotelRateLimitHit = true; break; }
     }
 
-    const { data: airportTiers } = await sb.from("mock_flight_pricing")
-      .select("airport_code, base_price_min, base_price_max, typical_stops, typical_duration_hours");
+    const { data: airportTiers } = await sb.from("mock_flight_pricing").select("airport_code, base_price_min, base_price_max, typical_stops, typical_duration_hours");
     const airportTier = new Map<string, any>();
     for (const r of airportTiers ?? []) airportTier.set(r.airport_code, r);
-
-    const { data: countryMods } = await sb.from("mock_hotel_pricing_country")
-      .select("country, price_multiplier");
+    const { data: countryMods } = await sb.from("mock_hotel_pricing_country").select("country, price_multiplier");
     const countryMult = new Map<string, number>();
     for (const r of countryMods ?? []) countryMult.set(r.country, Number(r.price_multiplier));
 
     const fareEq = adults + (childAges.length * 0.75);
     const nowIso = new Date().toISOString();
-
     const packageUpdates: any[] = [];
     const rateOfferRows: any[] = [];
     let hotelLive = 0, hotelMock = 0, hotelFallback = 0;
@@ -516,11 +421,7 @@ serve(async (req) => {
         const rnd = seededRand(`flt:${search.origin_iata}:${dest}:${search.date_start}`);
         let perPerson: number;
         if (!tier) perPerson = Math.round(640 + rnd * 220);
-        else {
-          perPerson = Math.round(Number(tier.base_price_min) + rnd * (Number(tier.base_price_max) - Number(tier.base_price_min)));
-          stops = tier.typical_stops ?? 1;
-          durationHours = tier.typical_duration_hours ?? null;
-        }
+        else { perPerson = Math.round(Number(tier.base_price_min) + rnd * (Number(tier.base_price_max) - Number(tier.base_price_min))); stops = tier.typical_stops ?? 1; durationHours = tier.typical_duration_hours ?? null; }
         flightTotal = Math.round(perPerson * fareEq);
         flightSupplier = "mock";
         flightMockPlaceholder++;
@@ -539,123 +440,86 @@ serve(async (req) => {
       let hasAnyRefundable = false;
 
       const hotelData = r?.liteapi_hotel_id ? hotelDataById.get(r.liteapi_hotel_id) : null;
-
       if (hotelData) {
         const offers = extractRateOffers(hotelData, r.liteapi_hotel_id, nights);
         if (offers.length > 0) {
-          // Only consider rates whose maxOccupancy can sleep the queried
-          // party in a single room. LiteAPI sometimes returns rates with
-          // a maxOccupancy below the queried occupancy (mixed-supplier
-          // responses), and picking offers[0] after a raw price sort
-          // would surface a $X price for a room the family literally
-          // Fit filter: every person in the search must sleep in the room.
-          // Infants used to be stripped from this calculation (and from
-          // the LiteAPI query above) on the theory that under-2s sleep on
-          // a parent's lap, but LiteAPI then never priced 6-person rooms
-          // for a family of 6 — it capped rates at maxOccupancy=5. That
-          // hid the bigger rooms users actually wanted to book. Now we
-          // pass the full child_ages to LiteAPI and gate rates at the
-          // full family size, with cribs treated as a property-side
-          // detail.
-          const partySize = adults + childAges.length;
-          const fitsParty = (o: ExtractedRateOffer) =>
-            o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+          const partySize = roomPartySize;
+          const fitsParty = (o: ExtractedRateOffer) => o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
           const fitsOffers = offers.filter(fitsParty);
 
           if (fitsOffers.length === 0) {
-            // No bookable room. Mark the package as 'no_fit' rather than
-            // 'mock' so top_up_hotels_worker doesn't immediately re-pull
-            // it, call /hotels/rates again, and re-filter the same too-
-            // small rates — that loop burned wall-clock for no progress.
-            // strict_live_only on the frontend filters 'no_fit' out the
-            // same way it filtered 'mock'.
             hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
             hotelSupplier = "no_fit";
             hotelFallback++;
           } else {
-          hotelSupplier = "liteapi";
-          hotelLive++;
+            hotelSupplier = "liteapi";
+            hotelLive++;
+            fitsOffers.sort((a, b) => a.total_price - b.total_price);
+            offers.sort((a, b) => a.total_price - b.total_price);
+            const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
+            const refOffers = fitsOffers.filter(o => o.refundable === true);
+            const pkgScope = p.package_id.slice(0, 8);
+            const scopeId = (id: string) => `${pkgScope}_${id}`;
+            cheapestAiTotal = aiOffers[0]?.total_price ?? null;
+            cheapestAiOfferId = aiOffers[0] ? scopeId(aiOffers[0].offer_id) : null;
+            cheapestRefTotal = refOffers[0]?.total_price ?? null;
+            cheapestRefOfferId = refOffers[0] ? scopeId(refOffers[0].offer_id) : null;
+            hasAnyAi = aiOffers.length > 0;
+            hasAnyRefundable = refOffers.length > 0;
+            maxOfferOcc = offers.reduce((m, o) => Math.max(m, o.max_occupancy ?? 0), 0) || null;
 
-          fitsOffers.sort((a, b) => a.total_price - b.total_price);
-          offers.sort((a, b) => a.total_price - b.total_price);
+            let chosen: ExtractedRateOffer | null = null;
+            if (search.require_all_inclusive && aiOffers.length > 0) chosen = aiOffers[0];
+            else chosen = fitsOffers[0];
+            chosenOfferId = scopeId(chosen.offer_id);
+            hotelTotal = Math.round(chosen.total_price);
+            offerCount = offers.length;
 
-          const aiOffers = fitsOffers.filter(o => o.is_all_inclusive);
-          const refOffers = fitsOffers.filter(o => o.refundable === true);
-          // offer_id from extractRateOffers is hotel-scoped, so two
-          // searches pricing the same hotel collide on PK and the later
-          // upsert overwrites the earlier search's rows. We re-scope by
-          // package_id here so each search owns its own offer rows.
-          const pkgScope = p.package_id.slice(0, 8);
-          const scopeId = (id: string) => `${pkgScope}_${id}`;
-          cheapestAiTotal = aiOffers[0]?.total_price ?? null;
-          cheapestAiOfferId = aiOffers[0] ? scopeId(aiOffers[0].offer_id) : null;
-          cheapestRefTotal = refOffers[0]?.total_price ?? null;
-          cheapestRefOfferId = refOffers[0] ? scopeId(refOffers[0].offer_id) : null;
-          hasAnyAi = aiOffers.length > 0;
-          hasAnyRefundable = refOffers.length > 0;
-          maxOfferOcc = offers.reduce((m, o) => Math.max(m, o.max_occupancy ?? 0), 0) || null;
+            const top = offers.slice(0, MAX_OFFERS_PER_PACKAGE);
+            const have = new Set(top.map(o => o.offer_id));
+            const cheapestAiRawId = aiOffers[0]?.offer_id ?? null;
+            const cheapestRefRawId = refOffers[0]?.offer_id ?? null;
+            if (cheapestAiRawId && !have.has(cheapestAiRawId)) { const found = offers.find(o => o.offer_id === cheapestAiRawId); if (found) top.push(found); }
+            if (cheapestRefRawId && !have.has(cheapestRefRawId)) { const found = offers.find(o => o.offer_id === cheapestRefRawId); if (found) top.push(found); }
 
-          let chosen: ExtractedRateOffer | null = null;
-          if (search.require_all_inclusive && aiOffers.length > 0) {
-            chosen = aiOffers[0];
-          } else {
-            chosen = fitsOffers[0];
-          }
-          chosenOfferId = scopeId(chosen.offer_id);
-          hotelTotal = Math.round(chosen.total_price);
-          offerCount = offers.length;
-
-          const top = offers.slice(0, MAX_OFFERS_PER_PACKAGE);
-          const have = new Set(top.map(o => o.offer_id));
-          const cheapestAiRawId = aiOffers[0]?.offer_id ?? null;
-          const cheapestRefRawId = refOffers[0]?.offer_id ?? null;
-          if (cheapestAiRawId && !have.has(cheapestAiRawId)) {
-            const found = offers.find(o => o.offer_id === cheapestAiRawId);
-            if (found) top.push(found);
-          }
-          if (cheapestRefRawId && !have.has(cheapestRefRawId)) {
-            const found = offers.find(o => o.offer_id === cheapestRefRawId);
-            if (found) top.push(found);
-          }
-
-          for (const o of top) {
-            rateOfferRows.push({
-              offer_id: scopeId(o.offer_id),
-              package_id: p.package_id,
-              resort_id: p.resort_id,
-              liteapi_hotel_id: r.liteapi_hotel_id,
-              room_type_id: o.room_type_id,
-              mapped_room_id: o.mapped_room_id,
-              room_name: o.room_name,
-              rate_id: o.rate_id,
-              max_occupancy: o.max_occupancy,
-              adult_count: o.adult_count,
-              child_count: o.child_count,
-              children_ages: o.children_ages,
-              total_price: o.total_price,
-              per_night: o.per_night,
-              currency: o.currency,
-              suggested_selling_price: o.suggested_selling_price,
-              initial_price: o.initial_price,
-              commission_amount: o.commission_amount,
-              commission_pct: o.commission_pct,
-              board_type: o.board_type,
-              board_name: o.board_name,
-              is_all_inclusive: o.is_all_inclusive,
-              refundable: o.refundable,
-              refundable_tag: o.refundable_tag,
-              cancellation_deadline: o.cancellation_deadline,
-              cancellation_penalty: o.cancellation_penalty,
-              payment_types: o.payment_types,
-              supplier: o.supplier,
-              price_type: o.price_type,
-              rate_type: o.rate_type,
-              perks: o.perks,
-              has_promotions: o.has_promotions,
-              remarks: o.remarks,
-              raw_offer: o.raw_offer,
-            });
-          }
+            for (const o of top) {
+              rateOfferRows.push({
+                offer_id: scopeId(o.offer_id),
+                package_id: p.package_id,
+                resort_id: p.resort_id,
+                liteapi_hotel_id: r.liteapi_hotel_id,
+                room_type_id: o.room_type_id,
+                mapped_room_id: o.mapped_room_id,
+                room_name: o.room_name,
+                rate_id: o.rate_id,
+                max_occupancy: o.max_occupancy,
+                adult_count: o.adult_count,
+                child_count: o.child_count,
+                children_ages: o.children_ages,
+                total_price: o.total_price,
+                per_night: o.per_night,
+                currency: o.currency,
+                suggested_selling_price: o.suggested_selling_price,
+                initial_price: o.initial_price,
+                commission_amount: o.commission_amount,
+                commission_pct: o.commission_pct,
+                board_type: o.board_type,
+                board_name: o.board_name,
+                is_all_inclusive: o.is_all_inclusive,
+                refundable: o.refundable,
+                refundable_tag: o.refundable_tag,
+                cancellation_deadline: o.cancellation_deadline,
+                cancellation_penalty: o.cancellation_penalty,
+                payment_types: o.payment_types,
+                supplier: o.supplier,
+                price_type: o.price_type,
+                rate_type: o.rate_type,
+                perks: o.perks,
+                has_promotions: o.has_promotions,
+                remarks: o.remarks,
+                raw_offer: o.raw_offer,
+              });
+            }
           }
         } else {
           hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
@@ -669,36 +533,17 @@ serve(async (req) => {
       }
 
       packageUpdates.push({
-        package_id: p.package_id,
-        flight_route_id: route.route_id,
-        flight_offer_id: flightOfferId,
-        flight_price: flightTotal,
-        hotel_price: hotelTotal,
-        total_price: flightTotal + hotelTotal,
-        stops, duration_hours: durationHours,
-        flight_supplier: flightSupplier,
-        hotel_supplier: hotelSupplier,
-        flight_priced_at: nowIso,
-        hotel_priced_at: nowIso,
-        priced_at: nowIso,
-        hotel_offer_id: chosenOfferId,
-        hotel_offer_count: offerCount,
-        cheapest_offer_id: chosenOfferId,
-        cheapest_ai_offer_id: cheapestAiOfferId,
-        cheapest_ai_total: cheapestAiTotal,
-        cheapest_refundable_offer_id: cheapestRefOfferId,
-        cheapest_refundable_total: cheapestRefTotal,
-        max_offer_occupancy: maxOfferOcc,
-        has_any_ai: hasAnyAi,
-        has_any_refundable: hasAnyRefundable,
+        package_id: p.package_id, flight_route_id: route.route_id, flight_offer_id: flightOfferId,
+        flight_price: flightTotal, hotel_price: hotelTotal, total_price: flightTotal + hotelTotal,
+        stops, duration_hours: durationHours, flight_supplier: flightSupplier, hotel_supplier: hotelSupplier,
+        flight_priced_at: nowIso, hotel_priced_at: nowIso, priced_at: nowIso,
+        hotel_offer_id: chosenOfferId, hotel_offer_count: offerCount, cheapest_offer_id: chosenOfferId,
+        cheapest_ai_offer_id: cheapestAiOfferId, cheapest_ai_total: cheapestAiTotal,
+        cheapest_refundable_offer_id: cheapestRefOfferId, cheapest_refundable_total: cheapestRefTotal,
+        max_offer_occupancy: maxOfferOcc, has_any_ai: hasAnyAi, has_any_refundable: hasAnyRefundable,
       });
     }
 
-    // v8: write rate offers SYNCHRONOUSLY. waitUntil was unreliable —
-    // ~38% of packages had no persisted hotel_rate_offers rows, so the
-    // frontend "Room options" section was coming back empty. We now
-    // block the response on these writes, but cap them at 12s so a slow
-    // DB can't push us past the 50s edge wall-clock.
     const rateOfferRowsCount = rateOfferRows.length;
     let rateOfferRowsPersisted = 0;
     let rateOfferWriteTruncated = false;
@@ -708,42 +553,28 @@ serve(async (req) => {
         const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
         const DEL_CHUNK = 200;
         for (let i = 0; i < pkgIds.length; i += DEL_CHUNK) {
-          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) {
-            rateOfferWriteTruncated = true;
-            break;
-          }
-          const slice = pkgIds.slice(i, i + DEL_CHUNK);
-          await sb.from("hotel_rate_offers").delete().in("package_id", slice);
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { rateOfferWriteTruncated = true; break; }
+          await sb.from("hotel_rate_offers").delete().in("package_id", pkgIds.slice(i, i + DEL_CHUNK));
         }
         const INS_CHUNK = 200;
         for (let i = 0; i < rateOfferRows.length; i += INS_CHUNK) {
-          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) {
-            rateOfferWriteTruncated = true;
-            break;
-          }
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { rateOfferWriteTruncated = true; break; }
           const slice = rateOfferRows.slice(i, i + INS_CHUNK);
           const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
           if (!oe) rateOfferRowsPersisted += slice.length;
         }
-      } catch (e) {
-        console.error("[start_pricing v8] rate offer persistence error:", e);
-      }
+      } catch (e) { console.error("[start_pricing v18] rate offer persistence error:", e); }
     }
 
     const CHUNK = 50;
     let updated = 0;
     for (let i = 0; i < packageUpdates.length; i += CHUNK) {
       const slice = packageUpdates.slice(i, i + CHUNK);
-      await Promise.all(slice.map(u => {
-        const { package_id, ...vals } = u;
-        return sb.from("packages").update(vals).eq("package_id", package_id);
-      }));
+      await Promise.all(slice.map(u => { const { package_id, ...vals } = u; return sb.from("packages").update(vals).eq("package_id", package_id); }));
       updated += slice.length;
     }
 
-    await sb.from("search_jobs").update({
-      hotels_done: true, updated_at: nowIso,
-    }).eq("search_id", search_id);
+    await sb.from("search_jobs").update({ hotels_done: true, updated_at: nowIso }).eq("search_id", search_id);
 
     const pendingRouteCount = (insertedRoutes ?? []).filter(r => r.status === "pending").length;
     let workerDispatched = false;
@@ -755,17 +586,11 @@ serve(async (req) => {
       }).catch(e => console.error("worker dispatch failed:", e));
       workerDispatched = true;
     } else {
-      await sb.from("search_jobs").update({
-        flights_done: true, updated_at: nowIso,
-      }).eq("search_id", search_id);
+      await sb.from("search_jobs").update({ flights_done: true, updated_at: nowIso }).eq("search_id", search_id);
     }
 
-    // v10: dispatch the hotel top-up worker if any mock packages remain
-    // that still have a liteapi_hotel_id. Wall-clock budget caps how
-    // many hotels we can fetch in this request; the worker picks up the
-    // rest in fresh edge workers, ~200 packages at a time, until done.
     let topUpDispatched = false;
-    if (hotelMock > 0 || hotelFallback > 0) {
+    if (hotelMock > 0) {
       const tp = fetch(`${supabaseUrl}/functions/v1/top_up_hotels_worker`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
@@ -778,56 +603,28 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      version: VERSION,
-      search_id,
-      family: { adults, children, infants, total: familySize },
-      nights,
-      pre_filter: {
-        applied: preFilter.willApply,
-        candidates_before: pkgsRaw.length,
-        candidates_after: pkgs.length,
-        dropped: dropped,
-        dropped_by_reason: droppedBy,
-      },
+      version: VERSION, search_id, family: { adults, children, infants, total: familySize }, nights,
+      room_party_size: roomPartySize,
+      pre_filter: { applied: preFilter.willApply, candidates_before: pkgsRaw.length, candidates_after: pkgs.length, dropped, dropped_by_reason: droppedBy },
       packages_priced: updated,
       hotels: {
-        ids_queried: liteapiHotelIds.length,
-        ids_fetched: hotelDataById.size,
-        batches_succeeded: hotelBatchesSucceeded,
-        batches_attempted: hotelBatchesAttempted,
-        wall_time_budget_hit: wallTimeBudgetHit,  // v5: true if we stopped early
-        rate_limit_hit: hotelRateLimitHit,
-        last_error: hotelLastError,
-        live_priced: hotelLive,
-        live_fallback_to_mock: hotelFallback,
-        mock_priced: hotelMock,
-        rate_offers_extracted: rateOfferRowsCount,
-        rate_offers_persisted: rateOfferRowsPersisted,
-        rate_offers_write_truncated: rateOfferWriteTruncated,
+        ids_queried: liteapiHotelIds.length, ids_fetched: hotelDataById.size,
+        batches_succeeded: hotelBatchesSucceeded, batches_attempted: hotelBatchesAttempted,
+        wall_time_budget_hit: wallTimeBudgetHit, rate_limit_hit: hotelRateLimitHit, last_error: hotelLastError,
+        live_priced: hotelLive, live_fallback_to_mock: hotelFallback, mock_priced: hotelMock,
+        rate_offers_extracted: rateOfferRowsCount, rate_offers_persisted: rateOfferRowsPersisted, rate_offers_write_truncated: rateOfferWriteTruncated,
       },
-      flights: {
-        unique_routes: uniqueDestinations.length,
-        cache_hits: cachedByDest.size,
-        pending_routes: pendingRouteCount,
-        live_priced_immediately: flightLive,
-        mock_placeholder: flightMockPlaceholder,
-        worker_dispatched: workerDispatched,
-      },
+      flights: { unique_routes: uniqueDestinations.length, cache_hits: cachedByDest.size, pending_routes: pendingRouteCount, live_priced_immediately: flightLive, mock_placeholder: flightMockPlaceholder, worker_dispatched: workerDispatched },
       top_up_dispatched: topUpDispatched,
     }, null, 2), { status: 200, headers });
 
   } catch (e) {
-    console.error("start_pricing v6 error:", e);
-    return new Response(JSON.stringify({
-      version: VERSION, error: String((e as any)?.message ?? e),
-    }, null, 2), { status: 500, headers });
+    console.error("start_pricing v18 error:", e);
+    return new Response(JSON.stringify({ version: VERSION, error: String((e as any)?.message ?? e) }, null, 2), { status: 500, headers });
   }
 });
 
-function mockHotelTotal(
-  r: any, nights: number, familySize: number,
-  countryMult: Map<string, number>, resortId: string, dateStart: string,
-): number {
+function mockHotelTotal(r: any, nights: number, familySize: number, countryMult: Map<string, number>, resortId: string, dateStart: string): number {
   const baseNight = mockHotelNightlyTier(r?.avg_user_rating);
   const countryMul = countryMult.get(r?.country ?? "") ?? 1.0;
   let occMul = 1.0;

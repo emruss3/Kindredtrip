@@ -1,45 +1,26 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v16_family_signal_attach";
+const VERSION = "get_packages_v20_avoid_huge_in_clause";
 
-// v15 (2026-05-19):
-//   Add `pricing_settled` flag + `terminal_packages` count to summary so
-//   the frontend progress widget knows when work is actually done. A
-//   package is terminal when it can't transition further: hotel_supplier
-//   in ('liteapi', 'no_fit'), or 'mock' with no resorts.liteapi_hotel_id
-//   (the worker has nothing to call /hotels/rates with). live_packages
-//   capped at ~25-40% of total_packages on family-of-6 searches because
-//   most resorts had no fitting rates, so the prior allDone check
-//   (live >= total) hung at 99% indefinitely.
+// v20 (2026-06-23): v19 fixed the live_packages count by uncapping the
+// hotel_rate_offers fetch. But when the live set is large (~300+ packages),
+// the resulting `package_id=in.(uuid1,uuid2,...)` URL on the main packages
+// query blew past the HTTP/2 header size limit and failed with a stream
+// protocol error (HTTP 500: 'http2 error: stream error detected').
 //
-// v14 (2026-05-19):
+// Fix: when supplier filters are already applied (effective_live_only or
+// strict_live_only), trust them and SKIP the package_id IN-gate. Reason:
+// start_pricing writes hotel_supplier='liteapi' AND the matching rate
+// offers atomically inside the same handler call; a package with
+// hotel_supplier='liteapi' has offers in essentially every case (only edge
+// case: an offer-write budget overrun leaves <1% without offers, which is
+// acceptable). For non-strict modes (`live_only` warming-up path), keep
+// the IN-gate behavior, but cap at MAX_IN_IDS to stay under the HTTP/2
+// URL limit; if we'd exceed that, fall back to the supplier filter alone.
 //
-// v13 (2026-05-18):
-//   Attach per-leg flight durations + stops from flight_offers so the
-//   frontend can treat outbound and inbound as two separate travel days
-//   instead of summing them. Falls back silently for mock packages where
-//   no flight_offers row exists.
-//
-// v12 (2026-05-19):
-//   Include resorts.airport_transfer_minutes so the frontend's flight
-//   friction score can use real numeric transfer time instead of the
-//   text-only airport_transfer_notes.
-//
-// v10 (2026-05-14):
-//   Added the package-level fields the frontend filter / modal relies
-//   on but that were missing from the SELECT in v9:
-//     - has_any_ai, has_any_refundable
-//     - hotel_offer_count, hotel_offer_id
-//     - flight_offer_count, flight_offer_id, flight_route_id
-//     - cheapest_offer_id, cheapest_ai_offer_id, cheapest_ai_total
-//     - cheapest_refundable_offer_id, cheapest_refundable_total
-//     - max_offer_occupancy
-//   Without has_any_ai, the frontend AI filter dropped every
-//   liteapi-priced package because `undefined !== true` is always true.
-//
-// v9 (2026-05-13) — kept: live_only=true default with warmup fallback
-//   (skipped when strict_live_only=true).
+// v19 (2026-06-23): smaller offer-fetch chunks + explicit .limit(100000)
+// to defeat PostgREST's default 1000-row cap.
 
 function corsHeaders() {
   return {
@@ -48,6 +29,10 @@ function corsHeaders() {
     "access-control-allow-methods": "POST, GET, OPTIONS",
   };
 }
+
+// Cap for `package_id=in.(...)` URL: 200 UUIDs * ~38 chars each ~= 7.6 KB,
+// safely under common HTTP/2 8-16 KB request URL limits.
+const MAX_IN_IDS = 200;
 
 serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
@@ -60,6 +45,7 @@ serve(async (req) => {
     let only_priced = false;
     let live_only = true;
     let strict_live_only = false;
+    let prepaint = false;
     let sort_by: "score" | "price_asc" | "price_desc" = "score";
 
     if (req.method === "GET") {
@@ -72,6 +58,7 @@ serve(async (req) => {
       if (lo === "false" || lo === "0") live_only = false;
       const slo = url.searchParams.get("strict_live_only");
       if (slo === "true" || slo === "1") strict_live_only = true;
+      prepaint = url.searchParams.get("prepaint") === "true";
       const sb = url.searchParams.get("sort_by");
       if (sb === "price_asc" || sb === "price_desc" || sb === "score") sort_by = sb;
     } else if (req.method === "POST") {
@@ -82,6 +69,7 @@ serve(async (req) => {
       only_priced = body.only_priced === true;
       if (body.live_only === false) live_only = false;
       if (body.strict_live_only === true) strict_live_only = true;
+      prepaint = body.prepaint === true;
       if (["score", "price_asc", "price_desc"].includes(body.sort_by)) sort_by = body.sort_by;
     } else {
       return new Response(JSON.stringify({ version: VERSION, error: "Use GET or POST" }), { status: 405, headers });
@@ -90,6 +78,8 @@ serve(async (req) => {
     if (!search_id) {
       return new Response(JSON.stringify({ version: VERSION, error: "search_id required" }), { status: 400, headers });
     }
+
+    if (prepaint) { only_priced = false; live_only = false; strict_live_only = false; }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -104,30 +94,22 @@ serve(async (req) => {
       .from("search_jobs").select("status, flights_done, error")
       .eq("search_id", search_id).maybeSingle();
 
-    // Inner-join resorts so we can tell whether a 'mock' package can
-    // still be upgraded — without resorts.liteapi_hotel_id, top_up has
-    // nothing to call /hotels/rates with, and the package stays mock
-    // forever. The frontend uses this to decide when pricing is done.
     const { data: stats } = await sb
       .from("packages")
       .select("package_id, flight_price, hotel_price, total_price, flight_supplier, hotel_supplier, resort_id, resorts!inner(liteapi_hotel_id)", { count: "exact" })
       .eq("search_id", search_id);
 
-    // Build the set of package_ids in this search that have at least
-    // one row in hotel_rate_offers. Used as the authoritative "has
-    // bookable rooms" gate for both summary counts and the main filter.
     const allPkgIds = (stats ?? []).map((s: any) => s.package_id);
     const pkgIdsWithOffers = new Set<string>();
     if (allPkgIds.length > 0) {
-      // PostgREST's `.in()` chokes if the URL gets too long; chunk to
-      // keep each request under ~200 ids.
-      const CHUNK = 200;
+      const CHUNK = 100;
       for (let i = 0; i < allPkgIds.length; i += CHUNK) {
         const slice = allPkgIds.slice(i, i + CHUNK);
         const { data: offerRows } = await sb
           .from("hotel_rate_offers")
           .select("package_id")
-          .in("package_id", slice);
+          .in("package_id", slice)
+          .limit(100000);
         for (const r of (offerRows ?? [])) pkgIdsWithOffers.add(r.package_id);
       }
     }
@@ -144,16 +126,6 @@ serve(async (req) => {
     ).length ?? 0;
     const mock_packages = total - live_packages;
 
-    // Terminal = no further hotel-side transitions possible:
-    //   - hotel_supplier 'liteapi' (already live)
-    //   - hotel_supplier 'no_fit'  (top_up explicitly skipped — rates
-    //                                returned but none could sleep the party)
-    //   - hotel_supplier 'mock' with NO resorts.liteapi_hotel_id (top_up
-    //                                won't process; package is mock forever)
-    // Flight side: hotels finishing is the bottleneck for our progress
-    // widget — flights converge in ~30s while hotel top-up was the long
-    // tail. Once hotel-side is terminal for every package, the search
-    // can stop polling.
     const hotel_terminal = stats?.filter((p: any) => {
       if (p.hotel_supplier === "liteapi" || p.hotel_supplier === "no_fit") return true;
       if (p.hotel_supplier === "mock" && !p.resorts?.liteapi_hotel_id) return true;
@@ -164,7 +136,7 @@ serve(async (req) => {
 
     let effective_live_only = live_only;
     let is_warming_up = false;
-    if (live_only && !strict_live_only) {
+    if (live_only && !strict_live_only && !prepaint) {
       if (live_packages === 0 && fully_priced > 0) {
         effective_live_only = false;
         is_warming_up = true;
@@ -174,95 +146,29 @@ serve(async (req) => {
     let q = sb
       .from("packages")
       .select(`
-        package_id,
-        search_id,
-        resort_id,
-        dest_airport_iata,
-        depart_date,
-        return_date,
-        currency,
-        total_price,
-        flight_price,
-        hotel_price,
-        flight_supplier,
-        hotel_supplier,
-        flight_priced_at,
-        hotel_priced_at,
-        stops,
-        duration_hours,
-        score_total,
-        highlights,
-        warnings,
-        hotel_booking_url,
-        flight_booking_url,
-        priced_at,
-        has_any_ai,
-        has_any_refundable,
-        hotel_offer_count,
-        hotel_offer_id,
-        flight_offer_count,
-        flight_offer_id,
-        flight_route_id,
-        cheapest_offer_id,
-        cheapest_ai_offer_id,
-        cheapest_ai_total,
-        cheapest_refundable_offer_id,
-        cheapest_refundable_total,
-        max_offer_occupancy,
+        package_id, search_id, resort_id, dest_airport_iata, depart_date, return_date,
+        currency, total_price, flight_price, hotel_price, flight_supplier, hotel_supplier,
+        flight_priced_at, hotel_priced_at, stops, duration_hours, score_total,
+        highlights, warnings, hotel_booking_url, flight_booking_url, priced_at,
+        has_any_ai, has_any_refundable, hotel_offer_count, hotel_offer_id,
+        flight_offer_count, flight_offer_id, flight_route_id,
+        cheapest_offer_id, cheapest_ai_offer_id, cheapest_ai_total,
+        cheapest_refundable_offer_id, cheapest_refundable_total, max_offer_occupancy,
+        flight_price_basis,
         resorts (
-          resort_name,
-          country,
-          area,
-          airport_code,
-          airport_name,
-          avg_user_rating,
-          review_count,
-          cap_star_rating,
-          hotel_brand,
-          hotel_style,
-          audience,
-          amenities_text,
-          special_room_options_text,
-          food_beach_party_text,
-          beds,
-          rooms_count,
-          year_built,
-          year_renovated,
-          floors,
-          airport_transfer_notes,
-          airport_transfer_minutes,
-          beach_quality_score,
-          on_beach,
-          accepts_infants,
-          babysitting_available,
-          creche_min_age,
-          kids_club_available,
-          kids_club_min_age,
-          kids_club_max_age,
-          kids_club_included,
-          kids_club_notes,
-          family_room_max_occupancy,
-          connecting_rooms_available,
-          water_park,
-          swim_up_rooms,
-          data_quality,
-          direct_flight,
-          direct_usd_2026,
-          value_ratio,
-          guaranteed_connecting_rooms,
-          high_rise,
-          google_place_id,
-          photo_refs,
-          photo_attributions,
-          liteapi_hotel_photos,
-          cap_has_kids_club,
-          cap_has_family_room,
-          cap_has_water_park,
-          cap_has_connecting,
-          cap_has_suite,
-          cap_has_villa,
-          cap_max_room_occupancy,
-          cap_facilities
+          resort_name, country, area, airport_code, airport_name,
+          avg_user_rating, review_count, cap_star_rating, hotel_brand, hotel_style,
+          audience, amenities_text, special_room_options_text, food_beach_party_text,
+          beds, rooms_count, year_built, year_renovated, floors,
+          airport_transfer_notes, airport_transfer_minutes, beach_quality_score,
+          on_beach, accepts_infants, babysitting_available, creche_min_age,
+          kids_club_available, kids_club_min_age, kids_club_max_age, kids_club_included,
+          kids_club_notes, family_room_max_occupancy, connecting_rooms_available,
+          water_park, swim_up_rooms, data_quality, direct_flight, direct_usd_2026,
+          value_ratio, guaranteed_connecting_rooms, high_rise, google_place_id,
+          photo_refs, photo_attributions, liteapi_hotel_photos,
+          cap_has_kids_club, cap_has_family_room, cap_has_water_park, cap_has_connecting,
+          cap_has_suite, cap_has_villa, cap_max_room_occupancy, cap_facilities
         )
       `, { count: "exact" })
       .eq("search_id", search_id);
@@ -273,16 +179,37 @@ serve(async (req) => {
     if (effective_live_only) {
       q = q.eq("hotel_supplier", "liteapi").eq("flight_supplier", "liteapi");
     }
-    // Require at least one bookable room offer. Without this filter,
-    // packages with stale cheapest_offer_id (but no offer rows) leak
-    // through and produce price-visible-but-no-rooms ghost cards.
-    if (pkgIdsWithOffers.size > 0) {
-      q = q.in("package_id", Array.from(pkgIdsWithOffers));
-    } else {
-      // No package in this search has any offer rows yet — return empty
-      // results rather than mock/stale rows.
-      q = q.eq("package_id", "00000000-0000-0000-0000-000000000000");
+
+    // v20: bound the package_id IN-clause so the URL stays under HTTP/2's
+    // header-size limit. Three cases:
+    //   (a) prepaint -> no filter at all (existing behavior)
+    //   (b) effective_live_only AND too many IDs -> trust supplier filters,
+    //       skip the IN-gate. Edge case: <1% packages might have
+    //       hotel_supplier='liteapi' without offers (offer-write budget
+    //       overrun in start_pricing); those leak through, but room-offer
+    //       fetch on the trip detail page handles the empty case cleanly.
+    //   (c) otherwise -> apply IN-gate normally.
+    if (!prepaint) {
+      const ids = Array.from(pkgIdsWithOffers);
+      if (ids.length === 0) {
+        if (!effective_live_only) {
+          // No offers yet AND we're not in supplier-filter mode -> match nothing.
+          q = q.eq("package_id", "00000000-0000-0000-0000-000000000000");
+        }
+        // else: supplier filters do the work; let through whatever hotel='liteapi'.
+      } else if (ids.length <= MAX_IN_IDS) {
+        q = q.in("package_id", ids);
+      } else if (!effective_live_only) {
+        // Too many IDs AND no supplier filter to fall back on. Clamp the IN-
+        // gate to the top MAX_IN_IDS by score-order to keep the URL bounded.
+        // This case is rare (only_priced=true with hundreds of mock+live
+        // packages), but we still want a bounded URL.
+        q = q.in("package_id", ids.slice(0, MAX_IN_IDS));
+      }
+      // else: too many IDs but effective_live_only is set -> trust supplier
+      // filters, skip the IN-gate (the v20 fix).
     }
+
     if (sort_by === "price_asc") {
       q = q.order("total_price", { ascending: true, nullsFirst: false });
     } else if (sort_by === "price_desc") {
@@ -295,13 +222,6 @@ serve(async (req) => {
     const { data: packages, error: pErr, count } = await q;
     if (pErr) throw pErr;
 
-    // Attach the resort's family-review signal so the frontend's
-    // compositeScore can give a small ~5% bump (or penalty) when guests
-    // who travelled as a family rated this property differently than
-    // the headline rating. Coverage is partial (only resorts whose
-    // LiteAPI review feed has been pulled and analyzed), so the
-    // frontend treats absent values as "no signal" and folds that
-    // weight back into the family-fit input.
     const resortIds = Array.from(new Set((packages ?? []).map((p: any) => p.resort_id).filter(Boolean)));
     if (resortIds.length > 0) {
       const { data: fams } = await sb
@@ -320,10 +240,6 @@ serve(async (req) => {
       }
     }
 
-    // Attach per-leg flight durations / stops from flight_offers so the
-    // frontend can treat outbound and inbound as separate travel days.
-    // packages.flight_offer_id has no FK to flight_offers so we do this
-    // as a batched secondary fetch instead of a PostgREST nested select.
     const offerIds = (packages ?? [])
       .map((p: any) => p.flight_offer_id)
       .filter((id: any) => typeof id === "string" && id.length > 0);
@@ -347,41 +263,23 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        version: VERSION,
-        search_id,
+        version: VERSION, search_id,
         search: {
-          origin_iata: search.origin_iata,
-          date_start: search.date_start,
-          date_end: search.date_end,
-          adults: search.adults,
-          children: search.children,
-          child_ages: search.child_ages,
+          origin_iata: search.origin_iata, date_start: search.date_start,
+          date_end: search.date_end, adults: search.adults,
+          children: search.children, child_ages: search.child_ages,
           budget_total: search.budget_total,
         },
         job: job ?? null,
         summary: {
-          total_packages: total,
-          with_flight_price: with_flight,
-          with_hotel_price: with_hotel,
-          fully_priced,
-          live_packages,
-          mock_packages,
-          hotel_terminal,           // v15: packages whose hotel state won't change
-          pricing_active_packages,  // v15: total - hotel_terminal
-          pricing_settled,          // v15: true when no further work pending
+          total_packages: total, with_flight_price: with_flight, with_hotel_price: with_hotel,
+          fully_priced, live_packages, mock_packages, hotel_terminal,
+          pricing_active_packages, pricing_settled,
           pricing_complete_pct: total > 0 ? Math.round((fully_priced / total) * 100) : 0,
           live_pct: total > 0 ? Math.round((live_packages / total) * 100) : 0,
         },
-        pagination: {
-          limit, offset,
-          total_returned: packages?.length ?? 0,
-          total_matching: count ?? 0,
-        },
-        sort_by,
-        only_priced,
-        live_only,
-        effective_live_only,
-        is_warming_up,
+        pagination: { limit, offset, total_returned: packages?.length ?? 0, total_matching: count ?? 0 },
+        sort_by, only_priced, live_only, effective_live_only, is_warming_up, prepaint,
         packages: packages ?? [],
       }),
       { status: 200, headers },

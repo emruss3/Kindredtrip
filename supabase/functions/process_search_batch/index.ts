@@ -1,30 +1,29 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v16_service_excluded";
+const VERSION = "process_search_batch_v20_infant_occupancy_and_crib";
 
-// CHANGE v14 -> v15: drop resorts that can never satisfy the user's
-// search constraints BEFORE we seed a package row for them. Avoids
-// pricing 100+ resorts that the frontend would just filter out, and
-// saves the LiteAPI calls those would generate downstream.
-//
-// Filterable upstream (resort-level data exists):
-//   - require_kids_club:    multi-source OR (cap_has_kids_club,
-//                            kids_club_available, amenities_text,
-//                            cap_facilities). Resorts with no cap data
-//                            (cap_fetched_at IS NULL) get benefit of
-//                            the doubt so we don't lose un-enriched
-//                            but otherwise good resorts.
-//   - require_connecting_rooms: existing guaranteed_connecting_rooms.
-//   - require_direct_flight: direct_flight=true (was always done).
-//   - hasInfant: cap_child_allowed must not be false.
-//   - familySize >= 5: room must hold them.
-//
-// NOT filterable upstream (no resort-level signal):
-//   - require_all_inclusive: only LiteAPI rate offers expose AI.
+// v20 (2026-06-23): infant-aware fixes.
+//   - roomFamilySize (adults + kids>=2) drives the coarse occupancy gate so
+//     infants (<2) aren't counted toward room occupancy.
+//   - cap_child_allowed=false is unreliable data (310/597 family resorts have
+//     it, 218 with kids clubs); only drop an infant family's resort when the
+//     no-children signal is corroborated (no kids-club AND not Family).
+// v18: dropped audience='Family' pre-filter; hard-block 'Adults Only' w/ flag.
+// v17: single-resort scope bypass. v16: respect service_excluded.
 
 const HARD_BLOCKED_COUNTRIES: string[] = ["Brazil"];
 const DEFAULT_EXCLUDED_COUNTRIES: string[] = ["Cuba"];
+
+const RESORT_COLS = `
+  resort_id, resort_name, country, area, airport_iata, airport_code,
+  audience,
+  avg_user_rating, cap_star_rating, value_ratio, direct_usd_2026,
+  direct_flight, guaranteed_connecting_rooms, amenities_text,
+  cap_has_kids_club, kids_club_available, cap_facilities,
+  cap_max_room_occupancy, cap_has_connecting, cap_has_suite,
+  cap_has_villa, cap_child_allowed, cap_fetched_at
+`;
 
 function parseChildAges(raw: any): number[] {
   if (raw == null) return [];
@@ -53,6 +52,10 @@ function hasKidsClubSignal(r: any): boolean {
   return false;
 }
 
+function isAdultsOnly(r: any): boolean {
+  return typeof r.audience === "string" && r.audience.trim().toLowerCase() === "adults only";
+}
+
 serve(async (req) => {
   try {
     if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
@@ -64,6 +67,10 @@ serve(async (req) => {
     const included_countries: string[] | null = Array.isArray(body.included_countries) && body.included_countries.length > 0
       ? body.included_countries
       : null;
+    const included_resort_ids: string[] | null = Array.isArray(body.included_resort_ids) && body.included_resort_ids.length > 0
+      ? body.included_resort_ids.filter((x: any) => typeof x === "string" && /^[0-9a-fA-F-]{36}$/.test(x))
+      : null;
+    const scoped = !!(included_resort_ids && included_resort_ids.length);
 
     if (!search_id) {
       return new Response(JSON.stringify({ version: VERSION, error: "search_id required" }), {
@@ -94,51 +101,83 @@ serve(async (req) => {
     const childAges = parseChildAges(search.child_ages);
     const familySize = Number(search.adults ?? 2) + childAges.length;
     const hasInfant = childAges.some((a) => a < 2);
+    // v19: room-occupancy requirement EXCLUDES infants (<2). Most hotels don't
+    // count an under-2 toward room occupancy (lap/crib), so the coarse cap
+    // gate must not drop a resort that can sleep adults + older kids. The
+    // infant is surfaced with an "on lap / in a crib" callout in the
+    // trip-detail room list.
+    const roomFamilySize = Number(search.adults ?? 2) + childAges.filter((a) => a >= 2).length;
 
-    const from = job.next_offset;
-    const to = job.next_offset + job.batch_size - 1;
+    let resorts: any[] = [];
+    let survivors: any[] = [];
+    let droppedKidsClub = 0, droppedInfant = 0, droppedFamilySize = 0, droppedAdultsOnly = 0;
+    let fetched = 0;
+    let done = true;
 
-    let resortsQuery = supabase
-      .from("resorts")
-      .select(`
-        resort_id, resort_name, country, area, airport_iata, airport_code,
-        avg_user_rating, cap_star_rating, value_ratio, direct_usd_2026,
-        direct_flight, guaranteed_connecting_rooms, amenities_text,
-        cap_has_kids_club, kids_club_available, cap_facilities,
-        cap_max_room_occupancy, cap_has_connecting, cap_has_suite,
-        cap_has_villa, cap_child_allowed, cap_fetched_at
-      `)
-      .eq("audience", "Family")
-      .eq("service_excluded", false)
-      .not("airport_code", "is", null);
+    if (scoped) {
+      const { data, error } = await supabase
+        .from("resorts").select(RESORT_COLS)
+        .in("resort_id", included_resort_ids!)
+        .eq("service_excluded", false);
+      if (error) throw error;
+      resorts = data ?? [];
+      survivors = resorts;
+      fetched = resorts.length;
+      done = true;
+    } else {
+      const from = job.next_offset;
+      const to = job.next_offset + job.batch_size - 1;
 
-    if (included_countries) resortsQuery = resortsQuery.in("country", included_countries);
-    const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter((c) => !(included_countries ?? []).includes(c));
-    const allExcluded = Array.from(new Set([...excluded_countries, ...HARD_BLOCKED_COUNTRIES, ...defaultExcluded]));
-    if (allExcluded.length > 0) {
-      const quoted = allExcluded.map((c) => `"${String(c).replace(/"/g, '\\"')}"`).join(",");
-      resortsQuery = resortsQuery.not("country", "in", `(${quoted})`);
-    }
-    if (search.require_direct_flight) resortsQuery = resortsQuery.eq("direct_flight", true);
-    if (search.require_connecting_rooms) resortsQuery = resortsQuery.eq("guaranteed_connecting_rooms", true);
+      let resortsQuery = supabase
+        .from("resorts").select(RESORT_COLS)
+        .eq("service_excluded", false)
+        .not("airport_code", "is", null);
 
-    const { data: resorts, error: rErr } = await resortsQuery.range(from, to);
-    if (rErr) throw rErr;
-
-    let droppedKidsClub = 0, droppedInfant = 0, droppedFamilySize = 0;
-    const survivors = (resorts ?? []).filter((r: any) => {
-      if (search.require_kids_club && !hasKidsClubSignal(r)) { droppedKidsClub++; return false; }
-      if (hasInfant && r.cap_child_allowed === false) { droppedInfant++; return false; }
-      if (familySize >= 5) {
-        const hasCap = r.cap_fetched_at != null;
-        if (hasCap) {
-          const occOk = (r.cap_max_room_occupancy ?? 0) >= familySize;
-          const altOk = r.cap_has_connecting === true || r.cap_has_suite === true || r.cap_has_villa === true;
-          if (!occOk && !altOk) { droppedFamilySize++; return false; }
-        }
+      if (included_countries) resortsQuery = resortsQuery.in("country", included_countries);
+      const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter((c) => !(included_countries ?? []).includes(c));
+      const allExcluded = Array.from(new Set([...excluded_countries, ...HARD_BLOCKED_COUNTRIES, ...defaultExcluded]));
+      if (allExcluded.length > 0) {
+        const quoted = allExcluded.map((c) => `"${String(c).replace(/"/g, '\\"')}"`).join(",");
+        resortsQuery = resortsQuery.not("country", "in", `(${quoted})`);
       }
-      return true;
-    });
+      if (search.require_direct_flight) resortsQuery = resortsQuery.eq("direct_flight", true);
+      if (search.require_connecting_rooms) resortsQuery = resortsQuery.eq("guaranteed_connecting_rooms", true);
+
+      const { data, error: rErr } = await resortsQuery.range(from, to);
+      if (rErr) throw rErr;
+      resorts = data ?? [];
+      fetched = resorts.length;
+      done = fetched < job.batch_size;
+
+      survivors = resorts.filter((r: any) => {
+        if (isAdultsOnly(r)) {
+          console.error(
+            `[process_search_batch v20] DATA FLAG: adults-only resort surfaced in catalog scan: ` +
+            `${r.resort_id} "${r.resort_name}" (${r.country}) — audience=${r.audience}`,
+          );
+          droppedAdultsOnly++;
+          return false;
+        }
+        if (search.require_kids_club && !hasKidsClubSignal(r)) { droppedKidsClub++; return false; }
+        // v20: cap_child_allowed=false is unreliable (310/597 family resorts
+        // carry it, 218 with kids clubs, 0 with accepts_infants). Only drop an
+        // infant family's resort when the no-children signal is CORROBORATED:
+        // no kids-club signal AND not family-audience.
+        if (hasInfant && r.cap_child_allowed === false
+            && !hasKidsClubSignal(r) && r.audience !== "Family") {
+          droppedInfant++; return false;
+        }
+        if (roomFamilySize >= 5) {
+          const hasCap = r.cap_fetched_at != null;
+          if (hasCap) {
+            const occOk = (r.cap_max_room_occupancy ?? 0) >= roomFamilySize;
+            const altOk = r.cap_has_connecting === true || r.cap_has_suite === true || r.cap_has_villa === true;
+            if (!occOk && !altOk) { droppedFamilySize++; return false; }
+          }
+        }
+        return true;
+      });
+    }
 
     const scored = survivors.map((r: any) => {
       const rating = Number(r.avg_user_rating ?? 0);
@@ -173,9 +212,7 @@ serve(async (req) => {
       if (pErr) throw pErr;
     }
 
-    const fetched = resorts?.length ?? 0;
-    const newOffset = job.next_offset + fetched;
-    const done = fetched < job.batch_size;
+    const newOffset = scoped ? job.next_offset : job.next_offset + fetched;
 
     await supabase.from("search_jobs").update({
       next_offset: newOffset, status: done ? "hotel_done" : "running",
@@ -186,7 +223,7 @@ serve(async (req) => {
       ? `${supabaseUrl}/functions/v1/process_search_batch`
       : `${supabaseUrl}/functions/v1/start_pricing`;
     const nextBody = !done
-      ? { search_id, excluded_countries, included_countries }
+      ? { search_id, excluded_countries, included_countries, included_resort_ids }
       : { search_id };
     try {
       const p = fetch(nextUrl, {
@@ -209,7 +246,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      version: VERSION, search_id,
+      version: VERSION, search_id, scoped,
       status: done ? "hotel_done" : "running",
       resorts_fetched: fetched,
       resorts_kept: survivors.length,
@@ -217,10 +254,11 @@ serve(async (req) => {
         kids_club: droppedKidsClub,
         infant: droppedInfant,
         family_size: droppedFamilySize,
+        adults_only: droppedAdultsOnly,
       },
       packages_written: packagesPayload.length,
       next_offset: newOffset,
-      excluded_countries_applied: allExcluded,
+      included_resort_ids_applied: included_resort_ids,
       included_countries_applied: included_countries,
       next_step: done ? "start_pricing" : "process_search_batch",
     }), { headers: { "content-type": "application/json" }, status: 200 });
