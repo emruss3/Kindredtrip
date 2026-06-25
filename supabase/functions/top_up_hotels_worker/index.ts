@@ -18,7 +18,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v9_retry_misses";
+const VERSION = "top_up_hotels_worker_v10_pending_sentinel";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -234,7 +234,7 @@ serve(async (req) => {
         resorts ( liteapi_hotel_id )
       `)
       .eq("search_id", search_id)
-      .eq("hotel_supplier", "mock")
+      .eq("hotel_supplier", "pending")
       .limit(max_pkgs);
     if (pErr) throw pErr;
 
@@ -313,12 +313,12 @@ serve(async (req) => {
       hotel_priced_at: nowIso,
     });
     // v9: a miss (no data / no rooms returned) is RETRIED on the next chain
-    // cycle by leaving the package as 'mock' (no update written). Only on the
+    // cycle by leaving the package as 'pending' (no update written). Only on the
     // final cycle do we convert it to no_fit so the search can terminate.
     let leftForRetry = 0;
     const handleMiss = (p: any) => {
       if (isFinalCycle) markNoFit(p);
-      else leftForRetry++; // leave as mock -> re-queried next cycle
+      else leftForRetry++; // leave as pending -> re-queried next cycle
     };
 
     for (const [hotelId, pkgsForHotel] of idToPackages.entries()) {
@@ -453,7 +453,9 @@ serve(async (req) => {
         await Promise.all(slice.map(u => {
           const { package_id, ...vals } = u;
           const fp = flightByPkg.get(package_id) ?? 0;
-          const total = fp + Number(vals.hotel_price);
+          const hp = Number(vals.hotel_price);
+          // No-mock: total only when a live flight price exists too.
+          const total = fp > 0 ? fp + hp : null;
           return sb.from("packages").update({ ...vals, total_price: total }).eq("package_id", package_id);
         }));
       }
@@ -473,14 +475,14 @@ serve(async (req) => {
     const { count: remainingCount } = await sb.from("packages")
       .select("package_id", { count: "exact", head: true })
       .eq("search_id", search_id)
-      .eq("hotel_supplier", "mock");
+      .eq("hotel_supplier", "pending");
     const remainingHasIds = (remainingCount ?? 0) > 0 && depth + 1 < MAX_CHAIN_DEPTH;
     let chained = false;
     if (remainingHasIds) {
       const { data: check } = await sb.from("packages")
         .select("package_id, resorts!inner(liteapi_hotel_id)")
         .eq("search_id", search_id)
-        .eq("hotel_supplier", "mock")
+        .eq("hotel_supplier", "pending")
         .not("resorts.liteapi_hotel_id", "is", null)
         .limit(1);
       if ((check ?? []).length > 0) {
@@ -513,7 +515,7 @@ serve(async (req) => {
       offers_persisted: offersPersisted,
       offer_write_truncated: offerWriteTruncated,
       chained,
-      remaining_mock: remainingCount,
+      remaining_pending: remainingCount,
     }), { status: 200, headers });
 
   } catch (e) {

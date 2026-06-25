@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v20_avoid_huge_in_clause";
+const VERSION = "get_packages_v21_pending_sentinel";
 
 // v20 (2026-06-23): v19 fixed the live_packages count by uncapping the
 // hotel_rate_offers fetch. But when the live set is large (~300+ packages),
@@ -127,8 +127,10 @@ serve(async (req) => {
     const mock_packages = total - live_packages;
 
     const hotel_terminal = stats?.filter((p: any) => {
+      // Terminal = will never change: priced live, or can never price live.
+      // 'pending' (LiteAPI hasn't answered yet, still mapped) is NOT terminal.
       if (p.hotel_supplier === "liteapi" || p.hotel_supplier === "no_fit") return true;
-      if (p.hotel_supplier === "mock" && !p.resorts?.liteapi_hotel_id) return true;
+      if (p.hotel_supplier !== "pending" && !p.resorts?.liteapi_hotel_id) return true;
       return false;
     }).length ?? 0;
     const pricing_active_packages = total - hotel_terminal;

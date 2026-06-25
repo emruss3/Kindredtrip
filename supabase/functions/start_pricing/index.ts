@@ -1,25 +1,26 @@
 // start_pricing
 //
-// v18 (2026-06-23): removed the infant 'banned_children' hard-drop
-// (cap_child_allowed=false). That field is unreliable data (310/597 family
-// resorts carry it, 218 with kids clubs). The child-policy gate now lives
-// ONCE in process_search_batch v20 (corroborated: no kids-club AND not
-// Family); start_pricing must not re-drop what passed, or those packages
-// would exist but never get priced.
+// v19 (2026-06-25): NO-MOCK PRICING. Removed all fabricated price
+// generation (mockHotelTotal / mock flight tiers). A package is now either
+// priced from a real LiteAPI rate ('liteapi') or left UNPRICED — never
+// assigned an invented number. Unpriced states:
+//   hotel_supplier='pending'  LiteAPI hasn't returned a rate yet (retryable;
+//                             top_up_hotels_worker re-queries it).
+//   hotel_supplier='no_fit'   LiteAPI returned rooms but none sleep the party.
+//   flight_supplier='pending' no live flight yet (price_flights_worker fills).
+// hotel_price / flight_price are NULL in every non-live state, and
+// total_price is set ONLY when both legs are live. The frontend's no-mock
+// contract already renders pending rows as a "finding live prices" skeleton,
+// so dropping fabricated numbers removes misleading estimates without
+// degrading the progressive-pricing UX.
 //
-// v17 (2026-06-23): room-occupancy requirement EXCLUDES infants (<2).
-// Most hotels don't count an under-2 toward room occupancy (lap/crib),
-// so a 2A+2K+1-infant family fits a room that sleeps 4. We still send the
-// full child ages to LiteAPI (each hotel applies its own infant policy);
-// roomPartySize (adults + kids>=2) is what our fit-filter and pre-filter
-// use. The trip-detail room list adds an '⚠ infant needs a crib — verify
-// with hotel' callout on any room that only fits because the infant isn't
-// counted. (familySize, incl. infants, is kept for mock price scaling.)
+// v18: removed the infant 'banned_children' hard-drop (cap_child_allowed).
+// v17: room-occupancy requirement EXCLUDES infants (<2).
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v18_infant_occupancy";
+const VERSION = "start_pricing_v19_no_mock_pricing";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -71,25 +72,8 @@ function parseChildAges(raw: any): number[] {
   return [];
 }
 
-function seededRand(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return ((h >>> 0) % 100000) / 100000;
-}
-
 function nightsBetween(a: string, b: string): number {
   return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
-}
-
-function mockHotelNightlyTier(rating: number | null): number {
-  if (rating == null) return 320;
-  if (rating >= 95) return 720;
-  if (rating >= 92) return 540;
-  if (rating >= 88) return 425;
-  if (rating >= 84) return 340;
-  if (rating >= 80) return 270;
-  if (rating >= 75) return 220;
-  return 180;
 }
 
 type ExtractedRateOffer = {
@@ -389,19 +373,11 @@ serve(async (req) => {
       if (hit429) { hotelRateLimitHit = true; break; }
     }
 
-    const { data: airportTiers } = await sb.from("mock_flight_pricing").select("airport_code, base_price_min, base_price_max, typical_stops, typical_duration_hours");
-    const airportTier = new Map<string, any>();
-    for (const r of airportTiers ?? []) airportTier.set(r.airport_code, r);
-    const { data: countryMods } = await sb.from("mock_hotel_pricing_country").select("country, price_multiplier");
-    const countryMult = new Map<string, number>();
-    for (const r of countryMods ?? []) countryMult.set(r.country, Number(r.price_multiplier));
-
-    const fareEq = adults + (childAges.length * 0.75);
     const nowIso = new Date().toISOString();
     const packageUpdates: any[] = [];
     const rateOfferRows: any[] = [];
-    let hotelLive = 0, hotelMock = 0, hotelFallback = 0;
-    let flightLive = 0, flightMockPlaceholder = 0;
+    let hotelLive = 0, hotelPending = 0, hotelNoFit = 0;
+    let flightLive = 0, flightPending = 0;
 
     for (const p of pkgs) {
       const r = (p as any).resorts;
@@ -409,25 +385,24 @@ serve(async (req) => {
       const route = dest ? routeByDest.get(dest) : null;
       if (!route) continue;
 
-      let flightTotal: number, flightSupplier: string, flightOfferId: string | null = null;
-      let stops = 1, durationHours: number | null = 7;
+      // FLIGHT: live LiteAPI fare or unpriced ('pending'). Never fabricated.
+      let flightTotal: number | null = null;
+      let flightSupplier: string;
+      let flightOfferId: string | null = null;
+      let stops: number | null = null;
+      let durationHours: number | null = null;
       if (route.status === "done" && route.cheapest_total != null) {
         flightTotal = Math.round(Number(route.cheapest_total));
         flightSupplier = "liteapi";
         flightOfferId = route.cheapest_offer_id ?? null;
         flightLive++;
       } else {
-        const tier = airportTier.get(dest);
-        const rnd = seededRand(`flt:${search.origin_iata}:${dest}:${search.date_start}`);
-        let perPerson: number;
-        if (!tier) perPerson = Math.round(640 + rnd * 220);
-        else { perPerson = Math.round(Number(tier.base_price_min) + rnd * (Number(tier.base_price_max) - Number(tier.base_price_min))); stops = tier.typical_stops ?? 1; durationHours = tier.typical_duration_hours ?? null; }
-        flightTotal = Math.round(perPerson * fareEq);
-        flightSupplier = "mock";
-        flightMockPlaceholder++;
+        flightSupplier = "pending";
+        flightPending++;
       }
 
-      let hotelTotal: number;
+      // HOTEL: live LiteAPI rate, or unpriced ('pending'/'no_fit'). Never fabricated.
+      let hotelTotal: number | null = null;
       let hotelSupplier: string;
       let chosenOfferId: string | null = null;
       let offerCount = 0;
@@ -448,9 +423,9 @@ serve(async (req) => {
           const fitsOffers = offers.filter(fitsParty);
 
           if (fitsOffers.length === 0) {
-            hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
+            // Rooms returned but none sleep the party — terminal, unpriced.
             hotelSupplier = "no_fit";
-            hotelFallback++;
+            hotelNoFit++;
           } else {
             hotelSupplier = "liteapi";
             hotelLive++;
@@ -522,19 +497,25 @@ serve(async (req) => {
             }
           }
         } else {
-          hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
-          hotelSupplier = "mock";
-          hotelFallback++;
+          // LiteAPI returned the hotel but with no rooms this cycle — retryable.
+          hotelSupplier = "pending";
+          hotelPending++;
         }
+      } else if (r?.liteapi_hotel_id) {
+        // Mapped hotel but LiteAPI omitted it this cycle — retryable by top_up.
+        hotelSupplier = "pending";
+        hotelPending++;
       } else {
-        hotelTotal = mockHotelTotal(r, nights, familySize, countryMult, p.resort_id, search.date_start);
-        hotelSupplier = "mock";
-        hotelMock++;
+        // No LiteAPI mapping at all — can never be priced live. Terminal.
+        hotelSupplier = "no_fit";
+        hotelNoFit++;
       }
 
+      const bothLive = flightTotal != null && hotelTotal != null;
       packageUpdates.push({
         package_id: p.package_id, flight_route_id: route.route_id, flight_offer_id: flightOfferId,
-        flight_price: flightTotal, hotel_price: hotelTotal, total_price: flightTotal + hotelTotal,
+        flight_price: flightTotal, hotel_price: hotelTotal,
+        total_price: bothLive ? (flightTotal as number) + (hotelTotal as number) : null,
         stops, duration_hours: durationHours, flight_supplier: flightSupplier, hotel_supplier: hotelSupplier,
         flight_priced_at: nowIso, hotel_priced_at: nowIso, priced_at: nowIso,
         hotel_offer_id: chosenOfferId, hotel_offer_count: offerCount, cheapest_offer_id: chosenOfferId,
@@ -563,7 +544,7 @@ serve(async (req) => {
           const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
           if (!oe) rateOfferRowsPersisted += slice.length;
         }
-      } catch (e) { console.error("[start_pricing v18] rate offer persistence error:", e); }
+      } catch (e) { console.error("[start_pricing v19] rate offer persistence error:", e); }
     }
 
     const CHUNK = 50;
@@ -589,8 +570,9 @@ serve(async (req) => {
       await sb.from("search_jobs").update({ flights_done: true, updated_at: nowIso }).eq("search_id", search_id);
     }
 
+    // Re-query the hotels LiteAPI omitted/under-filled this cycle ('pending').
     let topUpDispatched = false;
-    if (hotelMock > 0) {
+    if (hotelPending > 0) {
       const tp = fetch(`${supabaseUrl}/functions/v1/top_up_hotels_worker`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
@@ -611,26 +593,15 @@ serve(async (req) => {
         ids_queried: liteapiHotelIds.length, ids_fetched: hotelDataById.size,
         batches_succeeded: hotelBatchesSucceeded, batches_attempted: hotelBatchesAttempted,
         wall_time_budget_hit: wallTimeBudgetHit, rate_limit_hit: hotelRateLimitHit, last_error: hotelLastError,
-        live_priced: hotelLive, live_fallback_to_mock: hotelFallback, mock_priced: hotelMock,
+        live_priced: hotelLive, pending_retry: hotelPending, no_fit: hotelNoFit,
         rate_offers_extracted: rateOfferRowsCount, rate_offers_persisted: rateOfferRowsPersisted, rate_offers_write_truncated: rateOfferWriteTruncated,
       },
-      flights: { unique_routes: uniqueDestinations.length, cache_hits: cachedByDest.size, pending_routes: pendingRouteCount, live_priced_immediately: flightLive, mock_placeholder: flightMockPlaceholder, worker_dispatched: workerDispatched },
+      flights: { unique_routes: uniqueDestinations.length, cache_hits: cachedByDest.size, pending_routes: pendingRouteCount, live_priced_immediately: flightLive, pending: flightPending, worker_dispatched: workerDispatched },
       top_up_dispatched: topUpDispatched,
     }, null, 2), { status: 200, headers });
 
   } catch (e) {
-    console.error("start_pricing v18 error:", e);
+    console.error("start_pricing v19 error:", e);
     return new Response(JSON.stringify({ version: VERSION, error: String((e as any)?.message ?? e) }, null, 2), { status: 500, headers });
   }
 });
-
-function mockHotelTotal(r: any, nights: number, familySize: number, countryMult: Map<string, number>, resortId: string, dateStart: string): number {
-  const baseNight = mockHotelNightlyTier(r?.avg_user_rating);
-  const countryMul = countryMult.get(r?.country ?? "") ?? 1.0;
-  let occMul = 1.0;
-  if (familySize >= 7) occMul = 1.55;
-  else if (familySize >= 5) occMul = 1.30;
-  else if (familySize >= 3) occMul = 1.05;
-  const variation = 0.85 + seededRand(`htl:${resortId}:${dateStart}`) * 0.30;
-  return Math.round(baseNight * countryMul * nights * occMul * variation);
-}
