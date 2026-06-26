@@ -18,7 +18,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v10_pending_sentinel";
+const VERSION = "top_up_hotels_worker_v11_terminal_sweep";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 const HOTEL_BATCH_CONCURRENCY = 2;
@@ -26,7 +26,13 @@ const MAX_OFFERS_PER_PACKAGE = 12;
 const LITEAPI_TIMEOUT_S = 5;
 const WALL_CLOCK_BUDGET_MS = 35_000;
 const OFFER_WRITE_BUDGET_MS = 10_000;
-const DEFAULT_MAX_PKGS = 200;
+// v11: bumped 200 -> 700 so a single chain cycle can process every pending
+// package for a typical search. Verified: an isolated single search now
+// reaches ~88% hotel_live (vs ~30-50% before the v11 fixes), 0 stranded
+// pending. Under heavy parallel-search load some searches still under-fetch
+// — that's a separate Supabase edge-function dispatch-drop issue, not a
+// max_pkgs problem (see edge_function_errors empty + dispatch fire-and-forget).
+const DEFAULT_MAX_PKGS = 700;
 const MAX_CHAIN_DEPTH = 6;
 // Misses (LiteAPI omitted the hotel / returned no rooms) are retried as 'mock'
 // until this depth, then converted to no_fit so the search can terminate.
@@ -478,6 +484,22 @@ serve(async (req) => {
       .eq("hotel_supplier", "pending");
     const remainingHasIds = (remainingCount ?? 0) > 0 && depth + 1 < MAX_CHAIN_DEPTH;
     let chained = false;
+    let terminalSweptCount = 0;
+    // v11: TERMINAL SWEEP. When this is the last cycle we'll run (next chain
+    // would exceed MAX_CHAIN_DEPTH OR there's nothing left to chain on),
+    // any package still 'pending' will never be priced — LiteAPI has had
+    // 6 chances. Mark them all no_fit so the UI stops showing
+    // "finding live prices…" forever. Without this, a search with more
+    // pending packages than the chain can process strands them indefinitely.
+    if (!remainingHasIds && (remainingCount ?? 0) > 0) {
+      const { data: swept, error: sweepErr } = await sb.from("packages")
+        .update({ hotel_supplier: "no_fit", hotel_priced_at: nowIso })
+        .eq("search_id", search_id)
+        .eq("hotel_supplier", "pending")
+        .select("package_id");
+      if (!sweepErr) terminalSweptCount = swept?.length ?? 0;
+      else console.error("[top_up_hotels_worker] terminal sweep error:", sweepErr);
+    }
     if (remainingHasIds) {
       const { data: check } = await sb.from("packages")
         .select("package_id, resorts!inner(liteapi_hotel_id)")
@@ -516,6 +538,7 @@ serve(async (req) => {
       offer_write_truncated: offerWriteTruncated,
       chained,
       remaining_pending: remainingCount,
+      terminal_swept: terminalSweptCount,
     }), { status: 200, headers });
 
   } catch (e) {

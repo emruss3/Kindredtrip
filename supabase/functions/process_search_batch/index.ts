@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v20_infant_occupancy_and_crib";
+const VERSION = "process_search_batch_v21_mapped_only";
 
 // v20 (2026-06-23): infant-aware fixes.
 //   - roomFamilySize (adults + kids>=2) drives the coarse occupancy gate so
@@ -131,7 +131,13 @@ serve(async (req) => {
       let resortsQuery = supabase
         .from("resorts").select(RESORT_COLS)
         .eq("service_excluded", false)
-        .not("airport_code", "is", null);
+        .not("airport_code", "is", null)
+        // v21: only resorts with a LiteAPI mapping. Unmapped resorts can
+        // never be live-priced; including them creates packages that the
+        // user sees as "finding live prices…" forever (or as no_fit gaps).
+        // Filter at search-time so every package generated has a real shot
+        // at going live.
+        .not("liteapi_hotel_id", "is", null);
 
       if (included_countries) resortsQuery = resortsQuery.in("country", included_countries);
       const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter((c) => !(included_countries ?? []).includes(c));
