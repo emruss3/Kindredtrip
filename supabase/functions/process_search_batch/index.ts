@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v21_mapped_only";
+const VERSION = "process_search_batch_v22_country_interleave";
 
 // v20 (2026-06-23): infant-aware fixes.
 //   - roomFamilySize (adults + kids>=2) drives the coarse occupancy gate so
@@ -199,7 +199,28 @@ serve(async (req) => {
     });
     scored.sort((a: any, b: any) => (b.score_total ?? 0) - (a.score_total ?? 0));
 
-    const packagesPayload = scored.map((r: any) => ({
+    // v22: ROUND-ROBIN INTERLEAVE BY COUNTRY for pricing order. start_pricing
+    // and top_up process packages in insertion (physical-row) order, which
+    // used to mean strict score-descending — so the first cycles priced only
+    // the highest-scored resorts (big Mexico/DR all-inclusives) and smaller
+    // countries trickled in over several minutes. By writing packages
+    // round-robin across countries (each bucket still in score order), the
+    // first LiteAPI batch spans every country, so the country facet populates
+    // in seconds. Display ranking is unaffected — get_packages orders by
+    // score_total.
+    const byCountry = new Map<string, any[]>();
+    for (const r of scored) {
+      const k = r.country ?? "_";
+      if (!byCountry.has(k)) byCountry.set(k, []);
+      byCountry.get(k)!.push(r);
+    }
+    const buckets = Array.from(byCountry.values());
+    const interleaved: any[] = [];
+    for (let i = 0; interleaved.length < scored.length; i++) {
+      for (const b of buckets) if (i < b.length) interleaved.push(b[i]);
+    }
+
+    const packagesPayload = interleaved.map((r: any) => ({
       search_id, resort_id: r.resort_id,
       dest_airport_iata: (r.airport_code ?? r.airport_iata) ?? null,
       depart_date: search.date_start, return_date: search.date_end,
