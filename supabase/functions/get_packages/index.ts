@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "get_packages_v21_pending_sentinel";
+const VERSION = "get_packages_v22_booking_status";
 
 // v20 (2026-06-23): v19 fixed the live_packages count by uncapping the
 // hotel_rate_offers fetch. But when the live set is large (~300+ packages),
@@ -170,7 +170,8 @@ serve(async (req) => {
           value_ratio, guaranteed_connecting_rooms, high_rise, google_place_id,
           photo_refs, photo_attributions, liteapi_hotel_photos,
           cap_has_kids_club, cap_has_family_room, cap_has_water_park, cap_has_connecting,
-          cap_has_suite, cap_has_villa, cap_max_room_occupancy, cap_facilities
+          cap_has_suite, cap_has_villa, cap_max_room_occupancy, cap_facilities,
+          booking_status, booking_property_url
         )
       `, { count: "exact" })
       .eq("search_id", search_id);

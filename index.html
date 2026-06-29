@@ -4882,7 +4882,7 @@
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
             <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}${lapInfantCount() > 0 ? ` <span class="rail-lap-note">(incl. ${lapInfantCount()} lap ${lapInfantCount() === 1 ? "infant" : "infants"})</span>` : ""}</b></div>
           </div>
-          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book hotel on Booking.com →</button>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">${pkg.resorts?.booking_status === "ok" ? "Book hotel on Booking.com →" : "Search on Booking.com →"}</button>
           <button class="btn btn-secondary trip-rail-cta-flight" onclick="bookFlight('${pkg.package_id}')">Book flights on Aviasales →</button>
           <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees. Hotel and flights are booked separately.</div>
           <div class="trip-rail-actions">
