@@ -1,7 +1,45 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "generate_booking_redirect_v5_flight_deeplink";
+const VERSION = "generate_booking_redirect_v6_hotel_page_deeplink";
+
+// Country name -> ISO-3166-1 alpha-2 for Booking hotel-page deep links
+// (booking.com/hotel/<cc>/<slug>.html). Covers the catalog's countries plus
+// common name variants seen in the resorts table.
+const COUNTRY_CC: Record<string, string> = {
+  "mexico": "mx", "dominican republic": "do", "jamaica": "jm", "saint lucia": "lc",
+  "st lucia": "lc", "barbados": "bb", "costa rica": "cr", "antigua and barbuda": "ag",
+  "antigua": "ag", "aruba": "aw", "colombia": "co", "turks and caicos": "tc",
+  "bahamas": "bs", "the bahamas": "bs", "curacao": "cw", "curaçao": "cw", "belize": "bz",
+  "grenada": "gd", "honduras": "hn", "panama": "pa", "sint maarten": "sx",
+  "saint martin": "mf", "st martin": "mf", "british virgin islands": "vg",
+  "guatemala": "gt", "ecuador": "ec", "peru": "pe", "us virgin islands": "vi",
+  "u.s. virgin islands": "vi", "saint thomas": "vi", "st thomas": "vi",
+  "saint vincent and the grenadines": "vc", "saint vincent": "vc", "bermuda": "bm",
+  "cayman islands": "ky", "grand cayman": "ky", "el salvador": "sv", "bonaire": "bq",
+  "haiti": "ht", "martinique": "mq", "dominica": "dm", "nicaragua": "ni",
+  "saint kitts and nevis": "kn", "guadeloupe": "gp", "trinidad and tobago": "tt",
+};
+
+function countryCode(country: string | null): string | null {
+  if (!country) return null;
+  return COUNTRY_CC[country.trim().toLowerCase()] ?? null;
+}
+
+// Booking hotel-page slug from the hotel name. Booking slugs are a
+// deterministic slugify of the official name (accents folded, & -> "and",
+// "all inclusive" dropped, non-alphanumerics -> "-"). Verified against live
+// Booking URLs, e.g. "Sensira Resort & Spa Riviera Maya" ->
+// "sensira-resort-and-spa-riviera-maya".
+function bookingSlug(rawName: string): string {
+  return cleanResortName(rawName)
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\ball[\s-]?inclusive\b/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 // Aviasales (Travelpayouts) flight-search deep link. We don't store a
 // per-fare booking URL — flight_booking_url is null and LiteAPI flight
@@ -45,6 +83,35 @@ function cleanResortName(raw: string): string {
   return s;
 }
 
+function wrapTp(targetUrl: string, marker: string): string {
+  const tpUrl = new URL("https://tp.media/r");
+  tpUrl.searchParams.set("marker", marker);
+  tpUrl.searchParams.set("p", "4115");
+  tpUrl.searchParams.set("u", targetUrl);
+  return tpUrl.toString();
+}
+
+// Fallback when we can't resolve the country code to a Booking hotel-page
+// slug: a destination results LIST (never 404s, but availability can lag).
+function buildSearchResultsUrl(opts: {
+  resortName: string; city: string | null; country: string | null;
+  dateStart: string; dateEnd: string; adults: number; childAges: number[]; marker: string;
+}): string {
+  const queryParts = [cleanResortName(opts.resortName)];
+  if (opts.city) queryParts.push(opts.city);
+  if (opts.country) queryParts.push(opts.country);
+  const params = new URLSearchParams();
+  params.set("ss", queryParts.filter(Boolean).join(", "));
+  params.set("checkin", opts.dateStart);
+  params.set("checkout", opts.dateEnd);
+  params.set("group_adults", String(opts.adults));
+  params.set("group_children", String(opts.childAges.length));
+  for (const a of opts.childAges) params.append("age", String(a));
+  params.set("no_rooms", "1");
+  params.set("selected_currency", "USD");
+  return wrapTp(`https://www.booking.com/searchresults.html?${params.toString()}`, opts.marker);
+}
+
 function buildBookingHotelUrl(opts: {
   resortName: string;
   city: string | null;
@@ -54,42 +121,30 @@ function buildBookingHotelUrl(opts: {
   adults: number;
   childAges: number[];
   marker: string;
-}) {
-  const cleanName = cleanResortName(opts.resortName);
-  // v3: land on a Booking RESULTS LIST for the destination + dates, NOT a
-  // forced single-hotel page. v2's ssne/ssne_untouched jumped straight to
-  // the exact hotel page, which dead-ends on "not available for that stay"
-  // whenever that hotel/date combo isn't in Booking's inventory (common:
-  // we price via LiteAPI, a different source). A results list shows the
-  // hotel when Booking has it, and real available alternatives for those
-  // dates when it doesn't — never a dead end.
-  const queryParts = [cleanName];
-  if (opts.city) queryParts.push(opts.city);
-  if (opts.country) queryParts.push(opts.country);
-  const ss = queryParts.filter(Boolean).join(", ");
-
-  const params = new URLSearchParams();
-  params.set("ss", ss);
-  params.set("checkin", opts.dateStart);
-  params.set("checkout", opts.dateEnd);
-  params.set("group_adults", String(opts.adults));
-  // Deliberately DO NOT send group_children / age / no_rooms. Confirmed
-  // behavior: with the strict child+single-room occupancy filter, Booking's
-  // results page false-negatives ("no availability for your dates") for any
-  // hotel whose standard room sleeps fewer than the full party — even though
-  // the hotel page shows larger/sofa-bed rooms with those exact dates
-  // available. Landing on dates + adults gets the user to the right hotel
-  // for the right dates; they set exact occupancy on the hotel page, where
-  // availability resolves correctly. (childAges still drives flight pricing
-  // and our own hotel pricing elsewhere — this only affects the Booking URL.)
-  params.set("selected_currency", "USD");
-
-  const targetUrl = `https://www.booking.com/searchresults.html?${params.toString()}`;
-  const tpUrl = new URL("https://tp.media/r");
-  tpUrl.searchParams.set("marker", opts.marker);
-  tpUrl.searchParams.set("p", "4115");
-  tpUrl.searchParams.set("u", targetUrl);
-  return tpUrl.toString();
+}): string {
+  // v6: deep-link to the Booking HOTEL PAGE, not the searchresults flat list.
+  // Evidence (production): the flat list returns "Unavailable on our site for
+  // your selected dates" for hotels whose live availability the aggregate
+  // search engine hasn't cached, while the hotel page does a live query and
+  // shows the same dates as available. The hotel-page slug is a deterministic
+  // slugify of the name, so we can build it directly. Full occupancy
+  // (adults + children + ages) is sent so families see the correct rooms and
+  // any "free child stay" pricing. Falls back to a results list only when the
+  // country code can't be resolved (so we never produce a worse link than v5).
+  const cc = countryCode(opts.country);
+  const slug = bookingSlug(opts.resortName);
+  if (!cc || !slug) {
+    return buildSearchResultsUrl(opts);
+  }
+  const url = new URL(`https://www.booking.com/hotel/${cc}/${slug}.html`);
+  url.searchParams.set("checkin", opts.dateStart);
+  url.searchParams.set("checkout", opts.dateEnd);
+  url.searchParams.set("group_adults", String(opts.adults));
+  url.searchParams.set("group_children", String(opts.childAges.length));
+  for (const a of opts.childAges) url.searchParams.append("age", String(a));
+  url.searchParams.set("no_rooms", "1");
+  url.searchParams.set("selected_currency", "USD");
+  return wrapTp(url.toString(), opts.marker);
 }
 
 serve(async (req) => {
