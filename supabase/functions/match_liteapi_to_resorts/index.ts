@@ -34,7 +34,7 @@
 //                             //  i.e. anything not 'matched')
 // }
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // v4 adds three fixes on top of v3 that recover obvious matches v3 parked
@@ -61,7 +61,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //      That keeps same-city/different-brand pairs (Sunscape Puerto
 //      Vallarta vs Marriott Puerto Vallarta) rejected while letting the
 //      compound-word and cruft cases through.
-const VERSION = "match_liteapi_to_resorts_v4_dice_google_name";
+const VERSION = "match_liteapi_to_resorts_v5_name_guard";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const PER_REQUEST_DELAY_MS = 250;
 const WALL_CLOCK_BUDGET_MS = 90_000;
@@ -184,7 +184,7 @@ function chainKey(s: string | null | undefined): string {
   return tokens.slice(0, 3).join(" ");
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
   if (req.method !== "POST")
@@ -247,6 +247,8 @@ serve(async (req) => {
       relinked_via_chain: 0,
       low_confidence: 0,
       no_candidate: 0,
+      name_guard_rejected: 0,
+      name_guard_examples: [] as any[],
       wall_time_budget_hit: false,
       rate_limit_hit: false,
       last_error: undefined as undefined | string,
@@ -477,6 +479,41 @@ serve(async (req) => {
               if (j > jac) jac = j;
             }
             if (jac > bestSim) { bestSim = jac; runnerUp = { cand, sim: jac }; }
+          }
+        }
+
+        // v5 SAFETY GATE: guard against a match that only clears the bar via
+        // google_place_resolved_name pointing at a DIFFERENT co-located hotel.
+        // Require the resort's OWN name (resort_name) to share >=50% of its
+        // distinctive tokens (len>=3, stopwords already dropped by tokenize)
+        // with the accepted candidate. Kills wrong-hotel maps like
+        // "Real Playa del Carmen" -> "Hacienda Real del Caribe",
+        // "JW Marriott Costa Mujeres" -> "JW Marriott Cancun",
+        // "Hotel Riu Jalisco" -> "Riu Flamingos" — the co-located-but-different
+        // failure mode that caused earlier mis-bookings.
+        if (best) {
+          const ourOwnToks = tokenize(ours_row.resort_name).filter((t) => t.length >= 3);
+          if (ourOwnToks.length > 0) {
+            const shared = ourOwnToks.filter((t) => best.cand.tokens.includes(t)).length;
+            const overlap = shared / ourOwnToks.length;
+            // For short names (<=2 distinctive tokens) require ALL to match, so a
+            // lone shared BRAND token ("Riu Jalisco" vs "Riu Flamingos") can't
+            // pass. For longer names require >=50%.
+            const need = ourOwnToks.length <= 2 ? ourOwnToks.length : Math.ceil(ourOwnToks.length / 2);
+            if (shared < need) {
+              summary.name_guard_rejected = (summary.name_guard_rejected ?? 0) + 1;
+              summary.name_guard_examples = summary.name_guard_examples ?? [];
+              if (summary.name_guard_examples.length < 25) {
+                summary.name_guard_examples.push({
+                  ours: ours_row.resort_name, liteapi: best.cand.h?.name,
+                  overlap: Number(overlap.toFixed(2)),
+                });
+              }
+              // Not a confident link — keep as best-effort low_confidence.
+              if (!runnerUp) runnerUp = { cand: best.cand, sim: best.sim };
+              best = null;
+              matchPath = "rejected_name_guard";
+            }
           }
         }
 
