@@ -15,13 +15,14 @@
 //
 // v7: room-occupancy excludes infants (<2).
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v11_terminal_sweep";
+const VERSION = "top_up_hotels_worker_v12_concurrency6";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
-const HOTEL_BATCH_CONCURRENCY = 2;
+// v12: 2 -> 6 (matches start_pricing v20). 429 backoff self-limits.
+const HOTEL_BATCH_CONCURRENCY = 6;
 const MAX_OFFERS_PER_PACKAGE = 12;
 const LITEAPI_TIMEOUT_S = 5;
 const WALL_CLOCK_BUDGET_MS = 35_000;
@@ -202,7 +203,7 @@ async function fetchHotelRatesBatch(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
   if (req.method !== "POST") {
@@ -425,27 +426,7 @@ serve(async (req) => {
       }
     }
 
-    let offersPersisted = 0;
-    let offerWriteTruncated = false;
-    if (rateOfferRows.length) {
-      const writeStart = Date.now();
-      try {
-        const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
-        for (let i = 0; i < pkgIds.length; i += 200) {
-          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { offerWriteTruncated = true; break; }
-          await sb.from("hotel_rate_offers").delete().in("package_id", pkgIds.slice(i, i + 200));
-        }
-        for (let i = 0; i < rateOfferRows.length; i += 200) {
-          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { offerWriteTruncated = true; break; }
-          const slice = rateOfferRows.slice(i, i + 200);
-          const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
-          if (!oe) offersPersisted += slice.length;
-        }
-      } catch (e) {
-        console.error("[top_up_hotels_worker] offer persistence error:", e);
-      }
-    }
-
+    // v12: package price updates FIRST (visible prices), offer detail second.
     if (packageUpdates.length) {
       const ids = packageUpdates.map(u => u.package_id);
       const { data: existing } = await sb.from("packages")
@@ -464,6 +445,27 @@ serve(async (req) => {
           const total = fp > 0 ? fp + hp : null;
           return sb.from("packages").update({ ...vals, total_price: total }).eq("package_id", package_id);
         }));
+      }
+    }
+
+    let offersPersisted = 0;
+    let offerWriteTruncated = false;
+    if (rateOfferRows.length) {
+      const writeStart = Date.now();
+      try {
+        const pkgIds = Array.from(new Set(rateOfferRows.map(r => r.package_id)));
+        for (let i = 0; i < pkgIds.length; i += 200) {
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { offerWriteTruncated = true; break; }
+          await sb.from("hotel_rate_offers").delete().in("package_id", pkgIds.slice(i, i + 200));
+        }
+        for (let i = 0; i < rateOfferRows.length; i += 200) {
+          if (Date.now() - writeStart > OFFER_WRITE_BUDGET_MS) { offerWriteTruncated = true; break; }
+          const slice = rateOfferRows.slice(i, i + 200);
+          const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
+          if (!oe) offersPersisted += slice.length;
+        }
+      } catch (e) {
+        console.error("[top_up_hotels_worker] offer persistence error:", e);
       }
     }
 

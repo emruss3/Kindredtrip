@@ -17,13 +17,17 @@
 // v18: removed the infant 'banned_children' hard-drop (cap_child_allowed).
 // v17: room-occupancy requirement EXCLUDES infants (<2).
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "start_pricing_v19_no_mock_pricing";
+const VERSION = "start_pricing_v20_parallel_flights_conc6";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
-const HOTEL_BATCH_CONCURRENCY = 2;
+// v20: 2 -> 6. At concurrency 2 the 22s wall budget only reached ~45% of the
+// ~27 hotel batches, manufacturing hundreds of 'pending' packages that were
+// never queried at all. At 6, all batches fit in cycle 0 (~5 waves x ~4.5s).
+// 429 backoff below self-limits if LiteAPI pushes back.
+const HOTEL_BATCH_CONCURRENCY = 6;
 const MAX_OFFERS_PER_PACKAGE = 12;
 const LITEAPI_TIMEOUT_S = 3;
 const WALL_CLOCK_BUDGET_MS = 22_000;
@@ -240,7 +244,7 @@ function buildResortPreFilter(
   return { description: filters.length ? filters.join("; ") : "none", willApply: filters };
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
   if (req.method !== "POST") return new Response(JSON.stringify({ version: VERSION, error: "POST only" }), { status: 405, headers });
@@ -346,6 +350,26 @@ serve(async (req) => {
     if (rErr) throw rErr;
     const routeByDest = new Map<string, any>();
     for (const r of insertedRoutes ?? []) routeByDest.set(r.dest_iata, r);
+
+    // v20: dispatch the flight worker NOW — routes are committed, and flights
+    // are the long pole gating visible trips (a trip needs BOTH legs live).
+    // Previously this fired only after the entire 22s+ hotel phase + offer
+    // writes, delaying first-flight by ~30s. waitUntil keeps the isolate
+    // alive long enough to flush the request (the old fire-and-forget could
+    // be silently dropped on teardown).
+    const pendingRouteCount = (insertedRoutes ?? []).filter(r => r.status === "pending").length;
+    let workerDispatched = false;
+    if (pendingRouteCount > 0) {
+      const fw = fetch(`${supabaseUrl}/functions/v1/price_flights_worker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
+        body: JSON.stringify({ search_id, max_routes: 10 }),
+      });
+      const erFw = (globalThis as any).EdgeRuntime;
+      if (erFw?.waitUntil) erFw.waitUntil(fw.catch(e => console.error("flight worker dispatch failed:", e)));
+      else fw.catch(e => console.error("flight worker dispatch failed:", e));
+      workerDispatched = true;
+    }
 
     const liteapiHotelIds = Array.from(new Set(pkgs.map((p: any) => p.resorts?.liteapi_hotel_id).filter(Boolean))) as string[];
     const hotelDataById = new Map<string, any>();
@@ -525,6 +549,17 @@ serve(async (req) => {
       });
     }
 
+    // v20: write PACKAGE PRICES FIRST — they're what the results list renders.
+    // Offer-detail rows (trip modal data) follow; previously they consumed up
+    // to 12s (OFFER_WRITE_BUDGET_MS) before any visible price landed.
+    const CHUNK = 50;
+    let updated = 0;
+    for (let i = 0; i < packageUpdates.length; i += CHUNK) {
+      const slice = packageUpdates.slice(i, i + CHUNK);
+      await Promise.all(slice.map(u => { const { package_id, ...vals } = u; return sb.from("packages").update(vals).eq("package_id", package_id); }));
+      updated += slice.length;
+    }
+
     const rateOfferRowsCount = rateOfferRows.length;
     let rateOfferRowsPersisted = 0;
     let rateOfferWriteTruncated = false;
@@ -544,29 +579,13 @@ serve(async (req) => {
           const { error: oe } = await sb.from("hotel_rate_offers").upsert(slice, { onConflict: "offer_id" });
           if (!oe) rateOfferRowsPersisted += slice.length;
         }
-      } catch (e) { console.error("[start_pricing v19] rate offer persistence error:", e); }
-    }
-
-    const CHUNK = 50;
-    let updated = 0;
-    for (let i = 0; i < packageUpdates.length; i += CHUNK) {
-      const slice = packageUpdates.slice(i, i + CHUNK);
-      await Promise.all(slice.map(u => { const { package_id, ...vals } = u; return sb.from("packages").update(vals).eq("package_id", package_id); }));
-      updated += slice.length;
+      } catch (e) { console.error("[start_pricing v20] rate offer persistence error:", e); }
     }
 
     await sb.from("search_jobs").update({ hotels_done: true, updated_at: nowIso }).eq("search_id", search_id);
 
-    const pendingRouteCount = (insertedRoutes ?? []).filter(r => r.status === "pending").length;
-    let workerDispatched = false;
-    if (pendingRouteCount > 0) {
-      fetch(`${supabaseUrl}/functions/v1/price_flights_worker`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
-        body: JSON.stringify({ search_id, max_routes: 10 }),
-      }).catch(e => console.error("worker dispatch failed:", e));
-      workerDispatched = true;
-    } else {
+    // (flight worker was dispatched right after route upsert — v20)
+    if (pendingRouteCount === 0) {
       await sb.from("search_jobs").update({ flights_done: true, updated_at: nowIso }).eq("search_id", search_id);
     }
 
@@ -576,7 +595,9 @@ serve(async (req) => {
       const tp = fetch(`${supabaseUrl}/functions/v1/top_up_hotels_worker`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
-        body: JSON.stringify({ search_id, max_pkgs: 200, depth: 0 }),
+        // v20: 700 (was 200) — process ALL pending in cycle 1 instead of
+        // guaranteeing an extra 15-25s chain cycle.
+        body: JSON.stringify({ search_id, max_pkgs: 700, depth: 0 }),
       });
       const er = (globalThis as any).EdgeRuntime;
       if (er?.waitUntil) er.waitUntil(tp.catch(e => console.error("top_up dispatch failed:", e)));

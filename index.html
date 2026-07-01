@@ -2379,8 +2379,16 @@
   async function pollUntilFlightsReal() {
     const myPollId = ++activePollId;
     const startedAt = Date.now();
-    const HARD_TIMEOUT_MS = 180_000;   // 3 minutes
-    const STAGNANT_AFTER_MS = 30_000;  // give it 30s of grace
+    // Poll until the SERVER says pricing settled. The old 180s cap +
+    // 2-flat-poll stagnation check stranded users at ~34-73s while the
+    // backend kept settling (observed: UI froze at live=186 while the
+    // backend reached 271). Cap is now 5 min; stagnation is a last-resort
+    // fallback measured from server truth (summary.live_packages), not
+    // allPackages.length — which is CONSTANT during the prepaint fallback
+    // and made the old check exit before the first live trip appeared.
+    const HARD_TIMEOUT_MS = 300_000;   // 5 minutes
+    const STAGNANT_AFTER_MS = 60_000;  // grace before stagnation can fire
+    const STAGNANT_POLLS = 8;          // ~24s of truly no progress
     const POLL_INTERVAL_MS = 3_000;
     let lastLiveCount = -1;
     let stagnantChecks = 0;
@@ -2413,20 +2421,15 @@
         // when that flips — no need for the stagnation timer.
         if (data?.summary?.pricing_settled) return;
 
-        const total = allPackages.length;
-        if (total === 0) continue;
-        // With strict_live_only=true every returned package is fully
-        // live, so the meaningful progress signal is allPackages.length
-        // growing as the top-up worker upgrades mock packages.
-        const live = total;
-
-        // Fallback stagnation: in case pricing_settled never flips (a
-        // stuck top_up chain, an API error mid-stream), bail when live
-        // count hasn't grown for two consecutive polls after the grace.
-        if (live === lastLiveCount) {
+        // Fallback stagnation (server truth): only if pricing_settled never
+        // flips (stuck chain / API error). live_packages comes from the
+        // summary, so it keeps moving even while the UI shows the prepaint
+        // fallback list.
+        const live = Number(data?.summary?.live_packages ?? -1);
+        if (live >= 0 && live === lastLiveCount) {
           stagnantChecks++;
-          if (stagnantChecks >= 2 && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
-        } else {
+          if (stagnantChecks >= STAGNANT_POLLS && Date.now() - startedAt > STAGNANT_AFTER_MS) return;
+        } else if (live >= 0) {
           stagnantChecks = 0;
           lastLiveCount = live;
         }
