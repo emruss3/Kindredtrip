@@ -356,7 +356,11 @@
         <button type="button" class="toggle toggle-more" onclick="openMoreFilters()">More filters</button>
       </div>
     </form>
-    <div class="ai-search-card ai-search-card-below" id="ai-search-card">
+    <!-- AI/semantic search hidden until it works: resort_embeddings is empty
+         (0 rows) so semantic_search_resorts returns nothing. Re-enable by
+         removing `hidden` + the inline display:none once embeddings are
+         backfilled and the feature is verified. -->
+    <div class="ai-search-card ai-search-card-below" id="ai-search-card" hidden style="display:none">
       <form class="ai-search-form" onsubmit="event.preventDefault(); runSemanticSearch();">
         <div class="ai-search-label-row">
           <span class="ai-search-eyebrow">
