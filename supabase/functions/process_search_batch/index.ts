@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v22_country_interleave";
+const VERSION = "process_search_batch_v23_single_pass_scan";
 
 // v20 (2026-06-23): infant-aware fixes.
 //   - roomFamilySize (adults + kids>=2) drives the coarse occupancy gate so
@@ -125,35 +125,46 @@ serve(async (req) => {
       fetched = resorts.length;
       done = true;
     } else {
-      const from = job.next_offset;
-      const to = job.next_offset + job.batch_size - 1;
+      // v23: fetch the ENTIRE eligible catalog in a single invocation via an
+      // in-handler pagination loop, instead of chaining process_search_batch
+      // to itself one batch at a time. The self-chain was a fire-and-forget
+      // HTTP call that intermittently dropped under load, truncating the scan
+      // (observed: 104/587 resorts scanned -> only 9 live trips, vs 99 on a
+      // clean run). One invocation = no dropped links.
+      const PAGE = Math.max(100, Number(job.batch_size) || 250);
+      const buildQuery = () => {
+        let q = supabase
+          .from("resorts").select(RESORT_COLS)
+          .eq("service_excluded", false)
+          .not("airport_code", "is", null)
+          // v21: only resorts with a LiteAPI mapping — unmapped can't be priced.
+          .not("liteapi_hotel_id", "is", null);
+        if (included_countries) q = q.in("country", included_countries);
+        const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter((c) => !(included_countries ?? []).includes(c));
+        const allExcluded = Array.from(new Set([...excluded_countries, ...HARD_BLOCKED_COUNTRIES, ...defaultExcluded]));
+        if (allExcluded.length > 0) {
+          const quoted = allExcluded.map((c) => `"${String(c).replace(/"/g, '\\"')}"`).join(",");
+          q = q.not("country", "in", `(${quoted})`);
+        }
+        if (search.require_direct_flight) q = q.eq("direct_flight", true);
+        if (search.require_connecting_rooms) q = q.eq("guaranteed_connecting_rooms", true);
+        // Stable ordering so range-paging can't skip/repeat rows across pages.
+        return q.order("resort_id", { ascending: true });
+      };
 
-      let resortsQuery = supabase
-        .from("resorts").select(RESORT_COLS)
-        .eq("service_excluded", false)
-        .not("airport_code", "is", null)
-        // v21: only resorts with a LiteAPI mapping. Unmapped resorts can
-        // never be live-priced; including them creates packages that the
-        // user sees as "finding live prices…" forever (or as no_fit gaps).
-        // Filter at search-time so every package generated has a real shot
-        // at going live.
-        .not("liteapi_hotel_id", "is", null);
-
-      if (included_countries) resortsQuery = resortsQuery.in("country", included_countries);
-      const defaultExcluded = DEFAULT_EXCLUDED_COUNTRIES.filter((c) => !(included_countries ?? []).includes(c));
-      const allExcluded = Array.from(new Set([...excluded_countries, ...HARD_BLOCKED_COUNTRIES, ...defaultExcluded]));
-      if (allExcluded.length > 0) {
-        const quoted = allExcluded.map((c) => `"${String(c).replace(/"/g, '\\"')}"`).join(",");
-        resortsQuery = resortsQuery.not("country", "in", `(${quoted})`);
+      resorts = [];
+      let pageOffset = 0;
+      for (;;) {
+        const { data, error: rErr } = await buildQuery().range(pageOffset, pageOffset + PAGE - 1);
+        if (rErr) throw rErr;
+        const page = data ?? [];
+        resorts.push(...page);
+        if (page.length < PAGE) break;
+        pageOffset += PAGE;
+        if (pageOffset > 20000) break; // safety stop
       }
-      if (search.require_direct_flight) resortsQuery = resortsQuery.eq("direct_flight", true);
-      if (search.require_connecting_rooms) resortsQuery = resortsQuery.eq("guaranteed_connecting_rooms", true);
-
-      const { data, error: rErr } = await resortsQuery.range(from, to);
-      if (rErr) throw rErr;
-      resorts = data ?? [];
       fetched = resorts.length;
-      done = fetched < job.batch_size;
+      done = true; // whole catalog processed in this single invocation
 
       survivors = resorts.filter((r: any) => {
         if (isAdultsOnly(r)) {
