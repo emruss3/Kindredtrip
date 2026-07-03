@@ -25,14 +25,21 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "price_flights_worker_v6_parallel_claim";
+const VERSION = "price_flights_worker_v7_rate_limit_safe";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
-const PARALLEL = 6;
-const RETRY_DELAY_MS = 1500;
-const MAX_RETRIES = 2;
+// v7: v6's aggregate concurrency (4 workers x 6 routes x 2 legs = up to 48
+// concurrent LiteAPI calls) blew the flight-rates rate limit — 36/39 routes
+// failed with '429 rate limit exhausted' / timeouts, and the attempts cap
+// then locked them out. Calibrated envelope: 2 workers x 2 routes x 2 legs
+// = 8 concurrent max. Retryable failures (429/timeout) now return the route
+// to 'pending' instead of 'failed', and a wave that saw 429s backs off 3s.
+const PARALLEL = 2;
+const RETRY_DELAY_MS = 2_000;
+const MAX_RETRIES = 3;
 const MAX_OFFERS_PER_ROUTE = 20;
-const FETCH_TIMEOUT_MS = 12_000;
-const MAX_SIBLINGS = 3;
+const FETCH_TIMEOUT_MS = 20_000;
+const MAX_SIBLINGS = 1;
+const WAVE_BACKOFF_MS = 3_000;
 const SANDBOX_FAKE_CARRIERS = new Set<string>(["ND"]);
 
 function corsHeaders() { return { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, x-client-info, apikey, content-type", "access-control-allow-methods": "POST, OPTIONS" }; }
@@ -194,7 +201,7 @@ Deno.serve(async (req) => {
     let siblingsDispatched = 0;
     if (fanOut) {
       let remQ = sb.from("flight_search_routes").select("*", { count: "exact", head: true })
-        .in("status", ["pending", "failed"]).lt("attempts", 3);
+        .in("status", ["pending", "failed"]).lt("attempts", 5);
       if (search_id) remQ = remQ.eq("search_id", search_id);
       const { count: remaining } = await remQ;
       const siblings = Math.min(MAX_SIBLINGS, Math.ceil((remaining ?? 0) / max_routes));
@@ -217,7 +224,8 @@ Deno.serve(async (req) => {
 
     // v6: per-route fetch AND persist inside one closure — a route commits the
     // moment its legs return, instead of waiting for the whole call.
-    const processRoute = async (route: any) => {
+    // v7: returns true when it hit a rate limit (wave backoff signal).
+    const processRoute = async (route: any): Promise<boolean> => {
       // Concurrent legs (v5 was serial with a 700ms sleep).
       const [outRes, retRes] = await Promise.all([
         fetchLeg(apiKey, route.origin_iata, route.dest_iata, route.departure_date, route.adults, route.children, route.infants, "outbound", { includeSandboxCarriers }),
@@ -225,22 +233,27 @@ Deno.serve(async (req) => {
           ? fetchLeg(apiKey, route.dest_iata, route.origin_iata, route.return_date, route.adults, route.children, route.infants, "return", { includeSandboxCarriers })
           : Promise.resolve({ options: [] as any[], rawCount: 0, status: 200 } as any),
       ]);
+      const sawRateLimit = outRes.status === 429 || (retRes as any).status === 429;
       if (outRes.error || outRes.options.length === 0) {
         if (outRes.error) {
           errors.push(`${route.dest_iata}: ${outRes.error}`);
-          await sb.from("flight_search_routes").update({ status: "failed", last_error: `${outRes.status}: ${outRes.error}`, fetched_at: new Date().toISOString() }).eq("route_id", route.route_id);
+          // v7: 429s and timeouts (status 0) are TRANSIENT — put the route
+          // back to 'pending' so the chain retries it (attempts cap still
+          // bounds total tries). Only non-transient API errors are 'failed'.
+          const retryable = outRes.status === 429 || outRes.status === 0;
+          await sb.from("flight_search_routes").update({ status: retryable ? "pending" : "failed", last_error: `${outRes.status}: ${outRes.error}`, fetched_at: new Date().toISOString() }).eq("route_id", route.route_id);
           routesFailed++;
         } else {
           await sb.from("flight_search_routes").update({ status: "no_offers", fetched_at: new Date().toISOString() }).eq("route_id", route.route_id);
           routesNoOffers++;
         }
-        return;
+        return sawRateLimit;
       }
       const paired = buildPairedOffers(route.route_id, outRes.options, retRes.options ?? []);
       if (!paired.length) {
         await sb.from("flight_search_routes").update({ status: "no_offers", fetched_at: new Date().toISOString() }).eq("route_id", route.route_id);
         routesNoOffers++;
-        return;
+        return sawRateLimit;
       }
       const anySummed = paired.some((p: any) => p.price_basis === "summed_oneway");
       if (anySummed) routesTwoLeg++; else routesOnewayOnly++;
@@ -269,7 +282,7 @@ Deno.serve(async (req) => {
         errors.push(`offer upsert ${route.dest_iata}: ${oErr.message}`);
         await sb.from("flight_search_routes").update({ status: "failed", last_error: `offers upsert: ${oErr.message}` }).eq("route_id", route.route_id);
         routesFailed++;
-        return;
+        return sawRateLimit;
       }
       totalOffers += offerRows.length;
       const segmentRows: any[] = [];
@@ -317,18 +330,24 @@ Deno.serve(async (req) => {
         }
       }
       routesDone++;
+      return sawRateLimit;
     };
 
     for (let i = 0; i < pending.length; i += PARALLEL) {
       const batch = pending.slice(i, i + PARALLEL);
-      await Promise.all(batch.map((route: any) => processRoute(route).catch((e) => {
+      const waveFlags = await Promise.all(batch.map((route: any) => processRoute(route).catch((e) => {
         errors.push(`${route.dest_iata}: ${String((e as any)?.message ?? e)}`);
+        return false;
       })));
+      // v7: if this wave hit 429s, back off before the next one.
+      if (waveFlags.some(Boolean) && i + PARALLEL < pending.length) {
+        await new Promise((rs) => setTimeout(rs, WAVE_BACKOFF_MS));
+      }
     }
 
     // v6: chain scoped to search_id when given (v5 counted globally).
     let stillQ = sb.from("flight_search_routes").select("*", { count: "exact", head: true })
-      .in("status", ["pending", "failed"]).lt("attempts", 3);
+      .in("status", ["pending", "failed"]).lt("attempts", 5);
     if (search_id) stillQ = stillQ.eq("search_id", search_id);
     const { count: stillPending } = await stillQ;
     let chained = false;
