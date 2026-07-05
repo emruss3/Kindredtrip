@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "process_search_batch_v23_single_pass_scan";
+const VERSION = "process_search_batch_v24_multiroom_no_size_drop";
 
 // v20 (2026-06-23): infant-aware fixes.
 //   - roomFamilySize (adults + kids>=2) drives the coarse occupancy gate so
@@ -184,14 +184,10 @@ serve(async (req) => {
             && !hasKidsClubSignal(r) && r.audience !== "Family") {
           droppedInfant++; return false;
         }
-        if (roomFamilySize >= 5) {
-          const hasCap = r.cap_fetched_at != null;
-          if (hasCap) {
-            const occOk = (r.cap_max_room_occupancy ?? 0) >= roomFamilySize;
-            const altOk = r.cap_has_connecting === true || r.cap_has_suite === true || r.cap_has_villa === true;
-            if (!occOk && !altOk) { droppedFamilySize++; return false; }
-          }
-        }
+        // v24: NO family-size drop — parties >= 5 are priced with a 2-room
+        // occupancy split (start_pricing v21), so any resort with two
+        // standard rooms qualifies. LiteAPI's response is the availability
+        // signal, not cap_max_room_occupancy.
         return true;
       });
     }

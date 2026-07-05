@@ -18,7 +18,7 @@
 // Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v12_concurrency6";
+const VERSION = "top_up_hotels_worker_v13_multiroom";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 // v12: 2 -> 6 (matches start_pricing v20). 429 backoff self-limits.
@@ -86,7 +86,20 @@ function nightsBetween(a: string, b: string): number {
   return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
 }
 
-function extractRateOffers(hotel: any, hotelId: string, nights: number): any[] {
+// v13 MULTI-ROOM: 2-room occupancy split for parties >= 5 (see start_pricing v21).
+function buildOccupancies(adults: number, childAges: number[]): Array<{ adults: number; children: number[] }> {
+  const olderKids = childAges.filter((a) => a >= 2);
+  const partySize = adults + olderKids.length;
+  if (partySize < 5 || adults < 2) return [{ adults, children: childAges }];
+  const a1 = Math.ceil(adults / 2);
+  const a2 = adults - a1;
+  const sorted = [...childAges].sort((x, y) => y - x);
+  const c1: number[] = [], c2: number[] = [];
+  sorted.forEach((k, i) => (i % 2 === 0 ? c1 : c2).push(k));
+  return [{ adults: a1, children: c1 }, { adults: a2, children: c2 }];
+}
+
+function extractRateOffers(hotel: any, hotelId: string, nights: number, roomsRequested = 1): any[] {
   const out: any[] = [];
   const roomTypes: any[] = Array.isArray(hotel?.roomTypes) ? hotel.roomTypes : [];
   for (const rt of roomTypes) {
@@ -99,6 +112,83 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): any[] {
     const priceType = rt?.priceType ?? null;
     const rateType = rt?.rateType ?? null;
     const rates: any[] = Array.isArray(rt?.rates) ? rt.rates : [];
+
+    // v13 MULTI-ROOM: one rates[] entry per occupancyNumber; the roomType
+    // offer covers all rooms. Merge to a single priced offer (sum of rooms).
+    if (roomsRequested > 1) {
+      const byOcc = new Map<number, any>();
+      for (const rate of rates) {
+        const total = Number(rate?.retailRate?.total?.[0]?.amount ?? 0);
+        if (!total) continue;
+        const n = Number(rate?.occupancyNumber ?? 1);
+        const prev = byOcc.get(n);
+        const prevTotal = prev ? Number(prev?.retailRate?.total?.[0]?.amount ?? Infinity) : Infinity;
+        if (total < prevTotal) byOcc.set(n, rate);
+      }
+      if (byOcc.size < roomsRequested) continue;
+      const parts = Array.from(byOcc.values());
+      const sum = (f: (r: any) => number) => parts.reduce((acc, r) => acc + (Number.isFinite(f(r)) ? f(r) : 0), 0);
+      const total = sum((r) => Number(r?.retailRate?.total?.[0]?.amount ?? 0));
+      if (!total) continue;
+      const ssp = sum((r) => Number(r?.retailRate?.suggestedSellingPrice?.[0]?.amount ?? NaN));
+      const commAmt = sum((r) => Number(r?.commission?.[0]?.amount ?? NaN));
+      const first = parts[0];
+      const currency = String(first?.retailRate?.total?.[0]?.currency ?? "USD");
+      const boardType = String(first?.boardType ?? "").toUpperCase() || null;
+      const boardName = first?.boardName ?? null;
+      const isAI = boardType === "AI" || (boardName && /all\s+inclusive/i.test(String(boardName)));
+      const tags = parts.map((r) => r?.cancellationPolicies?.refundableTag ?? null);
+      const refundable = tags.every((t) => t === "RFN") ? true : (tags.some((t) => t === "NRFN") ? false : null);
+      const firstPolicy = (Array.isArray(first?.cancellationPolicies?.cancelPolicyInfos) ? first.cancellationPolicies.cancelPolicyInfos : [])[0] ?? null;
+      const names = Array.from(new Set(parts.map((r) => r?.name).filter(Boolean)));
+      const roomName = `${names.join(" + ") || "Room combo"} (${roomsRequested} rooms)`;
+      const maxOcc = sum((r) => Number(r?.maxOccupancy ?? 0)) || null;
+      const rateId = parts.map((r) => String(r?.rateId ?? "r0")).join("+");
+      const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
+      out.push({
+        offer_id: offerId,
+        room_type_id: roomTypeId,
+        mapped_room_id: null,
+        room_name: roomName,
+        rate_id: rateId,
+        max_occupancy: maxOcc,
+        adult_count: sum((r) => Number(r?.adultCount ?? 0)) || null,
+        child_count: sum((r) => Number(r?.childCount ?? 0)) || null,
+        children_ages: parts.flatMap((r) => Array.isArray(r?.childrenAges) ? r.childrenAges : []),
+        total_price: total,
+        per_night: nights > 0 ? Number((total / nights).toFixed(2)) : null,
+        currency,
+        suggested_selling_price: ssp > 0 ? ssp : null,
+        initial_price: null,
+        commission_amount: commAmt > 0 ? commAmt : null,
+        commission_pct: commAmt > 0 && total > 0 ? Number(((commAmt / total) * 100).toFixed(2)) : null,
+        board_type: boardType,
+        board_name: boardName,
+        is_all_inclusive: Boolean(isAI),
+        refundable,
+        refundable_tag: tags[0] ?? null,
+        cancellation_deadline: firstPolicy?.cancelTime ?? null,
+        cancellation_penalty: firstPolicy?.amount != null ? Number(firstPolicy.amount) : null,
+        payment_types: paymentTypes,
+        supplier,
+        price_type: priceType,
+        rate_type: rateType,
+        perks: [],
+        has_promotions: false,
+        remarks: null,
+        raw_offer: {
+          _liteapi_offer_id: liteOfferId,
+          _liteapi_room_type_id: roomTypeId,
+          _liteapi_rate_id: rateId,
+          _rooms: roomsRequested,
+          board_type: boardType,
+          board_name: boardName,
+          refundable_tag: tags[0] ?? null,
+        },
+      });
+      continue;
+    }
+
     for (const rate of rates) {
       const total = Number(rate?.retailRate?.total?.[0]?.amount ?? 0);
       if (!total) continue;
@@ -262,7 +352,9 @@ Deno.serve(async (req) => {
     const liteapiHotelIds = Array.from(idToPackages.keys());
 
     const hotelDataById = new Map<string, any>();
-    const hotelOccupancies = [{ adults, children: childAges }];
+    // v13: 2-room occupancy split for parties >= 5.
+    const hotelOccupancies = buildOccupancies(adults, childAges);
+    const roomsRequested = hotelOccupancies.length;
 
     let batchesAttempted = 0, batchesSucceeded = 0;
     let lastError: string | undefined;
@@ -309,9 +401,10 @@ Deno.serve(async (req) => {
     let upgraded = 0;
 
     // v7: infants (<2) are NOT counted toward room occupancy.
+    // v13: multi-room offers are priced for our exact occupancies — fit by construction.
     const partySize = adults + olderChildAges.length;
     const fitsParty = (o: any) =>
-      o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+      roomsRequested > 1 || o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
 
     const noFitUpdates: any[] = [];
     const markNoFit = (p: any) => noFitUpdates.push({
@@ -331,7 +424,7 @@ Deno.serve(async (req) => {
     for (const [hotelId, pkgsForHotel] of idToPackages.entries()) {
       const hotelData = hotelDataById.get(hotelId);
       if (!hotelData) { for (const p of pkgsForHotel) handleMiss(p); continue; }
-      const offers = extractRateOffers(hotelData, hotelId, nights);
+      const offers = extractRateOffers(hotelData, hotelId, nights, roomsRequested);
       if (offers.length === 0) { for (const p of pkgsForHotel) handleMiss(p); continue; }
 
       const fitsOffers = offers.filter(fitsParty);

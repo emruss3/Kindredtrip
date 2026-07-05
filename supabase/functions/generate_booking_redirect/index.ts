@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "generate_booking_redirect_v7_verified_property_url";
+const VERSION = "generate_booking_redirect_v8_multiroom";
 
 // v7 (2026-06-29): NEVER construct Booking hotel-page URLs from resort
 // names/slugs — slug guessing 404s (e.g. "Wyndham Grand Cancun All Inclusive
@@ -42,6 +42,12 @@ function wrapTp(targetUrl: string, marker: string): string {
 
 // Append stay + occupancy to a (verified) Booking property URL, preserving
 // whatever path/query the verified URL already has.
+function roomsFor(adults: number, childAges: number[]): number {
+  // Mirror of the pricing pipeline's 2-room split for parties >= 5.
+  const party = adults + childAges.filter((a) => a >= 2).length;
+  return party >= 5 && adults >= 2 ? 2 : 1;
+}
+
 function appendStayParams(rawUrl: string, opts: {
   dateStart: string; dateEnd: string; adults: number; childAges: number[];
 }): string {
@@ -52,7 +58,7 @@ function appendStayParams(rawUrl: string, opts: {
   u.searchParams.set("group_children", String(opts.childAges.length));
   u.searchParams.delete("age");
   for (const a of opts.childAges) u.searchParams.append("age", String(a));
-  u.searchParams.set("no_rooms", "1");
+  u.searchParams.set("no_rooms", String(roomsFor(opts.adults, opts.childAges)));
   u.searchParams.set("selected_currency", "USD");
   return u.toString();
 }
@@ -72,7 +78,7 @@ function buildSearchFallbackUrl(opts: {
   params.set("group_adults", String(opts.adults));
   params.set("group_children", String(opts.childAges.length));
   for (const a of opts.childAges) params.append("age", String(a));
-  params.set("no_rooms", "1");
+  params.set("no_rooms", String(roomsFor(opts.adults, opts.childAges)));
   params.set("selected_currency", "USD");
   return `https://www.booking.com/searchresults.html?${params.toString()}`;
 }
@@ -93,7 +99,7 @@ function buildAviasalesUrl(o: {
   return `https://www.aviasales.com/search/${code}?marker=${encodeURIComponent(o.marker)}`;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
   if (req.method !== "POST") {
