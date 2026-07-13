@@ -2319,6 +2319,9 @@ function patchCounts() {
     [/\b\d[\d,]*\+ family-friendly resorts/g, `${STATS.familyDisplay} family-friendly resorts`],
     [/\b\d[\d,]*\+ family-friendly Caribbean resorts/g, `${STATS.familyDisplay} family-friendly Caribbean resorts`],
     [/\b\d[\d,]*\+ properties/g, `${STATS.resortsDisplay} properties`],
+    // Generic "<n>+ resorts" (no qualifier) = total catalogue size. Runs
+    // after the family-specific patterns, which consume their matches.
+    [/\b\d[\d,]*\+ resorts\b/g, `${STATS.resortsDisplay} resorts`],
     [/\b\d+ Caribbean destinations/g, `${STATS.countries} Caribbean destinations`],
     [/\b\d+ destination airports/g, `${STATS.airports} destination airports`],
     [/\b\d+ airports/g, `${STATS.airports} airports`],
