@@ -74,7 +74,16 @@ const resorts = (() => {
 // positioned adults-only, couples-only, clothing-optional/nude, or its
 // name carries a minimum-age policy of 12+. These pages still exist (the
 // search UI deep-links to them) but are noindexed and never ranked.
-const ADULT_NAME_RE = /adults?\s*only|couples?\s*only|clothing\s*optional|nude/i;
+// Hard exclusion keywords: audience phrases plus adults-only /
+// couples-only brand names. Checked across name, brand, style, and the
+// structured audience field.
+const ADULT_NAME_RE = new RegExp(
+  [
+    "adults?\\s*only", "couples?\\s*only", "couples\\s*resort",
+    "clothing\\s*optional", "nude", "au\\s*naturel", "topless",
+    "temptation", "hedonism", "\\bsecrets\\b", "breathless",
+    "\\bzilara\\b", "\\bsandals\\b",
+  ].join("|"), "i");
 function nameMinAge(r) {
   let max = null;
   for (const m of String(r.resort_name).matchAll(/(\d{1,2})\s*\+/g)) {
@@ -85,7 +94,8 @@ function nameMinAge(r) {
 }
 function isAdultOriented(r) {
   if (r.audience === "Adults Only") return true;
-  if (ADULT_NAME_RE.test(String(r.resort_name))) return true;
+  const hay = `${r.resort_name} ${r.hotel_brand ?? ""} ${r.hotel_style ?? ""}`;
+  if (ADULT_NAME_RE.test(hay)) return true;
   const minAge = nameMinAge(r);
   return minAge != null && minAge >= 12;
 }
@@ -596,13 +606,16 @@ function familySignals(r) {
   return out;
 }
 
-// A resort only gets called "family-friendly" when it has confirmed
-// family-positive signals — not by default.
+// A resort only gets called "family-friendly" when it has at least one
+// confirmed family-positive signal — never by default.
 function hasFamilySignals(r) {
-  return familyEligible(r) && (
-    r.kids_club || r.water_park || toddlerFit(r) ||
-    Number(r.family_max) >= 5 || r.connecting
-  );
+  if (!familyEligible(r)) return false;
+  if (r.kids_club || r.water_park || toddlerFit(r) || r.connecting) return true;
+  if (Number(r.family_max) >= 5) return true;
+  if (r.family_room || r.child_allowed) return true;
+  const sig = signalsByResort.get(r.resort_id);
+  if (sig && Number(sig.family_review_count) >= 5) return true;
+  return false;
 }
 
 function resortIntro(r) {
@@ -616,13 +629,19 @@ function resortIntro(r) {
   const article = /^[aeiou8]/i.test(lead) ? "an" : "a";
   let p = `${name} is ${article} ${lead} in ${where}${transfer}. `;
   const sig = familySignals(r);
-  if (sig.length) {
+  if (familyEligible(r) && sig.length) {
     const list = sig.length === 1 ? sig[0] : `${sig.slice(0, -1).join(", ")} and ${sig.at(-1)}`;
     p += `For families, it offers ${list}. `;
+  } else if (familyEligible(r) && !hasFamilySignals(r)) {
+    // No confirmed family-positive signals — use the neutral descriptor,
+    // never "family-friendly" by default.
+    p += `KindredTrips tracks this resort as part of its Caribbean hotel database; we haven't confirmed family-specific facilities here yet. `;
   }
   const r5 = ratingTo5(r.rating);
   if (r5 != null && r.reviews) p += `Guests rate it ${r5}/5 across ${fmtInt(r.reviews)} reviews. `;
-  p += `KindredTrips ranks complete trips here — flights plus hotel — by total cost for your exact family and dates.`;
+  p += familyEligible(r)
+    ? `KindredTrips ranks complete trips here — flights plus hotel — by total cost for your exact family and dates.`
+    : `KindredTrips prices complete trips here — flights plus hotel — by total cost for your travelers and dates.`;
   return p;
 }
 
@@ -637,7 +656,9 @@ function factList(r) {
     facts.push(["Nearest airport", `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim()]);
   }
   facts.push(["Airport transfer", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed — check when booking"]);
-  facts.push(["Kids club", r.kids_club ? (r.kc_min != null ? `Yes (from age ${r.kc_min})` : "Yes") : "Not confirmed"]);
+  facts.push(["Kids club", r.kids_club
+    ? (r.kc_min != null ? `Yes — ages ${r.kc_min}${r.kc_max != null ? `–${r.kc_max}` : "+"} (verified with the resort/brand)` : "Yes — ages not confirmed")
+    : "Not confirmed"]);
   facts.push(["Beachfront", r.on_beach ? "Yes" : "Not confirmed"]);
   facts.push(["Pools", r.water_park ? "Yes — plus water park" : (r.pool ? "Yes" : "Not confirmed")]);
   facts.push(["All-inclusive", r.all_inclusive ? "Yes — we've seen live all-inclusive rates" : "Not confirmed — check live rates"]);
@@ -646,7 +667,23 @@ function factList(r) {
   if (r.connecting) facts.push(["Connecting rooms", "Available"]);
   if (r.sofa_bed) facts.push(["Sofa beds", "In some rooms"]);
   if (!familyEligible(r)) facts.push(["Audience", "Adults-only positioning"]);
+  // When the booking partner lists the property under a materially
+  // different name, say so — the name on the checkout page should never
+  // surprise anyone.
+  const partnerName = bookedAsName(r);
+  if (partnerName) facts.push(["Booked with our partner as", partnerName]);
   return facts;
+}
+
+// Partner (LiteAPI) hotel name, shown only when it differs materially
+// from our display name after normalization.
+function bookedAsName(r) {
+  const la = r.liteapi_hotel_name && String(r.liteapi_hotel_name).trim();
+  if (!la) return null;
+  const norm = (s) => String(s).toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const a = norm(displayName(r)), b = norm(la);
+  if (a === b || a.includes(b) || b.includes(a)) return null;
+  return la;
 }
 
 function badges(r) {
@@ -685,6 +722,41 @@ function familySignalLines(s) {
   return out;
 }
 
+// Clean a review snippet for display: collapse whitespace, drop
+// too-short fragments, and trim awkward mid-word truncations back to a
+// sentence boundary (or add an honest ellipsis).
+function cleanSnippet(s, max = 260) {
+  if (!s) return null;
+  let t = String(s).replace(/\s+/g, " ").trim();
+  if (t.length < 25) return null;
+  if (t.length > max) t = t.slice(0, max);
+  if (!/[.!?…)]$/.test(t)) {
+    const cut = Math.max(t.lastIndexOf(". "), t.lastIndexOf("! "), t.lastIndexOf("? "));
+    if (cut > 60) t = t.slice(0, cut + 1);
+    else t = t.replace(/\s+\S*$/, "") + "…";
+  }
+  return t;
+}
+
+// Pick displayable reviews for a resort page: family travelers first,
+// then couples/other; every shown snippet must survive cleaning.
+function selectReviews(allReviews, wantFamily) {
+  const usable = [];
+  for (const rv of allReviews) {
+    const pros = cleanSnippet(rv.pros);
+    const cons = cleanSnippet(rv.cons);
+    const headline = cleanSnippet(rv.headline, 120);
+    if (!pros && !cons) continue;
+    usable.push({ ...rv, pros, cons, headline });
+  }
+  const isFam = (rv) => /famil/i.test(String(rv.traveler_type_norm ?? ""));
+  usable.sort((a, b) => {
+    if (wantFamily && isFam(a) !== isFam(b)) return isFam(a) ? -1 : 1;
+    return String(b.review_date ?? "").localeCompare(String(a.review_date ?? ""));
+  });
+  return usable.slice(0, 4);
+}
+
 // Convert one raw review row → Schema.org Review entry. Per Google's
 // review-snippet guidelines we include author, datePublished, the
 // rating, the body, and a publisher attribution to the original source.
@@ -713,7 +785,9 @@ function resortFaq(r) {
   const qa = [];
   qa.push([`Does ${name} have a kids club?`,
     r.kids_club
-      ? `Yes — ${name} has a kids club${r.kc_min != null ? ` (minimum age ${r.kc_min})` : ""}. We don't have a confirmed minimum age on file${r.kc_min != null ? "" : ", so check with the resort if you're traveling with a child under 4"}.`
+      ? (r.kc_min != null
+          ? `Yes — ${name}'s kids club takes children ages ${r.kc_min}${r.kc_max != null ? ` to ${r.kc_max}` : " and up"} (verified against the resort or brand's own published policy). Programs and hours can change seasonally, so confirm when booking.`
+          : `Yes — ${name} has a kids club, but we don't have a confirmed minimum age on file, so check with the resort if you're traveling with a child under 4.`)
       : `We haven't confirmed a kids club at ${name}. If drop-off childcare matters, filter for kids-club resorts in the KindredTrips search or browse our kids-club rankings.`]);
   qa.push([`Is ${name} all-inclusive?`,
     r.all_inclusive
@@ -837,7 +911,7 @@ function themesForCountry(country) {
 const COMPARE_PAIRS = [
   // Beaches Negril is service-excluded (duplicate LiteAPI ID → misbooking
   // risk), so the Beaches head-to-head uses the flagship Jamaica property.
-  ["beaches-turks-and-caicos", "beaches-ochos-rios"],
+  ["beaches-turks-and-caicos", "beaches-ocho-rios"],
   ["hyatt-ziva-cancun", "finest-playa-mujeres"],
   ["moon-palace-cancun", "hyatt-ziva-cancun"],
   ["grand-velas-riviera-maya", "hotel-xcaret-mexico"],
@@ -915,6 +989,8 @@ function rankedCard(r, rank, extraMeta) {
     <p class="seo-rank-meta"><a href="${countryPath(r.country)}">${esc(r.country)}</a>${r.area ? ` · ${esc(r.area)}` : ""}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}${extraMeta ? ` · ${esc(extraMeta)}` : ""}</p>
     <p class="seo-rank-why"><strong>Why it ranks:</strong> ${esc(whyItRanks(r))}</p>
     <p class="seo-rank-why"><strong>Best for:</strong> ${esc(bestForList(r).slice(0, 2).join(" · "))}</p>
+    ${Number(r.family_max) >= 5 || r.connecting ? `<p class="seo-rank-why"><strong>Room fit:</strong> ${esc([Number(r.family_max) >= 5 ? `largest room sleeps ${r.family_max}` : null, r.connecting ? "connecting rooms available" : null].filter(Boolean).join("; "))}</p>` : ""}
+    ${r.transfer_min != null ? `<p class="seo-rank-why"><strong>Travel day:</strong> ~${r.transfer_min} min transfer from ${esc(r.airport_iata || r.airport_name || "the airport")}</p>` : ""}
     ${watch ? `<p class="seo-rank-watch"><strong>Watch out:</strong> ${esc(watch)}</p>` : ""}
     <p class="seo-rank-watch"><strong>Skip if:</strong> ${esc(skipIfList(r)[0])}</p>
     ${bs.length ? `<ul class="seo-badges seo-badges-sm">${bs.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
@@ -979,7 +1055,7 @@ function resortPage(r) {
   const facts = factList(r);
   const familySignal = signalsByResort.get(r.resort_id) || null;
   const allReviews = reviewsByResort.get(r.resort_id) || [];
-  const shownReviews = allReviews.slice(0, 4);
+  const shownReviews = selectReviews(allReviews, familyEligible(r));
   const reviewLd = shownReviews.map((rv) => reviewToJsonLd(rv, name)).filter(Boolean);
   const qa = resortFaq(r);
   const watchOuts = watchOutsFor(r);
@@ -1039,7 +1115,7 @@ function resortPage(r) {
     ...(ages ? [["Best ages", ages]] : []),
     ["Closest airport", r.airport_name || r.airport_iata ? `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim() : "Not confirmed"],
     ["Transfer time", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed"],
-    ["Kids club", r.kids_club ? (r.kc_min != null ? `Yes (from age ${r.kc_min})` : "Yes — minimum age not confirmed") : "Not confirmed"],
+    ["Kids club", r.kids_club ? (r.kc_min != null ? `Yes — ages ${r.kc_min}${r.kc_max != null ? `–${r.kc_max}` : "+"}` : "Yes — minimum age not confirmed") : "Not confirmed"],
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
     ["Pools", r.water_park ? "Yes + water park" : (r.pool ? "Yes" : "Not confirmed")],
     ["All-inclusive", r.all_inclusive ? "Yes — live AI rates seen" : "Not confirmed"],
@@ -1130,7 +1206,7 @@ ${lines.map((line) => `<li>${esc(line)}</li>`).join("")}
 })()}
 
 ${shownReviews.length ? `<h2>Recent guest reviews</h2>
-<p class="seo-sub">A few real guest reviews of ${esc(name)}, sourced from our booking partners. We display the most recent reviews that mention both pros and cons.</p>
+<p class="seo-sub">Real guest reviews of ${esc(name)} from our booking partners${familyEligible(r) ? ", with reviews from family travelers shown first" : ""}. We show both what guests liked and what they'd warn you about.</p>
 <ul class="seo-reviews">
 ${shownReviews.map((rv) => {
   const score = Number(rv.average_score);
@@ -1158,7 +1234,7 @@ ${shownReviews.map((rv) => {
     ${meta ? `<div class="seo-review-meta">${meta}</div>` : ""}
     ${rv.headline ? `<div class="seo-review-headline">${esc(rv.headline)}</div>` : ""}
     ${rv.pros ? `<p class="seo-review-pros"><strong>Liked:</strong> ${esc(rv.pros)}</p>` : ""}
-    ${rv.cons ? `<p class="seo-review-cons"><strong>Disliked:</strong> ${esc(rv.cons)}</p>` : ""}
+    ${rv.cons ? `<p class="seo-review-cons"><strong>${familyEligible(r) && /famil/i.test(String(rv.traveler_type_norm ?? "")) ? "Heads-up for parents:" : "Watch out:"}</strong> ${esc(rv.cons)}</p>` : ""}
   </li>`;
 }).join("")}
 </ul>` : ""}
@@ -1217,6 +1293,157 @@ window.__RESORT_BOOKING__ = ${JSON.stringify({
   });
 }
 
+// ---------- adults-only resort page (neutral, noindexed) ----------
+// Adults-only / age-restricted properties get a neutral database page:
+// no "family resort", "family vacation", "kids", or "family-friendly"
+// language, no family sections, and a noindex. They exist because the
+// search UI deep-links to them for groups traveling without children.
+function adultResortPage(r) {
+  const url = `${ORIGIN}${resortPath(r)}`;
+  const name = displayName(r);
+  const heroSrc = pageHero(r);
+  const hero = photoUrl(heroSrc, 1200);
+  const ownPhoto = !!(liteapiHero.get(r.resort_id) || r.photo_ref);
+  const r5 = ratingTo5(r.rating);
+  const shownReviews = selectReviews(reviewsByResort.get(r.resort_id) || [], false);
+  const reviewLd = shownReviews.map((rv) => reviewToJsonLd(rv, name)).filter(Boolean);
+
+  const neutralBadges = [
+    r.on_beach ? "Beachfront" : null,
+    r.water_park ? "Water park" : null,
+    r.pool && !r.water_park ? "Pools" : null,
+    r.all_inclusive ? "All-inclusive" : null,
+    r.spa ? "Spa" : null,
+    "Adults only",
+  ].filter(Boolean);
+  const facts = [
+    ...(r.stars ? [["Star class", `${r.stars}-star`]] : []),
+    ...(r5 != null ? [["Guest rating", `${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}`]] : []),
+    ["Location", r.area ? `${r.area}, ${r.country}` : r.country],
+    ...(r.airport_iata || r.airport_name ? [["Nearest airport", `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim()]] : []),
+    ["Airport transfer", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed"],
+    ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
+    ["Pools", r.water_park ? "Yes — plus water park" : (r.pool ? "Yes" : "Not confirmed")],
+    ["All-inclusive", r.all_inclusive ? "Yes — we've seen live all-inclusive rates" : "Not confirmed — check live rates"],
+    ["Audience", "Adults-only positioning — verify the exact age policy directly"],
+  ];
+  const qa = [
+    [`Is ${name} all-inclusive?`,
+      r.all_inclusive
+        ? `We've seen live all-inclusive rates for ${name} through our booking partners. Board types vary by room and date — search your dates to see current plans.`
+        : `We haven't seen all-inclusive rates for ${name} in recent live searches. Search your dates to see the meal plans actually on offer.`],
+    [`What is the age policy at ${name}?`,
+      `${name} is positioned as an adults-only property in our data. Minimum-age policies vary by resort and season — verify the exact requirement directly with the property before booking.`],
+    ...(r.transfer_min || r.airport_name || r.airport_iata ? [[`How far is ${name} from the airport?`,
+      r.transfer_min
+        ? `${name} is roughly ${r.transfer_min} minutes by road from ${r.airport_name || "the nearest airport"}${r.airport_iata ? ` (${r.airport_iata})` : ""}.`
+        : `The nearest airport we track for ${name} is ${r.airport_name || r.airport_iata}. We don't have a confirmed transfer time on file.`]] : []),
+    [`How much does a trip to ${name} cost?`,
+      `It depends on your origin airport, dates, and party — so we don't publish static prices. Run a KindredTrips search and we'll price live flights plus live hotel rates and rank this resort against every other Caribbean option by total trip cost.`],
+  ];
+  const siblings = (byCountry.get(r.country) || [])
+    .filter((s) => s.resort_id !== r.resort_id && !familyEligible(s))
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    .slice(0, 8);
+
+  const hotelLd = {
+    "@context": "https://schema.org",
+    "@type": "Resort",
+    name, url,
+    address: { "@type": "PostalAddress", addressCountry: r.country, ...(r.area ? { addressLocality: r.area } : {}) },
+    ...(r.lat && r.lng ? { geo: { "@type": "GeoCoordinates", latitude: r.lat, longitude: r.lng } } : {}),
+    ...(r.stars ? { starRating: { "@type": "Rating", ratingValue: r.stars } } : {}),
+    ...(r5 != null && r.reviews ? { aggregateRating: { "@type": "AggregateRating", ratingValue: r5, bestRating: 5, reviewCount: r.reviews } } : {}),
+    ...(hero ? { image: toAbs(hero) } : {}),
+    ...(reviewLd.length ? { review: reviewLd } : {}),
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: r.country, item: `${ORIGIN}${countryPath(r.country)}` },
+      { "@type": "ListItem", position: 4, name, item: url },
+    ],
+  };
+
+  const intro = `${name} is ${r.stars ? `a ${r.stars}-star` : "an"} adults-only resort in ${r.area ? `${r.area}, ` : ""}${r.country}${r.transfer_min ? `, about ${r.transfer_min} minutes from ${r.airport_name || r.airport_iata}` : ""}. KindredTrips tracks this resort as part of its Caribbean hotel database; it is not ranked on our family lists. ${r5 != null && r.reviews ? `Guests rate it ${r5}/5 across ${fmtInt(r.reviews)} reviews. ` : ""}Search your dates to price the complete trip — flights plus hotel — by total cost.`;
+
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(ownPhoto ? `${name} — resort in ${r.country}` : `${r.country} Caribbean coastline — illustrative photo`)}" loading="eager" /></div>` : ""}
+<h1>${esc(name)} — Resort Overview</h1>
+<p class="seo-sub">${esc(r.area ? `${r.area}, ${r.country}` : r.country)}${r.stars ? ` · ${r.stars}-star` : ""}${r5 != null ? ` · ${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}` : ""} · Adults only</p>
+<ul class="seo-badges">${neutralBadges.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+<p class="seo-lede">${esc(intro)}</p>
+
+${searchWidget({
+  country: r.country,
+  resortId: r.resort_id,
+  selfPath: resortPath(r),
+  headline: `See live prices for ${name}`,
+  sub: `Enter your airport and dates. We'll find live flights to ${r.airport_iata || r.country} and live hotel rates for this resort, right here on this page.`,
+})}
+
+<h2>At a glance</h2>
+<table class="seo-facts"><tbody>
+${facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}
+</tbody></table>
+
+${shownReviews.length ? `<h2>Recent guest reviews</h2>
+<p class="seo-sub">Real guest reviews of ${esc(name)} from our booking partners.</p>
+<ul class="seo-reviews">
+${shownReviews.map((rv) => {
+  const score = Number(rv.average_score);
+  const score5 = Number.isFinite(score) && score > 0 ? Math.round((score / 2) * 10) / 10 : null;
+  const meta = [rv.reviewer_country, rv.traveler_type_norm, rv.source ? `via ${rv.source}` : null].filter(Boolean).map(esc).join(" · ");
+  return `<li class="seo-review">
+    <div class="seo-review-head"><span class="seo-review-author">${esc(rv.reviewer_name || "Verified guest")}</span>${score5 != null ? `<span class="seo-review-score">${score5}/5</span>` : ""}</div>
+    ${meta ? `<div class="seo-review-meta">${meta}</div>` : ""}
+    ${rv.headline ? `<div class="seo-review-headline">${esc(rv.headline)}</div>` : ""}
+    ${rv.pros ? `<p class="seo-review-pros"><strong>Liked:</strong> ${esc(rv.pros)}</p>` : ""}
+    ${rv.cons ? `<p class="seo-review-cons"><strong>Watch out:</strong> ${esc(rv.cons)}</p>` : ""}
+  </li>`;
+}).join("")}
+</ul>` : ""}
+
+${siblings.length ? `<h2>Other adults-only properties in ${esc(r.country)}</h2>
+<ul class="seo-link-grid">
+${siblings.map((s) => `<li><a href="${resortPath(s)}">${esc(displayName(s))}</a><span class="seo-link-meta">${s.stars ? `${s.stars}★` : ""}</span></li>`).join("")}
+</ul>` : ""}
+
+<h2>${esc(name)} FAQ</h2>
+${faqHtml(qa)}
+<p class="seo-back"><a href="${countryPath(r.country)}">← ${esc(r.country)} guide</a></p>
+`;
+
+  return shell({
+    title: `${name} — Adults-Only Resort in ${r.country} | KindredTrips`,
+    description: clip(intro, 155),
+    canonical: url,
+    image: toAbs(hero),
+    imageAlt: `${name} — resort in ${r.country}`,
+    jsonld: [hotelLd, crumbLd, faqJsonLd(qa)],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: r.country, url: countryPath(r.country) },
+      { name, url },
+    ],
+    body,
+    noindex: true,
+    bodyScripts: `<script>
+window.__RESORT_BOOKING__ = ${JSON.stringify({
+  resort_id: r.resort_id,
+  resort_name: r.resort_name,
+  country: r.country,
+  airport_iata: r.airport_iata || null,
+}).replace(/</g, "\\u003C")};
+</script>
+<script src="/resort-booking.js?v=20260602"></script>`,
+  });
+}
+
 // ---------- country hub ----------
 function countryStats(list) {
   return {
@@ -1255,9 +1482,13 @@ function countryFaq(country, list) {
     [`How many family-friendly resorts are in ${country}?`,
      `KindredTrips tracks ${s.total} resort${s.total === 1 ? "" : "s"} in ${country}${s.adultsOnly ? ` (${s.total - s.adultsOnly} family-oriented, ${s.adultsOnly} adults-only)` : ""}, and ranks complete trips (flights plus hotel) to each by total cost for your family.`],
     [`Which ${country} resorts have a kids club?`,
-     `${s.kc} of the ${s.total} ${country} resorts we track have a confirmed kids club. You can require a kids club — and set its minimum age — in the KindredTrips search.`],
+     s.kc
+       ? `${s.kc} of the ${s.total} ${country} resorts we track have a confirmed kids club. You can require a kids club — and set its minimum age — in the KindredTrips search.`
+       : `KindredTrips does not currently track any ${country} resorts with a confirmed kids club. If drop-off childcare is essential, browse our Caribbean-wide kids-club rankings instead.`],
     [`Are there beachfront family resorts in ${country}?`,
-     `Yes — ${s.beach} of the ${country} resorts in our catalogue are directly on the beach${s.wp ? `, and ${s.wp} have a water park for kids` : ""}.`],
+     s.beach
+       ? `Yes — ${s.beach} of the ${country} resorts in our catalogue are directly on the beach${s.wp ? `, and ${s.wp} have a water park for kids` : ""}.`
+       : `No — KindredTrips does not currently track any beachfront family resorts in ${country}. See our Caribbean-wide beachfront rankings for nearby alternatives.`],
     [`Are there all-inclusive family resorts in ${country}?`,
      s.ai
        ? `Yes — we've seen live all-inclusive rates at ${s.ai} ${country} resort${s.ai === 1 ? "" : "s"} through our booking partners. Board options vary by date, so search your dates to see current plans.`
@@ -1336,6 +1567,35 @@ function countryPage(country) {
     ["Teen appeal", teenAppeal],
   ];
 
+  // Best areas for families: group family-eligible resorts by area.
+  const areaAgg = new Map();
+  for (const r of familyList) {
+    if (!r.area || r.area === country) continue;
+    if (!areaAgg.has(r.area)) areaAgg.set(r.area, []);
+    areaAgg.get(r.area).push(r);
+  }
+  const bestAreas = [...areaAgg.entries()]
+    .filter(([, rs]) => rs.length >= 2)
+    .map(([area, rs]) => ({ area, rs: rs.slice().sort(byScore) }))
+    .sort((a, b) => (b.rs.length + familyFitScore(b.rs[0]) / 100) - (a.rs.length + familyFitScore(a.rs[0]) / 100))
+    .slice(0, 4);
+
+  // Destination-level watch-outs and who-should-skip — derived from the
+  // same counts shown in Quick Take, phrased for parents.
+  const medianTransfer = s.transfers.length ? s.transfers[Math.floor(s.transfers.length / 2)] : null;
+  const destWatch = [];
+  if (s.total && s.adultsOnly / s.total >= 0.4) destWatch.push(`${s.adultsOnly} of the ${s.total} properties we track in ${country} are adults-only or age-restricted — a big share of the inventory here isn't bookable with kids.`);
+  if (!s.kc) destWatch.push(`No ${country} resort in our catalogue has a confirmed kids club.`);
+  if (!s.infant) destWatch.push(`No confirmed infant-ready resorts (infant acceptance or cribs) in our ${country} data yet.`);
+  if (medianTransfer != null && medianTransfer > 60) destWatch.push(`Airport transfers here commonly exceed an hour (typical is ~${medianTransfer} minutes) — plan the arrival day around it.`);
+  if (!s.sleeps5) destWatch.push(`No single rooms confirmed for parties of 5+ — larger families should price two-room setups.`);
+  const skipDest = [];
+  if (!s.kc) skipDest.push("Parents who need drop-off childcare to actually relax");
+  if (!s.infant) skipDest.push("Families with infants who need cribs confirmed in advance");
+  if (!s.sleeps5) skipDest.push("Families of 5+ set on a single room");
+  if (medianTransfer != null && medianTransfer > 60) skipDest.push("Anyone trying to minimize drive time after a full travel day");
+  if (!skipDest.length) skipDest.push(`Few — ${country} covers most family setups; let total trip cost for your dates decide.`);
+
   const eligibleSorted = list.filter(familyEligible);
   const toddlerTop = eligibleSorted.filter(toddlerFit).slice(0, 4);
   const teenTop = eligibleSorted
@@ -1379,11 +1639,26 @@ ${teenTop.length ? `<h2>${esc(country)} with teens</h2>
 ${teenTop.map(gridCard).join("\n")}
 </ul>` : ""}
 
+${bestAreas.length ? `<h2>Best areas of ${esc(country)} for families</h2>
+<ul class="seo-signal-list">
+${bestAreas.map(({ area, rs }) => `<li><strong>${esc(area)}</strong> — ${rs.length} family resort${rs.length === 1 ? "" : "s"} we track; strongest pick: <a href="${resortPath(rs[0])}">${esc(displayName(rs[0]))}</a>.</li>`).join("")}
+</ul>` : ""}
+
 ${easyReach.length ? `<h2>Easiest ${esc(country)} resorts to reach</h2>
 <p>Shortest confirmed airport transfers — the difference between "we're here!" and a carsick hour after a full travel day:</p>
 <ul class="seo-link-grid">
 ${easyReach.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a><span class="seo-link-meta">~${r.transfer_min} min from ${esc(r.airport_iata || r.airport_name || "airport")}</span></li>`).join("")}
 </ul>` : ""}
+
+${destWatch.length ? `<h2>Watch-outs for ${esc(country)}</h2>
+<ul class="seo-watchouts">
+${destWatch.map((w) => `<li>${esc(w)}</li>`).join("")}
+</ul>` : ""}
+
+<h2>Who should skip ${esc(country)}?</h2>
+<ul class="seo-signal-list">
+${skipDest.map((w) => `<li>${esc(w)}</li>`).join("")}
+</ul>
 
 <h2>All ${esc(country)} family resorts we track</h2>
 <ul class="seo-grid">
@@ -2127,7 +2402,10 @@ for (const [sa, sb] of COMPARE_PAIRS) {
 }
 
 let n = 0;
-for (const r of resorts) { write(`resort/${slugById.get(r.resort_id)}.html`, resortPage(r)); n++; }
+for (const r of resorts) {
+  write(`resort/${slugById.get(r.resort_id)}.html`, familyEligible(r) ? resortPage(r) : adultResortPage(r));
+  n++;
+}
 
 const noindexedCountries = [];
 for (const c of countries) {
@@ -2183,6 +2461,18 @@ const urls = [
   // Adults-only resort pages are noindexed, so they stay out of the sitemap.
   ...resorts.filter(familyEligible).map((r) => ({ loc: `${ORIGIN}${resortPath(r)}`, pr: "0.7", cf: "weekly" })),
 ];
+// Machine-readable stats for any other consumer (and for eyeballing
+// count drift in diffs).
+writeFileSync(join(ROOT, "data/site-stats.json"), JSON.stringify({
+  generated: TODAY,
+  resorts: STATS.resorts,
+  family_resorts: STATS.familyResorts,
+  family_resorts_display: STATS.familyDisplay,
+  resorts_display: STATS.resortsDisplay,
+  countries: STATS.countries,
+  airports: STATS.airports,
+}, null, 2) + "\n");
+
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${TODAY}</lastmod>\n    <changefreq>${u.cf}</changefreq>\n    <priority>${u.pr}</priority>\n  </url>`).join("\n")}
