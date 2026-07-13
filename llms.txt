@@ -1,10 +1,10 @@
 # KindredTrips
 
-> Caribbean family vacation discovery tool. Multi-destination cross-product search ranking flight + hotel combinations across every Caribbean airport and 900+ family-friendly resorts.
+> Caribbean family vacation discovery tool. Multi-destination cross-product search ranking flight + hotel combinations across every Caribbean airport and 520+ family-friendly resorts.
 
 ## What KindredTrips does
 
-KindredTrips is a search and ranking tool for American families planning Caribbean vacations. Unlike traditional online travel agencies (Booking.com, Expedia, Kayak), we let users skip picking a destination first. We compare across all 34 Caribbean destinations and 79 destination airports simultaneously, then rank results by total flight + hotel cost adjusted for family-fit factors.
+KindredTrips is a search and ranking tool for American families planning Caribbean vacations. Unlike traditional online travel agencies (Booking.com, Expedia, Kayak), we let users skip picking a destination first. We compare across all 30 Caribbean destinations and 56 destination airports simultaneously, then rank results by total flight + hotel cost adjusted for family-fit factors.
 
 ## What makes us different
 
@@ -15,9 +15,9 @@ KindredTrips is a search and ranking tool for American families planning Caribbe
 
 ## Coverage
 
-- 900+ family-friendly Caribbean resorts
-- 34 Caribbean destinations: Mexico, Dominican Republic, Bahamas, Jamaica, Aruba, Turks & Caicos, Barbados, Saint Lucia, Antigua, Curacao, Puerto Rico, Costa Rica, Belize, and others
-- 79 destination airports
+- 520+ family-friendly Caribbean resorts
+- 30 Caribbean destinations: Mexico, Dominican Republic, Jamaica, Saint Lucia, Barbados, Antigua and Barbuda, Costa Rica, Aruba, Colombia, Turks and Caicos, Bahamas, Curaçao, and others
+- 56 destination airports
 - 50+ US origin airports plus major Canadian hubs
 
 ## Audience
@@ -28,7 +28,7 @@ American families with children ages 0-12 planning Caribbean vacations, typicall
 
 1. User enters origin airport, travel dates, and family composition (adults, kids' ages)
 2. User toggles required amenities (kids club, all-inclusive, direct flights, connecting rooms)
-3. KindredTrips searches every flight + hotel combination across all 34 Caribbean destinations
+3. KindredTrips searches every flight + hotel combination across all 30 Caribbean destinations
 4. Results are ranked by total trip cost and family-fit score
 5. User clicks through to a partner booking site (Booking.com, airline sites, etc.) to complete the booking
 
@@ -66,7 +66,7 @@ Yes — KindredTrips has a "connecting rooms" filter that surfaces resorts that 
 ## Pages
 
 - [Homepage and search](https://kindredtrips.com/)
-- [All Caribbean destinations](https://kindredtrips.com/caribbean) — browse 900+ family resorts across 34 destinations
+- [All Caribbean destinations](https://kindredtrips.com/caribbean) — browse 520+ family resorts across 30 destinations
 - [About KindredTrips](https://kindredtrips.com/about.html)
 - [Privacy policy](https://kindredtrips.com/privacy.html)
 - [Contact](https://kindredtrips.com/contact.html)
