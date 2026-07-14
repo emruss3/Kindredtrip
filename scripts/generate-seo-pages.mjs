@@ -82,8 +82,15 @@ const ADULT_NAME_RE = new RegExp(
     "adults?\\s*only", "couples?\\s*only", "couples\\s*resort",
     "clothing\\s*optional", "nude", "au\\s*naturel", "topless",
     "temptation", "hedonism", "\\bsecrets\\b", "breathless",
-    "\\bzilara\\b", "\\bsandals\\b",
+    "\\bzilara\\b", "\\bsandals\\b", "\\bcouples\\b", "\\bexcellence\\b",
   ].join("|"), "i");
+// Explicit whitelist: properties that trip a brand keyword but are
+// genuinely family products. Each entry needs a reason.
+const FAMILY_WHITELIST = new Set([
+  // Excellence Collection's FAMILY brand is "Finest" — the parent-brand
+  // name in the resort name must not exclude it.
+  "finest-punta-cana-by-the-excellence-collection-all-inclusive",
+]);
 function nameMinAge(r) {
   let max = null;
   for (const m of String(r.resort_name).matchAll(/(\d{1,2})\s*\+/g)) {
@@ -95,7 +102,7 @@ function nameMinAge(r) {
 function isAdultOriented(r) {
   if (r.audience === "Adults Only") return true;
   const hay = `${r.resort_name} ${r.hotel_brand ?? ""} ${r.hotel_style ?? ""}`;
-  if (ADULT_NAME_RE.test(hay)) return true;
+  if (ADULT_NAME_RE.test(hay) && !FAMILY_WHITELIST.has(slugify(r.resort_name))) return true;
   const minAge = nameMinAge(r);
   return minAge != null && minAge >= 12;
 }
@@ -743,6 +750,9 @@ function cleanSnippet(s, max = 260) {
 function selectReviews(allReviews, wantFamily) {
   const usable = [];
   for (const rv of allReviews) {
+    // English-language site: skip reviews tagged in another language
+    // rather than showing untranslated text (untagged reviews pass).
+    if (rv.language && !/^en/i.test(String(rv.language))) continue;
     const pros = cleanSnippet(rv.pros);
     const cons = cleanSnippet(rv.cons);
     const headline = cleanSnippet(rv.headline, 120);
@@ -909,9 +919,13 @@ function themesForCountry(country) {
 // sitemap. (Atlantis and Baha Mar are not in the catalogue, so those
 // comparisons are intentionally absent.)
 const COMPARE_PAIRS = [
-  // Beaches Negril is service-excluded (duplicate LiteAPI ID → misbooking
-  // risk), so the Beaches head-to-head uses the flagship Jamaica property.
+  // Beaches Negril is not in LiteAPI's inventory at all (verified
+  // country-wide), so the Beaches head-to-head uses the flagship Jamaica
+  // property instead.
   ["beaches-turks-and-caicos", "beaches-ocho-rios"],
+  // "Atlantis vs Baha Mar" — LiteAPI sells Atlantis per tower; The Royal
+  // is the flagship family tower, Grand Hyatt is Baha Mar's family hotel.
+  ["the-royal-at-atlantis", "grand-hyatt-baha-mar"],
   ["hyatt-ziva-cancun", "finest-playa-mujeres"],
   ["moon-palace-cancun", "hyatt-ziva-cancun"],
   ["grand-velas-riviera-maya", "hotel-xcaret-mexico"],

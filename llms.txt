@@ -16,7 +16,7 @@ KindredTrips is a search and ranking tool for American families planning Caribbe
 ## Coverage
 
 - 520+ family-friendly Caribbean resorts
-- 30 Caribbean destinations: Mexico, Dominican Republic, Jamaica, Saint Lucia, Barbados, Antigua and Barbuda, Costa Rica, Aruba, Colombia, Turks and Caicos, Bahamas, Curaçao, and others
+- 30 Caribbean destinations: Mexico, Dominican Republic, Jamaica, Saint Lucia, Barbados, Antigua and Barbuda, Costa Rica, Bahamas, Aruba, Colombia, Turks and Caicos, Curaçao, and others
 - 56 destination airports
 - 50+ US origin airports plus major Canadian hubs
 
