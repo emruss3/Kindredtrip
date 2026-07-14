@@ -25,13 +25,22 @@ jobs:
       - name: Generate pages
         run: node scripts/generate-seo-pages.mjs
       - name: Commit if changed
+        id: commit
         run: |
           git config user.name "kindredtrips-bot"
           git config user.email "hello@kindredtrips.com"
           git add -A
           if git diff --cached --quiet; then
             echo "No changes."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: refresh SEO pages from live catalogue snapshot"
             git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+      # Push refreshed URLs to IndexNow (Bing/Yandex/etc). Google finds
+      # the sitemap via robots.txt + Search Console — no ping API exists.
+      # Non-fatal: indexing hints should never fail the refresh.
+      - name: Submit to IndexNow
+        if: steps.commit.outputs.changed == 'true'
+        run: node scripts/submit-indexnow.mjs || echo "IndexNow submission failed (non-fatal)"
