@@ -1,8 +1,11 @@
 name: CI
 
+# Build-blocking quality gates. Family-eligibility, canonical, dedupe,
+# and sitemap failures FAIL the build — programmatic page generation
+# must not scale until these pass (see scripts/lib/family-rules.mjs).
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
 
 jobs:
@@ -13,7 +16,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+
+      - name: Unit tests — family rules, content safety, indexability
+        run: node --test scripts/tests/*.test.mjs
 
       - name: Syntax-check inline JS in index.html
         run: |
@@ -29,43 +35,20 @@ jobs:
       - name: Syntax-check resort-booking.js
         run: node --check resort-booking.js
 
-      - name: Syntax-check the SEO generator
-        run: node --check scripts/generate-seo-pages.mjs
-
       - name: Regenerate SEO pages (must not error)
         run: node scripts/generate-seo-pages.mjs
 
       - name: Verify generator output is committed (no drift)
         run: |
-          if ! git diff --quiet -- resort caribbean sitemap.xml; then
+          if ! git diff --quiet -- resort caribbean from compare sitemap.xml index.html about.html llms.txt; then
             echo "::error::Generated pages are out of date. Run 'node scripts/generate-seo-pages.mjs' and commit the result."
-            git diff --stat -- resort caribbean sitemap.xml | head -20
+            git diff --stat -- resort caribbean from compare sitemap.xml index.html about.html llms.txt | head -20
             exit 1
           fi
           echo "Generated pages are in sync with the data snapshot"
 
-      - name: Validate JSON-LD across a sample of generated pages
-        run: |
-          node -e '
-            const fs = require("fs");
-            const path = require("path");
-            const files = fs.readdirSync("resort").filter(f => f.endsWith(".html"));
-            // Sample every 25th page to keep CI fast but representative.
-            const sample = files.filter((_, i) => i % 25 === 0);
-            let checked = 0, bad = 0;
-            const re = /<script type="application\/ld\+json">\n([\s\S]*?)\n<\/script>/g;
-            for (const f of sample) {
-              const html = fs.readFileSync(path.join("resort", f), "utf8");
-              let m;
-              while ((m = re.exec(html)) !== null) {
-                checked++;
-                try { JSON.parse(m[1]); }
-                catch (e) { bad++; console.error("BAD JSON-LD in " + f + ": " + e.message); }
-              }
-            }
-            console.log(`Checked ${checked} JSON-LD blocks across ${sample.length} pages, ${bad} invalid`);
-            if (bad > 0) process.exit(1);
-          '
+      - name: Validate generated site — crawl, sitemap, canonical, eligibility gates
+        run: node scripts/validate-site.mjs
 
       - name: Validate JSON data snapshots parse
         run: |

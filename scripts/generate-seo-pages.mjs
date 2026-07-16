@@ -31,8 +31,15 @@
 //   node scripts/generate-seo-pages.mjs
 //
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  slugify, displayName, nameMinAge, familyEligibility, familyEligible,
+  toddlerFit, hasFamilySignals as hasFamilySignalsRule, knownFieldCount,
+  familyFitScore, mayCallAllInclusive, countAnswer, cleanSnippet,
+  sentimentConflict, airportDisplay, GATES, indexability,
+} from "./lib/family-rules.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -69,43 +76,10 @@ const resorts = (() => {
   return out;
 })();
 
-// ---------- adult / age-restriction detection ----------
-// A resort is excluded from every family SEO surface when it is
-// positioned adults-only, couples-only, clothing-optional/nude, or its
-// name carries a minimum-age policy of 12+. These pages still exist (the
-// search UI deep-links to them) but are noindexed and never ranked.
-// Hard exclusion keywords: audience phrases plus adults-only /
-// couples-only brand names. Checked across name, brand, style, and the
-// structured audience field.
-const ADULT_NAME_RE = new RegExp(
-  [
-    "adults?\\s*only", "couples?\\s*only", "couples\\s*resort",
-    "clothing\\s*optional", "nude", "au\\s*naturel", "topless",
-    "temptation", "hedonism", "\\bsecrets\\b", "breathless",
-    "\\bzilara\\b", "\\bsandals\\b", "\\bcouples\\b", "\\bexcellence\\b",
-  ].join("|"), "i");
-// Explicit whitelist: properties that trip a brand keyword but are
-// genuinely family products. Each entry needs a reason.
-const FAMILY_WHITELIST = new Set([
-  // Excellence Collection's FAMILY brand is "Finest" — the parent-brand
-  // name in the resort name must not exclude it.
-  "finest-punta-cana-by-the-excellence-collection-all-inclusive",
-]);
-function nameMinAge(r) {
-  let max = null;
-  for (const m of String(r.resort_name).matchAll(/(\d{1,2})\s*\+/g)) {
-    const age = Number(m[1]);
-    if (age >= 2 && age <= 21 && (max == null || age > max)) max = age;
-  }
-  return max;
-}
-function isAdultOriented(r) {
-  if (r.audience === "Adults Only") return true;
-  const hay = `${r.resort_name} ${r.hotel_brand ?? ""} ${r.hotel_style ?? ""}`;
-  if (ADULT_NAME_RE.test(hay) && !FAMILY_WHITELIST.has(slugify(r.resort_name))) return true;
-  const minAge = nameMinAge(r);
-  return minAge != null && minAge >= 12;
-}
+// Family eligibility now lives in scripts/lib/family-rules.mjs — the
+// controlled FamilyEligibility vocabulary, the name/brand safety
+// detector, and the whitelist are imported above so the generator,
+// validator, and unit tests can never disagree.
 
 // ---------- transfer-time sanity check ----------
 // A few source rows carry impossible transfer times (e.g. "3 min from
@@ -179,23 +153,7 @@ const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function slugify(s) {
-  return String(s ?? "")
-    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
-    .replace(/\([^)]*\)/g, " ")          // drop parentheticals (date/age notes)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "")
-    .slice(0, 80) || "resort";
-}
 
-// Public display name: strip parenthetical policy notes ("(16+)",
-// "(Jan 5 to Mar 15 12+ Allowed …)") that live in some catalogue names.
-function displayName(r) {
-  const n = String(r.resort_name ?? "").replace(/\s*\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
-  return n || r.resort_name;
-}
 
 // US/Canadian origin airports — same set the homepage datalist offers, so
 // the inline wizard on SEO pages matches the homepage UX.
@@ -215,16 +173,6 @@ const ORIGIN_AIRPORTS = [
   ["YVR","Vancouver"],["YYC","Calgary"],["YYZ","Toronto Pearson"],
 ];
 
-// Default departure ~90 days out, 7-night trip — same defaults as the
-// homepage's setDefaultDates IIFE so the form looks reasonable on load.
-function defaultDates() {
-  const start = new Date();
-  start.setDate(start.getDate() + 90);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  const fmt = (d) => d.toISOString().slice(0, 10);
-  return { date_start: fmt(start), date_end: fmt(end) };
-}
 
 // Embedded search wizard. On resort pages, resort-booking.js intercepts
 // the form submit and runs the full Search → pricing → live offers flow
@@ -232,7 +180,6 @@ function defaultDates() {
 // form falls back to GET / for now, and the homepage's hydrate IIFE picks
 // up the params (no inline booking on country hubs yet).
 function searchWidget({ country, resortId, headline, sub, selfPath, originDefault }) {
-  const { date_start, date_end } = defaultDates();
   const opts = ORIGIN_AIRPORTS
     .map(([c, n]) => `<option value="${c}">${esc(n)} (${c})</option>`).join("");
   const hiddenCountry = country ? `<input type="hidden" name="country" value="${esc(country)}" />` : "";
@@ -258,11 +205,11 @@ function searchWidget({ country, resortId, headline, sub, selfPath, originDefaul
     <datalist id="seo-origin-airports">${opts}</datalist>
     <label class="seo-wizard-field">
       <span>Check-in</span>
-      <input type="date" name="date_start" value="${date_start}" required onchange="(function(e){var f=e.target.form;if(!f)return;var d=f.elements.date_end;if(d){d.min=e.target.value||'';if(d.value&&e.target.value&&d.value<e.target.value)d.value=e.target.value;}})(event)" />
+      <input type="date" name="date_start" value="" required onchange="(function(e){var f=e.target.form;if(!f)return;var d=f.elements.date_end;if(d){d.min=e.target.value||'';if(d.value&&e.target.value&&d.value<e.target.value)d.value=e.target.value;}})(event)" />
     </label>
     <label class="seo-wizard-field">
       <span>Check-out</span>
-      <input type="date" name="date_end" value="${date_end}" min="${date_start}" required />
+      <input type="date" name="date_end" value="" required />
     </label>
     <label class="seo-wizard-field">
       <span>Adults</span>
@@ -323,10 +270,6 @@ for (const r of resorts) {
 }
 const countries = [...byCountry.keys()].sort((a, b) => a.localeCompare(b));
 
-// Adults-only / age-restricted properties stay in the catalogue (the
-// search UI still prices them for groups without kids) but are never
-// ranked or indexed on family SEO surfaces.
-const familyEligible = (r) => !isAdultOriented(r);
 
 // ---------- single source of truth for public counts ----------
 const round10 = (n) => `${Math.floor(n / 10) * 10}+`;
@@ -343,55 +286,10 @@ const STATS = {
   airports: new Set(resorts.map((r) => r.airport_iata).filter(Boolean)).size,
 };
 
-// A destination page with fewer than this many family-eligible resorts
-// is too thin to index (it still exists for internal navigation, just
-// noindexed).
-const COUNTRY_INDEX_MIN = 5;
+const COUNTRY_INDEX_MIN = GATES.COUNTRY_MIN;
 
-// How many of the family-fit fields we actually know for this resort —
-// used for "thin data" watch-outs and comparison-page noindex decisions.
-function knownFieldCount(r) {
-  const keys = ["rating", "stars", "transfer_min", "family_max"];
-  let n = keys.filter((k) => r[k] != null).length;
-  // Booleans in the snapshot are real signals when true; false often
-  // means "unknown", so only count trues.
-  for (const k of ["kids_club", "on_beach", "water_park", "pool", "spa", "connecting", "infants", "cribs", "all_inclusive", "sofa_bed"]) {
-    if (r[k]) n++;
-  }
-  return n;
-}
 
-// Toddler fit = confirmed infant acceptance or confirmed crib
-// availability — and no minimum-age policy in the property name.
-const toddlerFit = (r) => (r.infants === true || r.cribs === true) && (nameMinAge(r) == null);
 
-// ---------- family-fit score ----------
-// The score that ranks every editorial list on the site. Inputs are ONLY
-// fields we actually track — the methodology block on ranked pages
-// describes exactly this. Live total-trip-cost ranking happens in search,
-// not here (prices depend on origin/dates/party, so static pages never
-// claim them).
-function familyFitScore(r) {
-  let s = 0;
-  if (r.rating != null) s += (Number(r.rating) / 100) * 25;      // guest rating (0–25)
-  if (r.kids_club) s += 12;                                      // kids club
-  if (r.on_beach) s += 10;                                       // beachfront
-  if (r.water_park) s += 8; else if (r.pool) s += 4;             // pools / water play
-  const fm = Number(r.family_max || 0);
-  if (fm >= 6) s += 8; else if (fm >= 5) s += 5;                 // room fit
-  if (r.connecting) s += 6;                                      // connecting rooms
-  if (r.infants) s += 3;                                         // infant policy
-  if (r.cribs) s += 3;                                           // cribs confirmed
-  if (r.all_inclusive) s += 5;                                   // live AI rates seen
-  if (r.transfer_min != null) {                                  // travel ease
-    if (r.transfer_min <= 30) s += 6;
-    else if (r.transfer_min <= 60) s += 3;
-    else if (r.transfer_min > 120) s -= 4;
-  }
-  if (Number(r.stars) >= 5) s += 4; else if (Number(r.stars) >= 4) s += 2;
-  if (!familyEligible(r)) s -= 100;                              // adults-only
-  return s;
-}
 
 const byScore = (a, b) => familyFitScore(b) - familyFitScore(a);
 
@@ -562,8 +460,8 @@ ${ld.map((o) => `<script type="application/ld+json">\n${JSON.stringify(o, null, 
     <a href="/" class="logo" aria-label="KindredTrips home"><img src="/logo.png" alt="KindredTrips" class="logo-img" /></a>
     <nav class="topbar-nav" aria-label="Primary">
       <a href="/caribbean" class="nav-link">Destinations</a>
-      <a href="/about.html" class="nav-link">About</a>
-      <a href="/contact.html" class="nav-link">Contact</a>
+      <a href="/about" class="nav-link">About</a>
+      <a href="/contact" class="nav-link">Contact</a>
       <a href="/#search-form" class="topbar-cta">Search trips</a>
     </nav>
   </div>
@@ -584,12 +482,15 @@ ${body}
       <a href="/caribbean/best-resorts-for-toddlers">Best for toddlers</a> ·
       <a href="/caribbean/best-resorts-for-family-of-5">Best for families of 5</a> ·
       <a href="/caribbean/best-beachfront-resorts">Best beachfront</a> ·
-      <a href="/about.html">About</a> ·
-      <a href="/contact.html">Contact</a> ·
-      <a href="/privacy.html">Privacy</a>
+      <a href="/about">About</a> ·
+      <a href="/contact">Contact</a> ·
+      <a href="/privacy">Privacy</a>
     </p>
   </div>
 </footer>
+<script>
+(function(){var f=function(d){return d.toISOString().slice(0,10)};var a=new Date();a.setDate(a.getDate()+90);var b=new Date(a);b.setDate(b.getDate()+7);document.querySelectorAll(".seo-wizard-form").forEach(function(fm){var s=fm.elements.date_start,e=fm.elements.date_end;if(s&&!s.value){s.value=f(a);s.min=f(new Date())}if(e&&!e.value){e.value=f(b);e.min=f(a)}});})();
+</script>
 ${bodyScripts || ""}
 </body>
 </html>`;
@@ -613,17 +514,10 @@ function familySignals(r) {
   return out;
 }
 
-// A resort only gets called "family-friendly" when it has at least one
-// confirmed family-positive signal — never by default.
-function hasFamilySignals(r) {
-  if (!familyEligible(r)) return false;
-  if (r.kids_club || r.water_park || toddlerFit(r) || r.connecting) return true;
-  if (Number(r.family_max) >= 5) return true;
-  if (r.family_room || r.child_allowed) return true;
-  const sig = signalsByResort.get(r.resort_id);
-  if (sig && Number(sig.family_review_count) >= 5) return true;
-  return false;
-}
+// hasFamilySignals needs the per-resort family-review counts, which
+// live in the review bundle — wrap the shared rule with that lookup.
+const hasFamilySignals = (r) =>
+  hasFamilySignalsRule(r, signalsByResort.get(r.resort_id)?.family_review_count ?? 0);
 
 function resortIntro(r) {
   const name = displayName(r);
@@ -660,7 +554,7 @@ function factList(r) {
   if (r.area) facts.push(["Location", `${r.area}, ${r.country}`]);
   else facts.push(["Country", r.country]);
   if (r.airport_iata || r.airport_name) {
-    facts.push(["Nearest airport", `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim()]);
+    facts.push(["Nearest airport", airportDisplay(r)]);
   }
   facts.push(["Airport transfer", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed — check when booking"]);
   facts.push(["Kids club", r.kids_club
@@ -729,21 +623,6 @@ function familySignalLines(s) {
   return out;
 }
 
-// Clean a review snippet for display: collapse whitespace, drop
-// too-short fragments, and trim awkward mid-word truncations back to a
-// sentence boundary (or add an honest ellipsis).
-function cleanSnippet(s, max = 260) {
-  if (!s) return null;
-  let t = String(s).replace(/\s+/g, " ").trim();
-  if (t.length < 25) return null;
-  if (t.length > max) t = t.slice(0, max);
-  if (!/[.!?…)]$/.test(t)) {
-    const cut = Math.max(t.lastIndexOf(". "), t.lastIndexOf("! "), t.lastIndexOf("? "));
-    if (cut > 60) t = t.slice(0, cut + 1);
-    else t = t.replace(/\s+\S*$/, "") + "…";
-  }
-  return t;
-}
 
 // Pick displayable reviews for a resort page: family travelers first,
 // then couples/other; every shown snippet must survive cleaning.
@@ -753,6 +632,7 @@ function selectReviews(allReviews, wantFamily) {
     // English-language site: skip reviews tagged in another language
     // rather than showing untranslated text (untagged reviews pass).
     if (rv.language && !/^en/i.test(String(rv.language))) continue;
+    if (sentimentConflict(rv)) continue; // mislabeled pros/cons — unsafe to show
     const pros = cleanSnippet(rv.pros);
     const cons = cleanSnippet(rv.cons);
     const headline = cleanSnippet(rv.headline, 120);
@@ -842,7 +722,7 @@ ${qa.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></det
 // themed page is only published when at least THEME_MIN resorts match,
 // so every page has a substantive list. Generated per-country and as a
 // cross-Caribbean "best of" hub. Adults-only properties never match.
-const THEME_MIN = 5;
+const THEME_MIN = GATES.THEME_MIN;
 const THEMES = [
   {
     slug: "all-inclusive-family-resorts", globalSlug: "best-all-inclusive-family-resorts",
@@ -1127,7 +1007,7 @@ function resortPage(r) {
     ["Best for", bestFor.join(" · ")],
     ["Not ideal for", notIdealFor(r)],
     ...(ages ? [["Best ages", ages]] : []),
-    ["Closest airport", r.airport_name || r.airport_iata ? `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim() : "Not confirmed"],
+    ["Closest airport", airportDisplay(r) || "Not confirmed"],
     ["Transfer time", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed"],
     ["Kids club", r.kids_club ? (r.kc_min != null ? `Yes — ages ${r.kc_min}${r.kc_max != null ? `–${r.kc_max}` : "+"}` : "Yes — minimum age not confirmed") : "Not confirmed"],
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
@@ -1334,7 +1214,7 @@ function adultResortPage(r) {
     ...(r.stars ? [["Star class", `${r.stars}-star`]] : []),
     ...(r5 != null ? [["Guest rating", `${r5}/5${r.reviews ? ` (${fmtInt(r.reviews)} reviews)` : ""}`]] : []),
     ["Location", r.area ? `${r.area}, ${r.country}` : r.country],
-    ...(r.airport_iata || r.airport_name ? [["Nearest airport", `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim()]] : []),
+    ...(airportDisplay(r) ? [["Nearest airport", airportDisplay(r)]] : []),
     ["Airport transfer", r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed"],
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
     ["Pools", r.water_park ? "Yes — plus water park" : (r.pool ? "Yes" : "Not confirmed")],
@@ -1478,11 +1358,9 @@ function countryStats(list) {
       for (const r of list) {
         const key = r.airport_iata || r.airport_name;
         if (!key) continue;
-        const label = r.airport_name
-          ? `${r.airport_name}${r.airport_iata ? ` (${r.airport_iata})` : ""}`
-          : r.airport_iata;
+        const label = airportDisplay(r);
         const prev = byKey.get(key);
-        if (!prev || (r.airport_name && !prev.includes("("))) byKey.set(key, label);
+        if (!prev || (label && label.includes("—") && !prev.includes("—"))) byKey.set(key, label);
       }
       return [...byKey.values()];
     })(),
@@ -1948,7 +1826,7 @@ ${faqHtml(qa)}
 <p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
 `;
   return shell({
-    title: `${t.globalH} (${new Date().getFullYear()}) | KindredTrips`,
+    title: `${t.globalH} | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
     image: toAbs(hero),
@@ -2103,6 +1981,10 @@ ${faqHtml(qa)}
 `;
 
   return shell({
+    // Indexability gate: origin pages need REAL airfare data; distance
+    // estimates alone don't qualify. noindex,follow until wired to live
+    // flight data.
+    noindex: true,
     title: `Best Family Vacations from ${ap.city} (${ap.code}) — Ranked | KindredTrips`,
     description: clip(`Best Caribbean family vacations from ${ap.city}: ${ranked.length} ranked resorts, estimated flight times, all-inclusive and toddler picks, priced live for your family.`, 155),
     canonical: url,
@@ -2123,7 +2005,7 @@ function compareValue(r, key) {
     case "dest": return r.area ? `${r.area}, ${r.country}` : r.country;
     case "stars": return r.stars ? `${r.stars}-star` : "Not confirmed";
     case "rating": { const v = ratingTo5(r.rating); return v != null ? `${v}/5${r.reviews ? ` (${fmtInt(r.reviews)})` : ""}` : "Not confirmed"; }
-    case "airport": return r.airport_name || r.airport_iata ? `${r.airport_name || ""}${r.airport_iata ? ` (${r.airport_iata})` : ""}`.trim() : "Not confirmed";
+    case "airport": return airportDisplay(r) || "Not confirmed";
     case "transfer": return r.transfer_min ? `~${r.transfer_min} min` : "Not confirmed";
     case "kids_club": return r.kids_club ? "Yes" : "Not confirmed";
     case "beach": return r.on_beach ? "Yes" : "Not confirmed";
@@ -2463,9 +2345,9 @@ patchCounts();
 const staticUrls = [
   { loc: `${ORIGIN}/`, pr: "1.0", cf: "daily" },
   { loc: `${ORIGIN}/caribbean`, pr: "0.9", cf: "weekly" },
-  { loc: `${ORIGIN}/about.html`, pr: "0.6", cf: "monthly" },
-  { loc: `${ORIGIN}/contact.html`, pr: "0.5", cf: "monthly" },
-  { loc: `${ORIGIN}/privacy.html`, pr: "0.3", cf: "yearly" },
+  { loc: `${ORIGIN}/about`, pr: "0.6", cf: "monthly" },
+  { loc: `${ORIGIN}/contact`, pr: "0.5", cf: "monthly" },
+  { loc: `${ORIGIN}/privacy`, pr: "0.3", cf: "yearly" },
 ];
 const urls = [
   ...staticUrls,
@@ -2473,7 +2355,8 @@ const urls = [
     .filter((c) => !noindexedCountries.includes(c))
     .map((c) => ({ loc: `${ORIGIN}${countryPath(c)}`, pr: "0.8", cf: "weekly" })),
   ...themeUrls,
-  ...FROM_AIRPORTS.map((a) => ({ loc: `${ORIGIN}${fromPath(a)}`, pr: "0.7", cf: "weekly" })),
+  // /from pages are noindex until they carry real airfare data (their
+  // flight times are distance estimates) — kept out of the sitemap.
   ...compareOutputs.filter((c) => !c.thin).map((c) => ({ loc: `${ORIGIN}${c.path}`, pr: "0.6", cf: "monthly" })),
   // Adults-only resort pages are noindexed, so they stay out of the sitemap.
   ...resorts.filter(familyEligible).map((r) => ({ loc: `${ORIGIN}${resortPath(r)}`, pr: "0.7", cf: "weekly" })),
@@ -2490,11 +2373,40 @@ writeFileSync(join(ROOT, "data/site-stats.json"), JSON.stringify({
   airports: STATS.airports,
 }, null, 2) + "\n");
 
+// Honest lastmod: hash each page's stable content (the search widget's
+// default dates change every generation and are NOT a meaningful
+// change) and only advance lastmod when the hash actually changed.
+const lastmodPath = join(ROOT, "data/lastmod.json");
+let lastmodManifest = {};
+try { lastmodManifest = JSON.parse(readFileSync(lastmodPath, "utf8")); } catch { /* first run */ }
+function urlToFile(loc) {
+  const path = loc.replace(ORIGIN, "");
+  if (path === "/" || path === "") return "index.html";
+  if (path === "/caribbean") return "caribbean/index.html";
+  if (/\.html$/.test(path)) return path.slice(1);
+  return `${path.slice(1)}.html`;
+}
+function lastmodFor(loc) {
+  const file = join(ROOT, urlToFile(loc));
+  if (!existsSync(file)) return TODAY;
+  const stable = readFileSync(file, "utf8")
+    .replace(/value="20\d\d-\d\d-\d\d"/g, "")
+    .replace(/min="20\d\d-\d\d-\d\d"/g, "");
+  const hash = createHash("sha256").update(stable).digest("hex").slice(0, 16);
+  const prev = lastmodManifest[loc];
+  if (prev && prev.hash === hash) return prev.lastmod;
+  lastmodManifest[loc] = { hash, lastmod: TODAY };
+  return TODAY;
+}
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${TODAY}</lastmod>\n    <changefreq>${u.cf}</changefreq>\n    <priority>${u.pr}</priority>\n  </url>`).join("\n")}
+${urls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${lastmodFor(u.loc)}</lastmod>\n    <changefreq>${u.cf}</changefreq>\n    <priority>${u.pr}</priority>\n  </url>`).join("\n")}
 </urlset>
 `;
+// Prune manifest entries for URLs no longer in the sitemap.
+const liveUrls = new Set(urls.map((u) => u.loc));
+for (const k of Object.keys(lastmodManifest)) if (!liveUrls.has(k)) delete lastmodManifest[k];
+writeFileSync(lastmodPath, JSON.stringify(lastmodManifest));
 writeFileSync(join(ROOT, "sitemap.xml"), sitemap);
 
 console.log(`Stats: ${STATS.resorts} resorts (${STATS.familyResorts} family-eligible), ${STATS.countries} countries, ${STATS.airports} airports.`);
