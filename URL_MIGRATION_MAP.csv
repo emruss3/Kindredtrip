@@ -1,0 +1,13 @@
+old_url,new_canonical_url,status_code,reason
+https://kindredtrips.com/about.html,https://kindredtrips.com/about,308,vercel cleanUrls; canonical+sitemap+internal links now extensionless
+https://kindredtrips.com/contact.html,https://kindredtrips.com/contact,308,vercel cleanUrls; canonical+sitemap+internal links now extensionless
+https://kindredtrips.com/privacy.html,https://kindredtrips.com/privacy,308,vercel cleanUrls; canonical+sitemap+internal links now extensionless
+https://kindredtrips.com/caribbean/brazil,https://kindredtrips.com/caribbean,301,country removed from catalogue (vercel.json redirect)
+https://kindredtrips.com/caribbean/brazil/*,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/ecuador,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/ecuador/*,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/peru,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/peru/*,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/united-states,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/united-states/*,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/from/*/family-vacations,https://kindredtrips.com/from/*/family-vacations,200,kept live but noindex-follow until real airfare data exists; removed from sitemap

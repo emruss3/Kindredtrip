@@ -11,6 +11,22 @@
       "destination": "/$1"
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.kindredtrips.com" }],
+      "destination": "https://kindredtrips.com/:path*",
+      "permanent": true
+    },
+    { "source": "/caribbean/brazil", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/brazil/:path*", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/ecuador", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/ecuador/:path*", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/peru", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/peru/:path*", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/united-states", "destination": "/caribbean", "permanent": true },
+    { "source": "/caribbean/united-states/:path*", "destination": "/caribbean", "permanent": true }
+  ],
   "headers": [
     {
       "source": "/(.*\\.html)",
@@ -32,6 +48,18 @@
     },
     {
       "source": "/caribbean/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/from/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/compare/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800" }
       ]
