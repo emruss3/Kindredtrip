@@ -8,6 +8,12 @@
     }
   ],
   "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.kindredtrips.com" }],
+      "destination": "https://kindredtrips.com/:path*",
+      "permanent": true
+    },
     { "source": "/caribbean/brazil", "destination": "/caribbean", "permanent": true },
     { "source": "/caribbean/brazil/:path*", "destination": "/caribbean", "permanent": true },
     { "source": "/caribbean/ecuador", "destination": "/caribbean", "permanent": true },

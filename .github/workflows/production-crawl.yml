@@ -1,0 +1,27 @@
+name: Production crawl
+
+# Post-deployment verification: crawls the LIVE site (or a preview URL)
+# and fails on any P0 error — wrong status codes, redirect chains,
+# canonical mismatches, robots drift, or an adult-brand canary appearing
+# in a family context. Run manually after every deploy, or point it at a
+# Vercel preview URL before merging.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL to crawl"
+        required: true
+        default: "https://kindredtrips.com"
+  schedule:
+    - cron: "47 10 * * 1" # Mondays, after the weekly SEO refresh
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Crawl deployed site
+        run: node scripts/crawl-production.mjs "${{ github.event.inputs.base_url || 'https://kindredtrips.com' }}"

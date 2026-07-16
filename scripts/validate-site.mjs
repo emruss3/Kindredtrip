@@ -255,6 +255,102 @@ for (const [f, p] of pages) {
   }
 }
 
+// ---------- HTML-level canaries (final rendered output) ----------
+{
+  const jam = pages.get("caribbean/jamaica.html");
+  if (jam) {
+    const familyPortion = jam.html.split(/<h2>Adults-only properties in /)[0];
+    for (const canary of ["Sandals Royal Plantation", "Hedonism", "Couples Tower Isle", "Grand Lido"]) {
+      if (familyPortion.includes(canary)) fail("CANARY-HTML", `jamaica family section contains "${canary}"`);
+    }
+  }
+  const srp = pages.get("resort/sandals-royal-plantation.html");
+  if (srp) {
+    const body = srp.html.slice(srp.html.indexOf("<main"), srp.html.indexOf("</main>"));
+    if (/family-friendly/i.test(body)) fail("CANARY-HTML", "sandals-royal-plantation page says family-friendly");
+  }
+  const westin = [...pages.keys()].find((f) => f.includes("westin-reserva-conchal"));
+  if (westin && !isIndexable(pages.get(westin))) fail("CANARY-HTML", "Westin Reserva Conchal (family canary) is noindexed");
+}
+
+// ---------- broken internal links (redirect-aware) ----------
+{
+  const redirects = (() => {
+    try {
+      return (JSON.parse(read("vercel.json")).redirects ?? []).map((r) => r.source.replace("/:path*", ""));
+    } catch { return []; }
+  })();
+  const redirected = (href) => redirects.some((src) => href === src || href.startsWith(src + "/"));
+  const broken = new Map();
+  for (const [f, p] of pages) {
+    for (const m of p.html.matchAll(/href="(\/(?:resort|caribbean|from|compare)\/[^"#?]+)"/g)) {
+      const href = m[1];
+      const target = `${href.slice(1)}.html`;
+      if (!pages.has(target) && href !== "/caribbean" && !redirected(href)) {
+        broken.set(href, f);
+      }
+    }
+  }
+  for (const [href, f] of broken) fail("BROKEN-LINK", `${f} links ${href} (no page, no redirect)`);
+}
+
+// ---------- provider restrictions must not leak into display names ----------
+for (const [f, p] of pages) {
+  const h1 = p.html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? "";
+  if (/\((?:[^)]*(?:only|nude|clothing|allowed|refundable)[^)]*)\)/i.test(h1)) {
+    fail("H1-RESTRICTION", `${f} h1 leaks a provider restriction: "${h1.replace(/<[^>]+>/g, "").slice(0, 80)}"`);
+  }
+}
+
+// ---------- filter-derived titles: any "All-Inclusive"-titled list page ----------
+{
+  const aiOk = new Set(resorts.filter((r) => r.all_inclusive === true).map((r) => slugify(r.resort_name)));
+  for (const [f, p] of pages) {
+    if (!/All-Inclusive/i.test(p.title)) continue;
+    if (f.startsWith("resort/") || f.startsWith("compare/")) continue; // single-entity pages describe their own status
+    const listPortion = p.html.split(/<h2>More "best of the Caribbean" lists|<h2>By destination/)[0];
+    for (const m of listPortion.matchAll(/href="\/resort\/([a-z0-9-]+)"/g)) {
+      if (slugElig.has(m[1]) && !aiOk.has(m[1])) {
+        fail("AI-TITLE", `${f} titled All-Inclusive lists unverified ${m[1]}`);
+      }
+    }
+  }
+}
+
+// ---------- duplicate meta descriptions on indexable pages ----------
+{
+  const descSeen = new Map();
+  for (const [f, p] of pages) {
+    if (!isIndexable(p)) continue;
+    const d = p.html.match(/name="description" content="([^"]*)"/)?.[1] ?? "";
+    if (!d) { fail("DESC", `${f} missing meta description`); continue; }
+    if (descSeen.has(d)) fail("DESC-DUPE", `duplicate description on ${f} and ${descSeen.get(d)}`);
+    descSeen.set(d, f);
+  }
+}
+
+// ---------- route manifest consistency ----------
+{
+  const manifest = JSON.parse(read("data/route-manifest.json"));
+  const manifestUrls = new Set(manifest.map((r) => r.url));
+  // Every generated page must be in the manifest and vice versa.
+  for (const f of pages.keys()) {
+    if (!manifestUrls.has(urlOf(f))) fail("MANIFEST", `${f} generated but not in route manifest`);
+  }
+  for (const r of manifest) {
+    const rel = r.url.replace(ORIGIN, "").replace(/^\//, "");
+    const file = rel === "" ? "index.html" : rel === "caribbean" ? "caribbean/index.html" : `${rel}.html`;
+    if (!pages.has(file)) fail("MANIFEST", `${r.url} in manifest but no page generated`);
+  }
+  // Homepage destination navigation must only reference manifest routes.
+  const home = pages.get("index.html");
+  if (home) {
+    for (const m of home.html.matchAll(/href="(\/caribbean\/[a-z0-9-]+)"/g)) {
+      if (!manifestUrls.has(`${ORIGIN}${m[1]}`)) fail("NAV-MANIFEST", `homepage links ${m[1]} which is not a published route`);
+    }
+  }
+}
+
 // ---------- INDEXABILITY_REPORT.csv ----------
 {
   const rows = [["url", "template", "indexable", "robots", "canonical", "in_sitemap"]];

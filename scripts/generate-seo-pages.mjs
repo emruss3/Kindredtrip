@@ -1745,7 +1745,9 @@ ${faqHtml(qa)}
 `;
   return shell({
     title: `${title} — Ranked by Family Fit | KindredTrips`,
-    description: clip(intro, 155),
+    // Lead with the page-unique part (theme + country + count) so
+    // clipping can never produce identical descriptions across countries.
+    description: clip(`${title}: ${n} verified pick${n === 1 ? "" : "s"} ranked by family fit — features, watch-outs, and live total-trip pricing for your family.`, 155),
     canonical: url,
     image: toAbs(hero),
     imageAlt: title,
@@ -2361,6 +2363,24 @@ const urls = [
   // Adults-only resort pages are noindexed, so they stay out of the sitemap.
   ...resorts.filter(familyEligible).map((r) => ({ loc: `${ORIGIN}${resortPath(r)}`, pr: "0.7", cf: "weekly" })),
 ];
+// Published-route manifest: the single list of routes this build
+// produced. Navigation, sitemap checking, and the production crawler all
+// consume this — a destination that didn't generate a page can never
+// appear in navigation.
+const routeManifest = [
+  { url: `${ORIGIN}/`, template: "home", indexable: true },
+  { url: `${ORIGIN}/caribbean`, template: "index", indexable: true },
+  { url: `${ORIGIN}/about`, template: "static", indexable: true },
+  { url: `${ORIGIN}/contact`, template: "static", indexable: true },
+  { url: `${ORIGIN}/privacy`, template: "static", indexable: true },
+  ...countries.map((c) => ({ url: `${ORIGIN}${countryPath(c)}`, template: "country", indexable: !noindexedCountries.includes(c) })),
+  ...themeUrls.map((u) => ({ url: u.loc, template: "theme", indexable: true })),
+  ...FROM_AIRPORTS.map((a) => ({ url: `${ORIGIN}${fromPath(a)}`, template: "from", indexable: false })),
+  ...compareOutputs.map((c) => ({ url: `${ORIGIN}${c.path}`, template: "compare", indexable: !c.thin })),
+  ...resorts.map((r) => ({ url: `${ORIGIN}${resortPath(r)}`, template: "resort", indexable: familyEligible(r) })),
+];
+writeFileSync(join(ROOT, "data/route-manifest.json"), JSON.stringify(routeManifest));
+
 // Machine-readable stats for any other consumer (and for eyeballing
 // count drift in diffs).
 writeFileSync(join(ROOT, "data/site-stats.json"), JSON.stringify({
