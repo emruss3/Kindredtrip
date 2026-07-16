@@ -1,0 +1,46 @@
+name: Refresh SEO pages
+
+# Regenerates the static SEO pages from the live catalogue snapshot so
+# resort data, rankings, and public counts never go stale. The snapshot
+# comes from the seo_snapshot Supabase edge function (anon key — public
+# by design). Commits only when output actually changed.
+on:
+  schedule:
+    - cron: "17 9 * * 1" # Mondays 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch catalogue snapshot
+        run: node scripts/fetch-seo-snapshot.mjs
+      - name: Generate pages
+        run: node scripts/generate-seo-pages.mjs
+      - name: Commit if changed
+        id: commit
+        run: |
+          git config user.name "kindredtrips-bot"
+          git config user.email "hello@kindredtrips.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore: refresh SEO pages from live catalogue snapshot"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Push refreshed URLs to IndexNow (Bing/Yandex/etc). Google finds
+      # the sitemap via robots.txt + Search Console — no ping API exists.
+      # Non-fatal: indexing hints should never fail the refresh.
+      - name: Submit to IndexNow
+        if: steps.commit.outputs.changed == 'true'
+        run: node scripts/submit-indexnow.mjs || echo "IndexNow submission failed (non-fatal)"

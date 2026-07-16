@@ -1,0 +1,57 @@
+name: CI
+
+# Build-blocking quality gates. Family-eligibility, canonical, dedupe,
+# and sitemap failures FAIL the build — programmatic page generation
+# must not scale until these pass (see scripts/lib/family-rules.mjs).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Unit tests — family rules, content safety, indexability
+        run: node --test scripts/tests/*.test.mjs
+
+      - name: Syntax-check inline JS in index.html
+        run: |
+          start=$(grep -n '^<script>$' index.html | head -1 | cut -d: -f1)
+          end=$(awk -v s="$start" 'NR>s && /^<\/script>$/{print NR; exit}' index.html)
+          if [ -z "$start" ] || [ -z "$end" ]; then
+            echo "Could not locate the inline <script> block"; exit 1
+          fi
+          sed -n "$((start+1)),$((end-1))p" index.html > /tmp/index-inline.js
+          node --check /tmp/index-inline.js
+          echo "index.html inline JS OK"
+
+      - name: Syntax-check resort-booking.js
+        run: node --check resort-booking.js
+
+      - name: Regenerate SEO pages (must not error)
+        run: node scripts/generate-seo-pages.mjs
+
+      - name: Verify generator output is committed (no drift)
+        run: |
+          if ! git diff --quiet -- resort caribbean from compare sitemap.xml index.html about.html llms.txt; then
+            echo "::error::Generated pages are out of date. Run 'node scripts/generate-seo-pages.mjs' and commit the result."
+            git diff --stat -- resort caribbean from compare sitemap.xml index.html about.html llms.txt | head -20
+            exit 1
+          fi
+          echo "Generated pages are in sync with the data snapshot"
+
+      - name: Validate generated site — crawl, sitemap, canonical, eligibility gates
+        run: node scripts/validate-site.mjs
+
+      - name: Validate JSON data snapshots parse
+        run: |
+          for f in data/*.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8')); console.log('OK: $f')"
+          done
