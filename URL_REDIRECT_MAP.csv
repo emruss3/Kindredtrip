@@ -1,0 +1,10 @@
+old_url,new_url,status_code,reason
+https://www.kindredtrips.com/*,https://kindredtrips.com/*,301,single canonical host (vercel.json host redirect; effective once production deploy is promoted)
+https://kindredtrips.com/about.html,https://kindredtrips.com/about,308,cleanUrls; canonical/sitemap/links extensionless
+https://kindredtrips.com/contact.html,https://kindredtrips.com/contact,308,cleanUrls
+https://kindredtrips.com/privacy.html,https://kindredtrips.com/privacy,308,cleanUrls
+https://kindredtrips.com/caribbean/brazil,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/ecuador,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/peru,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/caribbean/united-states,https://kindredtrips.com/caribbean,301,country removed from catalogue
+https://kindredtrips.com/from/*/family-vacations,https://kindredtrips.com/from/*/family-vacations,200,noindex-follow until real airfare data; excluded from sitemap
