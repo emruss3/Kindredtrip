@@ -36,7 +36,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   slugify, displayName, nameMinAge, familyEligibility, familyEligible,
-  toddlerFit, hasFamilySignals as hasFamilySignalsRule, knownFieldCount,
+  toddlerFit, infantFriendly, toddlerFriendly, toddlerScore,
+  hasFamilySignals as hasFamilySignalsRule, knownFieldCount,
   familyFitScore, mayCallAllInclusive, countAnswer, cleanSnippet,
   sentimentConflict, airportDisplay, GATES, indexability,
 } from "./lib/family-rules.mjs";
@@ -754,10 +755,19 @@ const THEMES = [
   },
   {
     slug: "resorts-for-toddlers", globalSlug: "best-resorts-for-toddlers",
-    countryH: (c) => `Best ${c} Resorts for Toddlers & Infants`,
-    globalH: "Best Caribbean Resorts for Toddlers & Infants",
-    blurb: "Resorts with confirmed infant-friendly signals — infant acceptance or crib availability — so the youngest travelers are actually welcome.",
-    match: (r) => familyEligible(r) && toddlerFit(r),
+    countryH: (c) => `Best ${c} Resorts for Toddlers`,
+    globalH: "Best Caribbean Resorts for Toddlers",
+    blurb: "Resorts with a verified kids-club minimum age of 3 or under — genuine programming for the 1–3 crowd, ranked by travel ease and room separation, not water parks.",
+    match: (r) => familyEligible(r) && toddlerFriendly(r),
+    sortScore: toddlerScore,
+    cardKind: "toddler",
+  },
+  {
+    slug: "infant-friendly-resorts", globalSlug: "best-infant-friendly-resorts",
+    countryH: (c) => `Infant-Friendly Family Resorts in ${c}`,
+    globalH: "Best Infant-Friendly Caribbean Resorts",
+    blurb: "Resorts that accept infants or provide cribs, with no minimum-age restriction — so the youngest travelers are genuinely welcome. (For verified toddler programs, see our best-for-toddlers list.)",
+    match: (r) => familyEligible(r) && infantFriendly(r),
   },
   {
     slug: "resorts-for-family-of-5", globalSlug: "best-resorts-for-family-of-5",
@@ -783,6 +793,12 @@ const THEMES = [
 ];
 const themeCountryPath = (t, c) => `/caribbean/${slugify(c)}/${t.slug}`;
 const themeGlobalPath = (t) => `/caribbean/${t.globalSlug}`;
+// A theme may override the ranking (e.g. the toddler theme ranks by
+// toddlerScore, not the general family-fit score).
+const themeCmp = (t) => {
+  const score = t.sortScore || familyFitScore;
+  return (a, b) => score(b) - score(a);
+};
 
 function themesForResort(r) {
   return THEMES.filter((t) => t.match(r));
@@ -933,6 +949,83 @@ function methodologyBlock() {
 <h2>How we ranked these resorts</h2>
 <p>Rankings use the KindredTrips family-fit score, computed from fields we actually track for each resort: confirmed family features (kids club, beachfront, pools or water park, room capacity, connecting rooms, infant/crib availability), guest rating and star class, whether we've seen live all-inclusive rates, and travel ease (airport transfer time where known). Adults-only properties are excluded from family rankings.</p>
 <p>What the score deliberately leaves out: <strong>price</strong>. Total trip cost depends on your origin airport, dates, and party — so instead of publishing stale numbers, every resort links to a live search that prices flights plus hotel for your exact family and re-ranks by total cost. Where a data field is missing we say "not confirmed" rather than guessing.</p>
+</section>`;
+}
+
+// ---------- toddler-specific rendering ----------
+// Cards on the toddler page lead on toddler facts (childcare age, cribs,
+// transfer time, room separation), NOT generic kids-club/beachfront/
+// water-park chips.
+function toddlerChips(r) {
+  const c = [];
+  if (r.kc_min != null) c.push(`Kids club from age ${r.kc_min}`);
+  if (r.cribs) c.push("Cribs available");
+  else if (r.infants) c.push("Infants welcome");
+  if (r.transfer_min != null && r.transfer_min <= 45) c.push(`~${r.transfer_min} min transfer`);
+  if (r.connecting) c.push("Connecting rooms");
+  else if (Number(r.family_max) >= 5) c.push(`Sleeps ${r.family_max}`);
+  if (r.on_beach) c.push("Beachfront");
+  else if (r.pool) c.push("Pool");
+  return c.slice(0, 5);
+}
+function toddlerWhy(r) {
+  const bits = [];
+  if (r.kc_min != null) bits.push(`kids club takes children from age ${r.kc_min}`);
+  if (r.transfer_min != null && r.transfer_min <= 45) bits.push(`short ${r.transfer_min}-minute airport transfer`);
+  else if (r.transfer_min != null && r.transfer_min <= 60) bits.push(`under-an-hour transfer`);
+  if (r.cribs) bits.push("cribs on request");
+  if (r.connecting) bits.push("connecting rooms to settle a napper next door");
+  else if (Number(r.family_max) >= 5) bits.push("room to separate the kids");
+  if (!bits.length) return whyItRanks(r);
+  const s = bits.slice(0, 3).join(", ");
+  return s.charAt(0).toUpperCase() + s.slice(1) + ".";
+}
+function toddlerWatch(r) {
+  if (r.transfer_min != null && r.transfer_min > 60) return `Airport transfer is ~${r.transfer_min} min — long for a toddler; plan the arrival day around a nap.`;
+  if (!r.on_beach) return "Not directly on the beach in our data — check how far the sand is with a stroller.";
+  if (!r.connecting && Number(r.family_max) < 5) return "No confirmed connecting rooms or 5-person room — early bedtimes share the room.";
+  return "Confirm the kids-club minimum age and crib availability for your exact dates before booking.";
+}
+function toddlerGridCard(r) {
+  const ph = photoUrl(pageHero(r), 600);
+  const r5 = ratingTo5(r.rating);
+  const chips = toddlerChips(r).slice(0, 3);
+  const name = displayName(r);
+  return `<li class="seo-card">
+  <a href="${resortPath(r)}" class="seo-card-link">
+    ${ph ? `<img class="seo-card-img" src="${ph}" alt="${esc(name)} — toddler-friendly resort in ${esc(r.country)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
+    <span class="seo-card-body">
+      <span class="seo-card-name">${esc(name)}</span>
+      <span class="seo-card-meta">${esc(r.area || r.country)}${r.kc_min != null ? ` · kids club from ${r.kc_min}` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
+      ${chips.length ? `<span class="seo-card-tags">${chips.map((b) => `<span>${esc(b)}</span>`).join("")}</span>` : ""}
+    </span>
+  </a>
+</li>`;
+}
+function toddlerRankedCard(r, rank) {
+  const ph = photoUrl(pageHero(r), 600);
+  const r5 = ratingTo5(r.rating);
+  const chips = toddlerChips(r);
+  const name = displayName(r);
+  return `<li class="seo-rank-card">
+  <div class="seo-rank-num" aria-hidden="true">${rank}</div>
+  ${ph ? `<img class="seo-rank-img" src="${ph}" alt="${esc(name)} — toddler-friendly resort in ${esc(r.country)}" loading="lazy" />` : ""}
+  <div class="seo-rank-body">
+    <h3 class="seo-rank-name"><a href="${resortPath(r)}">${esc(name)}</a></h3>
+    <p class="seo-rank-meta"><a href="${countryPath(r.country)}">${esc(r.country)}</a>${r.area ? ` · ${esc(r.area)}` : ""}${r5 != null ? ` · ${r5}/5` : ""}</p>
+    <p class="seo-rank-why"><strong>Why it ranks for toddlers:</strong> ${esc(toddlerWhy(r))}</p>
+    <p class="seo-rank-why"><strong>Childcare age:</strong> ${r.kc_min != null ? `kids club from age ${r.kc_min}${r.kc_max != null ? ` to ${r.kc_max}` : ""}` : "not confirmed"} · <strong>Cribs:</strong> ${r.cribs ? "available" : "not confirmed"} · <strong>Transfer:</strong> ${r.transfer_min != null ? `~${r.transfer_min} min` : "not confirmed"}</p>
+    <p class="seo-rank-watch"><strong>Watch out:</strong> ${esc(toddlerWatch(r))}</p>
+    ${chips.length ? `<ul class="seo-badges seo-badges-sm">${chips.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    <p class="seo-rank-cta"><a href="${resortPath(r)}">Price this resort for your family →</a></p>
+  </div>
+</li>`;
+}
+function toddlerMethodologyBlock() {
+  return `<section class="seo-method">
+<h2>How we rank toddler-friendly resorts</h2>
+<p>This list is deliberately strict. A resort only appears when we have a <strong>verified kids-club minimum age of 3 or under</strong> — the one toddler-grade programming signal we actually track (from the resort or brand's own published policy). "Accepts infants" or "has cribs" alone is <em>not</em> enough to call a resort one of the best for toddlers; those properties live on our <a href="/caribbean/best-infant-friendly-resorts">infant-friendly list</a> instead.</p>
+<p>Ranking weights what matters with a 1–3-year-old: a short airport transfer, a young childcare age, cribs, and the ability to separate the room for naps (connecting or larger rooms). It deliberately does <strong>not</strong> reward water parks, which are a big-kid feature. Fields we don't yet verify — nursery, shallow pools, stroller access, beach swimmability — are simply not claimed. Price isn't part of the score: run a live search to rank by total trip cost.</p>
 </section>`;
 }
 
@@ -1489,7 +1582,15 @@ function countryPage(country) {
   if (!skipDest.length) skipDest.push(`Few — ${country} covers most family setups; let total trip cost for your dates decide.`);
 
   const eligibleSorted = list.filter(familyEligible);
-  const toddlerTop = eligibleSorted.filter(toddlerFit).slice(0, 4);
+  // Infant/toddler section: verified-toddler resorts (young kids-club age)
+  // surface first via toddlerScore, then the broader infant-friendly set.
+  const verifiedToddler = eligibleSorted.filter(toddlerFriendly);
+  const infantTop = eligibleSorted.filter(infantFriendly).sort((a, b) => toddlerScore(b) - toddlerScore(a));
+  const toddlerTop = [
+    ...verifiedToddler.sort((a, b) => toddlerScore(b) - toddlerScore(a)),
+    ...infantTop.filter((r) => !toddlerFriendly(r)),
+  ].slice(0, 4);
+  const countryToddlerVerified = verifiedToddler.length;
   const teenTop = eligibleSorted
     .filter((r) => r.water_park || (r.pool && r.on_beach))
     .sort((a, b) => (b.water_park === true) - (a.water_park === true) || byScore(a, b))
@@ -1518,12 +1619,17 @@ ${picksStrip(list, { withTravel: true }) ? `<h2>Best family resorts in ${esc(cou
 <p class="seo-sub">Picked by family-fit score — confirmed family features, guest rating, and travel ease. Prices come from your live search.</p>
 ${picksStrip(list, { withTravel: true })}` : ""}
 
-${toddlerTop.length ? `<h2>${esc(country)} with toddlers</h2>
-<p>${esc(`${s.infant} ${country} resort${s.infant === 1 ? " shows" : "s show"} confirmed infant-friendly signals — infant acceptance or cribs on file. The strongest toddler picks by family-fit score:`)}</p>
+${toddlerTop.length ? `<h2>${esc(country)} with babies & toddlers</h2>
+<p>${esc(
+  countryToddlerVerified
+    ? `${countryToddlerVerified} ${country} resort${countryToddlerVerified === 1 ? " has" : "s have"} a verified kids-club minimum age of 3 or under; ${s.infant} in total show infant-friendly signals (infant acceptance or cribs). Ranked for the youngest travelers — childcare age, short transfers, room separation:`
+    : `${s.infant} ${country} resort${s.infant === 1 ? " shows" : "s show"} infant-friendly signals (infant acceptance or cribs). We don't yet have a verified toddler-program age for any ${country} resort, so these are ranked by travel ease and room separation:`
+)}</p>
 <ul class="seo-grid">
-${toddlerTop.map(gridCard).join("\n")}
+${toddlerTop.map(toddlerGridCard).join("\n")}
 </ul>
-${useCases.some((t) => t.slug === "resorts-for-toddlers") ? `<p><a href="${themeCountryPath(THEMES.find((t) => t.slug === "resorts-for-toddlers"), country)}">All ${esc(country)} toddler-ready resorts →</a></p>` : ""}` : ""}
+${useCases.some((t) => t.slug === "resorts-for-toddlers") ? `<p><a href="${themeCountryPath(THEMES.find((t) => t.slug === "resorts-for-toddlers"), country)}">All ${esc(country)} toddler-friendly resorts →</a></p>`
+  : `<p><a href="/caribbean/best-resorts-for-toddlers">See our Caribbean-wide best-for-toddlers list →</a></p>`}` : ""}
 
 ${teenTop.length ? `<h2>${esc(country)} with teens</h2>
 <p>Teens need more than a kiddie pool. These picks lead on water parks, pools, and beach access${s.wp ? ` — ${s.wp} ${country} resort${s.wp === 1 ? " has" : "s have"} a confirmed water park` : ""}:</p>
@@ -1709,10 +1815,14 @@ function themeCountryPage(t, country, matches) {
   const otherThemes = themesForCountry(country).filter((x) => x.slug !== t.slug);
   const ranked = matches.slice(0, 10);
   const rest = matches.slice(10);
+  const isToddler = t.cardKind === "toddler";
+  const rankedFn = isToddler ? toddlerRankedCard : rankedCard;
+  const gridFn = isToddler ? toddlerGridCard : gridCard;
+  const rankLabel = isToddler ? "ranked for toddlers (childcare age, travel ease, room separation)" : "ranked by family-fit score";
   const body = `
 ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(title)}" loading="eager" /></div>` : ""}
 <h1>${esc(title)}</h1>
-<p class="seo-sub">${n} resort${n === 1 ? "" : "s"} in ${esc(country)} · ranked by family-fit score</p>
+<p class="seo-sub">${n} resort${n === 1 ? "" : "s"} in ${esc(country)} · ${rankLabel}</p>
 <p class="seo-lede">${esc(intro)}</p>
 
 ${searchWidget({
@@ -1721,17 +1831,17 @@ ${searchWidget({
   sub: `Enter your airport, dates, and family. We'll price every resort below — live flights plus live hotel rates — ranked by total trip cost.`,
 })}
 
-${methodologyBlock()}
+${isToddler ? toddlerMethodologyBlock() : methodologyBlock()}
 
-${picksStrip(matches, { withTravel: true })}
+${isToddler ? "" : picksStrip(matches, { withTravel: true })}
 
 <h2>The ranking</h2>
 <ol class="seo-rank-list">
-${ranked.map((r, i) => rankedCard(r, i + 1)).join("\n")}
+${ranked.map((r, i) => rankedFn(r, i + 1)).join("\n")}
 </ol>
 ${rest.length ? `<h2>Also matching in ${esc(country)}</h2>
 <ul class="seo-grid">
-${rest.map(gridCard).join("\n")}
+${rest.map(gridFn).join("\n")}
 </ul>` : ""}
 
 <p class="seo-back"><a href="${countryPath(country)}">← All family resorts in ${esc(country)}</a> · <a href="${themeGlobalPath(t)}">${esc(t.globalH)} →</a></p>
@@ -1766,9 +1876,15 @@ function themeGlobalPage(t, matches) {
   const url = `${ORIGIN}${themeGlobalPath(t)}`;
   const ranked = matches.slice(0, 20);
   const rest = matches.slice(20, 68);
+  const isToddler = t.cardKind === "toddler";
+  const rankedFn = isToddler ? toddlerRankedCard : rankedCard;
+  const gridFn = isToddler ? toddlerGridCard : gridCard;
+  const rankLabel = isToddler ? "ranked for toddlers" : "ranked by family-fit score";
   const hero = photoUrl(pageHero(matches[0]), 1200);
   const countryList = [...new Set(matches.map((r) => r.country))];
-  const intro = `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these are the ${matches.length} resorts KindredTrips tracks that match — ranked by family-fit score, not just guest rating. Pick any and we'll price the complete trip (flights + hotel) for your family.`;
+  const intro = isToddler
+    ? `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these ${matches.length} resorts have a verified kids-club minimum age of 3 or under. Pick any and we'll price the complete trip (flights + hotel) for your family.`
+    : `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these are the ${matches.length} resorts KindredTrips tracks that match — ranked by family-fit score, not just guest rating. Pick any and we'll price the complete trip (flights + hotel) for your family.`;
   const qa = themeFaq(t, matches, "Caribbean resorts");
   const collectionLd = {
     "@context": "https://schema.org", "@type": "CollectionPage",
@@ -1795,22 +1911,22 @@ function themeGlobalPage(t, matches) {
   const body = `
 ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loading="eager" /></div>` : ""}
 <h1>${esc(t.globalH)}</h1>
-<p class="seo-sub">${matches.length} resorts across ${countryList.length} destinations · ranked by family-fit score</p>
+<p class="seo-sub">${matches.length} resorts across ${countryList.length} destinations · ${rankLabel}</p>
 <p class="seo-lede">${esc(intro)}</p>
 <a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
 
-${methodologyBlock()}
+${isToddler ? toddlerMethodologyBlock() : methodologyBlock()}
 
-${picksStrip(matches, { withTravel: true })}
+${isToddler ? "" : picksStrip(matches, { withTravel: true })}
 
 <h2>The ranking</h2>
 <ol class="seo-rank-list">
-${ranked.map((r, i) => rankedCard(r, i + 1)).join("\n")}
+${ranked.map((r, i) => rankedFn(r, i + 1)).join("\n")}
 </ol>
 
 ${rest.length ? `<h2>More matches</h2>
 <ul class="seo-grid">
-${rest.map(gridCard).join("\n")}
+${rest.map(gridFn).join("\n")}
 </ul>` : ""}
 
 ${countryLinks.length ? `<h2>By destination</h2>
@@ -2319,14 +2435,15 @@ write("caribbean/index.html", destinationsIndex());
 let themeN = 0;
 const themeUrls = [];
 for (const t of THEMES) {
-  const globalMatches = resorts.filter(t.match).sort(byScore);
+  const cmp = themeCmp(t);
+  const globalMatches = resorts.filter(t.match).sort(cmp);
   if (globalMatches.length >= THEME_MIN) {
     write(`caribbean/${t.globalSlug}.html`, themeGlobalPage(t, globalMatches));
     themeUrls.push({ loc: `${ORIGIN}${themeGlobalPath(t)}`, pr: "0.7", cf: "weekly" });
     themeN++;
   }
   for (const c of countries) {
-    const matches = (byCountry.get(c) || []).filter(t.match).sort(byScore);
+    const matches = (byCountry.get(c) || []).filter(t.match).sort(cmp);
     if (matches.length >= THEME_MIN) {
       write(`caribbean/${slugify(c)}/${t.slug}.html`, themeCountryPage(t, c, matches));
       themeUrls.push({ loc: `${ORIGIN}${themeCountryPath(t, c)}`, pr: "0.6", cf: "weekly" });

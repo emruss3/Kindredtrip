@@ -153,3 +153,25 @@ test("policy phrase in brand/style field still excludes", () => {
     resort_name: "Calm Bay Resort", hotel_brand: "X", hotel_style: "Adults Only boutique", audience: "Family",
   }), "family_allowed");
 });
+
+// --- toddler vs infant split (added for the toddler-page narrowing) ---
+import { infantFriendly, toddlerFriendly, toddlerScore } from "../lib/family-rules.mjs";
+test("infantFriendly is broad (infants OR cribs), toddlerFriendly is strict (kc_min<=3)", () => {
+  const infantOnly = { ...base, cribs: true };            // no kids-club age
+  assert.equal(infantFriendly(infantOnly), true);
+  assert.equal(toddlerFriendly(infantOnly), false, "cribs alone is NOT toddler-friendly");
+  const toddler = { ...base, kc_min: 3 };
+  assert.equal(toddlerFriendly(toddler), true);
+  const olderClub = { ...base, kc_min: 4 };
+  assert.equal(toddlerFriendly(olderClub), false, "kids club from age 4 is not toddler-grade");
+});
+test("toddlerFriendly respects name age gates", () => {
+  assert.equal(toddlerFriendly({ ...base, kc_min: 3, resort_name: "X (12+)" }), false);
+});
+test("toddlerScore rewards young childcare age + short transfer, not water parks", () => {
+  const closeYoungClub = { ...base, kc_min: 1, transfer_min: 20, on_beach: true };
+  const farOldWaterpark = { ...base, kc_min: 3, transfer_min: 130, water_park: true };
+  assert.ok(toddlerScore(closeYoungClub) > toddlerScore(farOldWaterpark));
+  // water_park adds nothing to the toddler score
+  assert.equal(toddlerScore({ ...base, kc_min: 3 }), toddlerScore({ ...base, kc_min: 3, water_park: true }));
+});

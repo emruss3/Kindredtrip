@@ -108,8 +108,47 @@ export const familyEligible = (r) => familyEligibility(r) === "family_allowed";
 // ---------- family-positive signals ----------
 // "family-friendly" may only be said about a family_allowed property
 // with at least one confirmed family-positive signal.
-export const toddlerFit = (r) =>
+// Infant-friendly (BROAD): the resort accepts infants or provides cribs,
+// with no minimum-age policy in the name. A welcome signal for the
+// youngest travelers — NOT proof of a toddler program.
+export const infantFriendly = (r) =>
   (r.infants === true || r.cribs === true) && nameMinAge(r) == null;
+
+// Toddler-friendly (STRICT): a *verified* young kids-club minimum age
+// (<= 3) — the only toddler-grade programming signal we actually track.
+// (A confirmed nursery or verified toddler program would also qualify
+// once that data exists; we never fabricate it.) Much narrower than
+// infant-friendly, so "best for toddlers" means the resort genuinely
+// programs for that age — not just "accepts infants."
+export const toddlerFriendly = (r) =>
+  nameMinAge(r) == null && r.kc_min != null && Number(r.kc_min) <= 3;
+
+// Back-compat alias: broad "infant & toddler" contexts use the infant signal.
+export const toddlerFit = infantFriendly;
+
+// Toddler-specific ranking. Unlike familyFitScore it heavily weights what
+// matters with a 1–3-year-old — a short travel day, a young childcare
+// age, and room separation for naps — and deliberately does NOT reward
+// water parks (a big-kid feature). Fields we don't track (shallow pools,
+// nursery, stroller access, beach swimmability) are absent, never invented.
+export function toddlerScore(r) {
+  let s = 0;
+  if (r.kc_min != null) s += Math.max(0, 5 - Number(r.kc_min)) * 8; // age 1→32, 3→16
+  if (r.transfer_min != null) {
+    if (r.transfer_min <= 30) s += 12;
+    else if (r.transfer_min <= 45) s += 7;
+    else if (r.transfer_min <= 60) s += 3;
+    else if (r.transfer_min > 120) s -= 8;
+  }
+  if (r.connecting || Number(r.family_max) >= 5) s += 6;
+  if (r.cribs) s += 5;
+  if (r.infants) s += 3;
+  if (r.on_beach) s += 5;
+  if (r.pool) s += 4;
+  if (r.rating != null) s += (Number(r.rating) / 100) * 8;
+  if (Number(r.stars) >= 5) s += 2;
+  return s;
+}
 
 export function hasFamilySignals(r, familyReviewCount = 0) {
   if (!familyEligible(r)) return false;
