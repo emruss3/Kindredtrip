@@ -1,0 +1,5 @@
+KindredTrips production redeploy marker
+Triggered: 2026-07-16
+Base SEO overhaul commit: e92d95ebb4c70c87cd4b05348da59631fb7dd7f6
+Expected homepage inventory: 520+ family resorts across 30 Caribbean destinations
+Expected Sandals Saint Vincent classification: adults-only, noindex, excluded from family lists
