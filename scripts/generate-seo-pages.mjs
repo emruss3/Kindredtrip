@@ -37,6 +37,7 @@ import { fileURLToPath } from "node:url";
 import {
   slugify, displayName, nameMinAge, familyEligibility, familyEligible,
   toddlerFit, infantFriendly, toddlerFriendly, toddlerScore,
+  qualifyingRoom5, hasQualifyingRoom5, roomEvidenceLine,
   hasFamilySignals as hasFamilySignalsRule, knownFieldCount,
   familyFitScore, mayCallAllInclusive, countAnswer, cleanSnippet,
   sentimentConflict, airportDisplay, GATES, indexability,
@@ -691,7 +692,9 @@ function resortFaq(r) {
         : `The nearest airport we track for ${name} is ${r.airport_name || r.airport_iata}. We don't have a confirmed transfer time on file — check with the resort or your transfer provider.`]);
   }
   qa.push([`Can ${name} sleep a family of 5?`,
-    Number(r.family_max) >= 5
+    r.qual_room
+      ? `Yes — the ${r.qual_room.room} sleeps up to ${r.qual_room.occ} (max ${r.qual_room.ad} adults + ${r.qual_room.ch} children) in one unit${r.connecting ? ", and connecting rooms are available for bigger groups" : ""}. Verified ${r.qual_room.v} from the LiteAPI room catalogue; confirm the exact room for your dates when you book.`
+      : Number(r.family_max) >= 5
       ? `Property data indicates at least one room here may sleep ${r.family_max}${r.connecting ? ", and connecting rooms are available for bigger groups" : ""} — but room categories and occupancy vary by date, so confirm the exact qualifying room before booking. Search your dates to see rooms that fit your exact party.`
       : `The largest single-room configuration we track sleeps ${r.family_max ?? "an unconfirmed number"}. Room fit varies by date and party size — search your dates and kids' ages and we'll show which rooms (or two-room combinations) actually fit.`]);
   if (familyEligible(r)) {
@@ -773,8 +776,9 @@ const THEMES = [
     slug: "resorts-for-family-of-5", globalSlug: "best-resorts-for-family-of-5",
     countryH: (c) => `Best ${c} Resorts for a Family of 5`,
     globalH: "Best Caribbean Resorts for a Family of 5",
-    blurb: "Property data indicates at least one room may sleep five or more. Room categories and occupancy vary by date, so confirm the exact qualifying room before booking.",
-    match: (r) => familyEligible(r) && Number(r.family_max) >= 5,
+    blurb: "Every resort here has a verified room that sleeps a family of five in one unit — exact room category, bedding, and occupancy shown, no mandatory second room.",
+    match: (r) => familyEligible(r) && hasQualifyingRoom5(r),
+    cardKind: "family5",
   },
   {
     slug: "connecting-room-resorts", globalSlug: "best-connecting-room-resorts",
@@ -787,8 +791,9 @@ const THEMES = [
     slug: "large-family-resorts", globalSlug: "best-large-family-resorts",
     countryH: (c) => `${c} Resorts for Large Families (Sleep 6+)`,
     globalH: "Best Caribbean Resorts for Large Families (Sleep 6+)",
-    blurb: "Suites and villas that sleep six or more — one booking for the whole crew.",
-    match: (r) => familyEligible(r) && Number(r.family_max) >= 6,
+    blurb: "Verified rooms that sleep six or more in one unit — exact room, bedding, and occupancy shown, one booking for the whole crew.",
+    match: (r) => familyEligible(r) && hasQualifyingRoom5(r) && Number(qualifyingRoom5(r).occ) >= 6,
+    cardKind: "family5",
   },
 ];
 const themeCountryPath = (t, c) => `/caribbean/${slugify(c)}/${t.slug}`;
@@ -1021,6 +1026,71 @@ function toddlerRankedCard(r, rank) {
   </div>
 </li>`;
 }
+// ---------- family-of-5 rendering (verified room evidence) ----------
+function familyRoomChips(r) {
+  const q = qualifyingRoom5(r); const c = [];
+  if (q) { c.push(`Sleeps up to ${q.occ}`); c.push(`${q.ad} adults + ${q.ch} children`); }
+  if (r.connecting) c.push("Connecting rooms");
+  if (r.all_inclusive) c.push("All-inclusive");
+  if (r.on_beach) c.push("Beachfront");
+  if (r.kids_club) c.push("Kids club");
+  return c.slice(0, 5);
+}
+function familyRoomEvidenceHtml(r) {
+  const q = qualifyingRoom5(r);
+  if (!q) return "";
+  const rows = [
+    ["Qualifying room", q.room],
+    ["Occupancy", `up to ${q.occ} (max ${q.ad} adults + ${q.ch} children)`],
+    ...(q.beds ? [["Bedding", q.beds]] : []),
+    ["Units required", "1 (no second room)"],
+    ["Source", `LiteAPI room catalogue · verified ${q.v}`],
+  ];
+  return `<table class="seo-roomfit"><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</tbody></table>`;
+}
+function familyRoomRankedCard(r, rank) {
+  const ph = photoUrl(pageHero(r), 600);
+  const r5 = ratingTo5(r.rating);
+  const chips = familyRoomChips(r);
+  const name = displayName(r);
+  const q = qualifyingRoom5(r);
+  return `<li class="seo-rank-card">
+  <div class="seo-rank-num" aria-hidden="true">${rank}</div>
+  ${ph ? `<img class="seo-rank-img" src="${ph}" alt="${esc(name)} — family room in ${esc(r.country)}" loading="lazy" />` : ""}
+  <div class="seo-rank-body">
+    <h3 class="seo-rank-name"><a href="${resortPath(r)}">${esc(name)}</a></h3>
+    <p class="seo-rank-meta"><a href="${countryPath(r.country)}">${esc(r.country)}</a>${r.area ? ` · ${esc(r.area)}` : ""}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}</p>
+    <p class="seo-rank-why"><strong>Verified family room:</strong> ${esc(q.room)} — sleeps up to ${q.occ} (max ${q.ad} adults + ${q.ch} children)${q.beds ? `; ${esc(q.beds)}` : ""}, one unit.</p>
+    <p class="seo-rank-why"><strong>Verified:</strong> ${esc(q.v)} · LiteAPI room catalogue${r.transfer_min != null ? ` · <strong>Transfer:</strong> ~${r.transfer_min} min` : ""}</p>
+    ${chips.length ? `<ul class="seo-badges seo-badges-sm">${chips.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    <p class="seo-rank-cta"><a href="${resortPath(r)}">Price this resort for your family →</a></p>
+  </div>
+</li>`;
+}
+function familyRoomGridCard(r) {
+  const ph = photoUrl(pageHero(r), 600);
+  const r5 = ratingTo5(r.rating);
+  const q = qualifyingRoom5(r);
+  const name = displayName(r);
+  return `<li class="seo-card">
+  <a href="${resortPath(r)}" class="seo-card-link">
+    ${ph ? `<img class="seo-card-img" src="${ph}" alt="${esc(name)} — family room in ${esc(r.country)}" loading="lazy" />` : `<span class="seo-card-img seo-card-img-empty"></span>`}
+    <span class="seo-card-body">
+      <span class="seo-card-name">${esc(name)}</span>
+      <span class="seo-card-meta">${esc(r.area || r.country)}${q ? ` · sleeps up to ${q.occ}` : ""}${r5 != null ? ` · ${r5}/5` : ""}</span>
+      <span class="seo-card-tags">${familyRoomChips(r).slice(0, 3).map((b) => `<span>${esc(b)}</span>`).join("")}</span>
+    </span>
+  </a>
+</li>`;
+}
+function familyRoomMethodologyBlock() {
+  return `<section class="seo-method">
+<h2>How we verify a family-of-five room</h2>
+<p>Every resort on this list has a <strong>real, named room type</strong> from the LiteAPI room catalogue whose stated capacity sleeps a family of five in a single unit — a maximum occupancy of at least 5 with room for at least 2 adults and 3 children. We show the exact room name, bedding, and occupancy caps, and the date we verified it. We do <strong>not</strong> list a resort here on a generic maximum-guest number alone.</p>
+<p>Occupancy rules and availability still vary by date and rate, so confirm the specific room when you search your dates. Price isn't part of the ranking — run a live search to sort by total trip cost.</p>
+</section>`;
+}
+
 function toddlerMethodologyBlock() {
   return `<section class="seo-method">
 <h2>How we rank toddler-friendly resorts</h2>
@@ -1106,12 +1176,14 @@ function resortPage(r) {
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
     ["Pools", r.water_park ? "Yes + water park" : (r.pool ? "Yes" : "Not confirmed")],
     ["All-inclusive", r.all_inclusive ? "Yes — live AI rates seen" : "Not confirmed"],
-    ["Family room fit", r.family_max ? `A room may sleep up to ${r.family_max} (confirm exact room)` : "Varies — search your dates"],
+    ["Family room fit", qualifyingRoom5(r) ? `Verified: ${qualifyingRoom5(r).room} sleeps up to ${qualifyingRoom5(r).occ}` : (r.family_max ? `A room may sleep up to ${r.family_max} (confirm exact room)` : "Varies — search your dates")],
   ];
 
+  const qroom = qualifyingRoom5(r);
   const roomFit = (() => {
     const lines = [];
-    if (r.family_max) lines.push(`Property data indicates a room here may sleep up to <strong>${r.family_max}</strong>. Room categories and occupancy vary by date — confirm the exact qualifying room before booking.`);
+    if (qroom) lines.push(`<strong>Verified family room:</strong> ${esc(qroom.room)} — sleeps up to ${qroom.occ} (max ${qroom.ad} adults + ${qroom.ch} children)${qroom.beds ? `, ${esc(qroom.beds)}` : ""}, in one unit. Verified ${esc(qroom.v)} from the LiteAPI room catalogue; confirm the exact room for your dates when you book.`);
+    else if (r.family_max) lines.push(`Property data indicates a room here may sleep up to <strong>${r.family_max}</strong>. Room categories and occupancy vary by date — confirm the exact qualifying room before booking.`);
     if (r.connecting) lines.push(`Connecting rooms are available — a practical option for families of 5+ or trips with grandparents.`);
     if (r.sofa_bed) lines.push(`Some rooms include sofa beds, which usually count toward the room's stated occupancy.`);
     if (r.cribs) lines.push(`Cribs are available, so an infant typically doesn't consume a bed spot.`);
@@ -1818,9 +1890,10 @@ function themeCountryPage(t, country, matches) {
   const ranked = matches.slice(0, 10);
   const rest = matches.slice(10);
   const isToddler = t.cardKind === "toddler";
-  const rankedFn = isToddler ? toddlerRankedCard : rankedCard;
-  const gridFn = isToddler ? toddlerGridCard : gridCard;
-  const rankLabel = isToddler ? "ranked for toddlers (childcare age, travel ease, room separation)" : "ranked by family-fit score";
+  const isFamily5 = t.cardKind === "family5";
+  const rankedFn = isToddler ? toddlerRankedCard : (isFamily5 ? familyRoomRankedCard : rankedCard);
+  const gridFn = isToddler ? toddlerGridCard : (isFamily5 ? familyRoomGridCard : gridCard);
+  const rankLabel = isToddler ? "ranked for toddlers (childcare age, travel ease, room separation)" : (isFamily5 ? "each with a verified family room" : "ranked by family-fit score");
   const body = `
 ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(title)}" loading="eager" /></div>` : ""}
 <h1>${esc(title)}</h1>
@@ -1833,9 +1906,9 @@ ${searchWidget({
   sub: `Enter your airport, dates, and family. We'll price every resort below — live flights plus live hotel rates — ranked by total trip cost.`,
 })}
 
-${isToddler ? toddlerMethodologyBlock() : methodologyBlock()}
+${isToddler ? toddlerMethodologyBlock() : (isFamily5 ? familyRoomMethodologyBlock() : methodologyBlock())}
 
-${isToddler ? "" : picksStrip(matches, { withTravel: true })}
+${isToddler || isFamily5 ? "" : picksStrip(matches, { withTravel: true })}
 
 <h2>The ranking</h2>
 <ol class="seo-rank-list">
@@ -1879,13 +1952,16 @@ function themeGlobalPage(t, matches) {
   const ranked = matches.slice(0, 20);
   const rest = matches.slice(20, 68);
   const isToddler = t.cardKind === "toddler";
-  const rankedFn = isToddler ? toddlerRankedCard : rankedCard;
-  const gridFn = isToddler ? toddlerGridCard : gridCard;
-  const rankLabel = isToddler ? "ranked for toddlers" : "ranked by family-fit score";
+  const isFamily5 = t.cardKind === "family5";
+  const rankedFn = isToddler ? toddlerRankedCard : (isFamily5 ? familyRoomRankedCard : rankedCard);
+  const gridFn = isToddler ? toddlerGridCard : (isFamily5 ? familyRoomGridCard : gridCard);
+  const rankLabel = isToddler ? "ranked for toddlers" : (isFamily5 ? "each with a verified family room" : "ranked by family-fit score");
   const hero = photoUrl(pageHero(matches[0]), 1200);
   const countryList = [...new Set(matches.map((r) => r.country))];
   const intro = isToddler
     ? `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these ${matches.length} resorts have a verified kids-club minimum age of 3 or under. Pick any and we'll price the complete trip (flights + hotel) for your family.`
+    : isFamily5
+    ? `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these ${matches.length} resorts each have a verified room that fits the family in one unit. Pick any and we'll price the complete trip (flights + hotel) for your family.`
     : `${t.blurb} Across ${countryList.length} Caribbean destination${countryList.length === 1 ? "" : "s"}, these are the ${matches.length} resorts KindredTrips tracks that match — ranked by family-fit score, not just guest rating. Pick any and we'll price the complete trip (flights + hotel) for your family.`;
   const qa = themeFaq(t, matches, "Caribbean resorts");
   const collectionLd = {
@@ -1917,9 +1993,9 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loadi
 <p class="seo-lede">${esc(intro)}</p>
 <a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
 
-${isToddler ? toddlerMethodologyBlock() : methodologyBlock()}
+${isToddler ? toddlerMethodologyBlock() : (isFamily5 ? familyRoomMethodologyBlock() : methodologyBlock())}
 
-${isToddler ? "" : picksStrip(matches, { withTravel: true })}
+${isToddler || isFamily5 ? "" : picksStrip(matches, { withTravel: true })}
 
 <h2>The ranking</h2>
 <ol class="seo-rank-list">

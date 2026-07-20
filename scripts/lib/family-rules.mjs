@@ -150,6 +150,19 @@ export function toddlerScore(r) {
   return s;
 }
 
+// Verified qualifying-room record (from the LiteAPI room catalogue):
+// { room, occ, ad, ch, beds, v }. Present only when a real room sleeps
+// the party (built for occ>=5, adults>=2, children>=3). This is the
+// evidence a family-size page must show — not a generic max-occupancy.
+export const qualifyingRoom5 = (r) => (r && r.qual_room) || null;
+export const hasQualifyingRoom5 = (r) => !!(r && r.qual_room);
+// Human-readable evidence line.
+export function roomEvidenceLine(r) {
+  const q = qualifyingRoom5(r);
+  if (!q) return null;
+  return `Qualifying room: ${q.room} — sleeps up to ${q.occ} (max ${q.ad} adults, ${q.ch} children)${q.beds ? `; ${q.beds}` : ""}. 1 unit, no second room required. Verified ${q.v} from the LiteAPI room catalogue.`;
+}
+
 export function hasFamilySignals(r, familyReviewCount = 0) {
   if (!familyEligible(r)) return false;
   if (r.kids_club || r.water_park || toddlerFit(r) || r.connecting) return true;

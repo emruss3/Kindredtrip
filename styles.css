@@ -9539,3 +9539,9 @@ body.body-lock {
 .seo-compare thead a:hover { color: var(--accent, #c08a3e); }
 .seo-compare tbody th { width: 26%; color: var(--ink-3); font-weight: 600; }
 .seo-compare tbody td { color: var(--ink); min-width: 140px; }
+
+/* Verified family-room evidence table (family-of-five pages) */
+.seo-roomfit { border-collapse: collapse; width: 100%; max-width: 620px; margin: 8px 0 14px; }
+.seo-roomfit th, .seo-roomfit td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line-soft, #ece4d2); font-size: 13.5px; vertical-align: top; }
+.seo-roomfit th { width: 34%; color: var(--ink-3); font-weight: 600; }
+.seo-roomfit td { color: var(--ink); }

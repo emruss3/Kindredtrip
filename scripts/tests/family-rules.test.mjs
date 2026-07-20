@@ -175,3 +175,17 @@ test("toddlerScore rewards young childcare age + short transfer, not water parks
   // water_park adds nothing to the toddler score
   assert.equal(toddlerScore({ ...base, kc_min: 3 }), toddlerScore({ ...base, kc_min: 3, water_park: true }));
 });
+
+// --- verified qualifying-room evidence (family-of-five) ---
+import { qualifyingRoom5, hasQualifyingRoom5, roomEvidenceLine } from "../lib/family-rules.mjs";
+test("qualifyingRoom5 evidence surfaces real room data", () => {
+  const r = { ...base, qual_room: { room: "Two-Bedroom Family Suite", occ: 6, ad: 4, ch: 4, beds: "1 King + 2 Double", v: "2026-05" } };
+  assert.equal(hasQualifyingRoom5(r), true);
+  const line = roomEvidenceLine(r);
+  assert.match(line, /Two-Bedroom Family Suite/);
+  assert.match(line, /sleeps up to 6/);
+  assert.match(line, /max 4 adults, 4 children/);
+  assert.match(line, /1 unit/);
+  assert.equal(hasQualifyingRoom5({ ...base }), false);
+  assert.equal(roomEvidenceLine({ ...base }), null);
+});
