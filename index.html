@@ -70,7 +70,7 @@
   "name": "KindredTrips",
   "alternateName": "Kindred Trips",
   "url": "https://kindredtrips.com/",
-  "description": "Caribbean family vacation discovery and ranking tool. Compares family-friendly all-inclusive resorts across 30 Caribbean destinations by total trip cost.",
+  "description": "Caribbean family vacation discovery and ranking tool. Compares family-friendly resorts across 30 Caribbean destinations by total trip cost.",
   "potentialAction": {
     "@type": "SearchAction",
     "target": {
@@ -119,7 +119,7 @@
       "name": "Do you actually book the trip?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. KindredTrips finds and ranks trips, but the actual booking happens on a trusted partner site like Booking.com or airline sites. The price you see and the price you pay are identical — we don't add fees. We earn a small affiliate commission when you book through our recommendations, which is how the site is free for users."
+        "text": "No. KindredTrips finds and ranks trips, but the actual booking happens on a trusted partner site like Booking.com or airline sites. KindredTrips does not add fees or markups, though partner prices and availability may change before checkout. We earn a small affiliate commission when you book through our recommendations, which is how the site is free for users."
       }
     },
     {
@@ -143,7 +143,7 @@
       "name": "Are KindredTrips prices live or estimates?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding live prices' placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through."
+        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding live prices' placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout."
       }
     }
   ]
@@ -167,7 +167,7 @@
     <nav class="topbar-nav" aria-label="Primary">
       <a href="/#destinations" class="nav-link">Destinations</a>
       <a href="/about" class="nav-link">About</a>
-      <a href="/inspiration.html" class="nav-link">Inspiration</a>
+      <a href="/inspiration" class="nav-link">Inspiration</a>
       <a href="/contact" class="nav-link">Contact</a>
       <a href="/#search-form" class="topbar-cta">Search trips</a>
     </nav>
@@ -648,7 +648,7 @@
     <details class="faq-item">
       <summary>Do you actually book the trip?</summary>
       <div class="faq-answer">
-        <p>No. KindredTrips finds and ranks trips, but the actual booking happens on a trusted partner site like Booking.com or airline sites. The price you see and the price you pay are identical — we don't add fees. We earn a small affiliate commission when you book through our recommendations, which is how the site is free for users.</p>
+        <p>No. KindredTrips finds and ranks trips, but the actual booking happens on a trusted partner site like Booking.com or airline sites. KindredTrips does not add fees or markups, though partner prices and availability may change before checkout. We earn a small affiliate commission when you book through our recommendations, which is how the site is free for users.</p>
       </div>
     </details>
     <details class="faq-item">
@@ -666,7 +666,7 @@
     <details class="faq-item">
       <summary>Are KindredTrips prices live or estimates?</summary>
       <div class="faq-answer">
-        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding live prices…" placeholder instead of a number. Prices on screen are bookable; the partner site shows the same fare when you click through.</p>
+        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding live prices…" placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout.</p>
       </div>
     </details>
   </div>
@@ -780,7 +780,7 @@
   <div class="footer-disclosures">
     <div>
       <h5>Why we're free</h5>
-      <p>KindredTrips earns a referral fee when you book through our partners (Booking.com, airlines, etc.). The price you pay is identical — we don't add fees. We don't take payments directly; you book on the partner's site, they handle your reservation.</p>
+      <p>KindredTrips earns a referral fee when you book through our partners (Booking.com, airlines, etc.). KindredTrips does not add fees or markups, though partner prices and availability may change before checkout. We don't take payments directly; you book on the partner's site, they handle your reservation.</p>
     </div>
     <div>
       <h5>About our rankings</h5>
@@ -817,7 +817,7 @@
       <h5>Legal</h5>
       <ul>
         <li><a href="/privacy">Privacy</a></li>
-        <li><a href="/privacy.html#affiliate">Affiliate disclosure</a></li>
+        <li><a href="/privacy#affiliate">Affiliate disclosure</a></li>
       </ul>
     </div>
   </div>
@@ -5370,7 +5370,7 @@
       ${compareSection ? `<section class="trip-alts">${compareSection}</section>` : ""}
 
       <p class="modal-footer-note">${isLive
-        ? "Prices are live flight + hotel rates for your party and dates, pulled from our booking partners. The partner shows the same fare when you click through — we don't add fees."
+        ? "Prices are live flight + hotel rates for your party and dates, pulled from our booking partners. The partner completes the booking; we don't add fees or markups, though partner prices can change before checkout."
         : "Live rates are still loading for this trip — the price shown is an estimate based on rating tier, country, and party size. The exact fare is confirmed by the booking partner when you click through."}</p>
 
       <div class="trip-mobile-cta">

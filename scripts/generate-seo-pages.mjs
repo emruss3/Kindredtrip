@@ -596,7 +596,7 @@ function badges(r) {
   if (r.pool && !r.water_park) b.push("Pools");
   if (r.all_inclusive) b.push("All-inclusive");
   if (r.connecting) b.push("Connecting rooms");
-  if (Number(r.family_max) >= 5) b.push(`Sleeps ${r.family_max}`);
+  if (Number(r.family_max) >= 5) b.push(`Sleeps up to ${r.family_max}`);
   if (r.infants || r.cribs) b.push("Infant-friendly");
   if (r.spa) b.push("Spa");
   if (!familyEligible(r)) b.push("Adults only");
@@ -692,7 +692,7 @@ function resortFaq(r) {
   }
   qa.push([`Can ${name} sleep a family of 5?`,
     Number(r.family_max) >= 5
-      ? `Yes — the largest room configuration we track at ${name} sleeps ${r.family_max}${r.connecting ? ", and connecting rooms are available for bigger groups" : ""}. Availability varies by date, so search your dates to see rooms that fit your exact party.`
+      ? `Property data indicates at least one room here may sleep ${r.family_max}${r.connecting ? ", and connecting rooms are available for bigger groups" : ""} — but room categories and occupancy vary by date, so confirm the exact qualifying room before booking. Search your dates to see rooms that fit your exact party.`
       : `The largest single-room configuration we track sleeps ${r.family_max ?? "an unconfirmed number"}. Room fit varies by date and party size — search your dates and kids' ages and we'll show which rooms (or two-room combinations) actually fit.`]);
   if (familyEligible(r)) {
     qa.push([`Is ${name} good for toddlers?`,
@@ -773,7 +773,7 @@ const THEMES = [
     slug: "resorts-for-family-of-5", globalSlug: "best-resorts-for-family-of-5",
     countryH: (c) => `Best ${c} Resorts for a Family of 5`,
     globalH: "Best Caribbean Resorts for a Family of 5",
-    blurb: "Rooms confirmed to sleep five or more — no squeezing into a double, no mandatory second room.",
+    blurb: "Property data indicates at least one room may sleep five or more. Room categories and occupancy vary by date, so confirm the exact qualifying room before booking.",
     match: (r) => familyEligible(r) && Number(r.family_max) >= 5,
   },
   {
@@ -899,7 +899,7 @@ function rankedCard(r, rank, extraMeta) {
     <p class="seo-rank-meta"><a href="${countryPath(r.country)}">${esc(r.country)}</a>${r.area ? ` · ${esc(r.area)}` : ""}${r.stars ? ` · ${r.stars}★` : ""}${r5 != null ? ` · ${r5}/5` : ""}${extraMeta ? ` · ${esc(extraMeta)}` : ""}</p>
     <p class="seo-rank-why"><strong>Why it ranks:</strong> ${esc(whyItRanks(r))}</p>
     <p class="seo-rank-why"><strong>Best for:</strong> ${esc(bestForList(r).slice(0, 2).join(" · "))}</p>
-    ${Number(r.family_max) >= 5 || r.connecting ? `<p class="seo-rank-why"><strong>Room fit:</strong> ${esc([Number(r.family_max) >= 5 ? `largest room sleeps ${r.family_max}` : null, r.connecting ? "connecting rooms available" : null].filter(Boolean).join("; "))}</p>` : ""}
+    ${Number(r.family_max) >= 5 || r.connecting ? `<p class="seo-rank-why"><strong>Room fit:</strong> ${esc([Number(r.family_max) >= 5 ? `property data indicates a room may sleep up to ${r.family_max}` : null, r.connecting ? "connecting rooms available" : null].filter(Boolean).join("; "))}</p>` : ""}
     ${r.transfer_min != null ? `<p class="seo-rank-why"><strong>Travel day:</strong> ~${r.transfer_min} min transfer from ${esc(r.airport_iata || r.airport_name || "the airport")}</p>` : ""}
     ${watch ? `<p class="seo-rank-watch"><strong>Watch out:</strong> ${esc(watch)}</p>` : ""}
     <p class="seo-rank-watch"><strong>Skip if:</strong> ${esc(skipIfList(r)[0])}</p>
@@ -1106,12 +1106,12 @@ function resortPage(r) {
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
     ["Pools", r.water_park ? "Yes + water park" : (r.pool ? "Yes" : "Not confirmed")],
     ["All-inclusive", r.all_inclusive ? "Yes — live AI rates seen" : "Not confirmed"],
-    ["Family room fit", r.family_max ? `Largest room sleeps ${r.family_max}` : "Varies — search your dates"],
+    ["Family room fit", r.family_max ? `A room may sleep up to ${r.family_max} (confirm exact room)` : "Varies — search your dates"],
   ];
 
   const roomFit = (() => {
     const lines = [];
-    if (r.family_max) lines.push(`The largest room configuration we track at ${name} sleeps <strong>${r.family_max}</strong>.`);
+    if (r.family_max) lines.push(`Property data indicates a room here may sleep up to <strong>${r.family_max}</strong>. Room categories and occupancy vary by date — confirm the exact qualifying room before booking.`);
     if (r.connecting) lines.push(`Connecting rooms are available — a practical option for families of 5+ or trips with grandparents.`);
     if (r.sofa_bed) lines.push(`Some rooms include sofa beds, which usually count toward the room's stated occupancy.`);
     if (r.cribs) lines.push(`Cribs are available, so an infant typically doesn't consume a bed spot.`);
@@ -1488,7 +1488,7 @@ function countryFaq(country, list) {
        : `We haven't confirmed rooms sleeping 5+ in ${country}. Many resorts still work with two connecting rooms — search your party size and we'll price two-room options where needed.`],
     [`Which airport do you fly into for ${country} resorts?`,
      s.airports.length
-       ? `The ${country} resorts we track are served by ${s.airports.slice(0, 4).join(", ")}${s.airports.length > 4 ? ` and ${s.airports.length - 4} more` : ""}.${s.transfers.length ? ` Airport transfers range from about ${s.transfers[0]} to ${s.transfers[s.transfers.length - 1]} minutes.` : ""}`
+       ? `The ${country} resorts we track are served by ${s.airports.slice(0, 4).join(", ")}${s.airports.length > 4 ? ` and ${s.airports.length - 4} more` : ""}.${s.transfers.length ? (s.transfers[0] === s.transfers[s.transfers.length - 1] ? ` The tracked resort is approximately ${s.transfers[0]} minutes from the airport.` : ` Airport transfers range from about ${s.transfers[0]} to ${s.transfers[s.transfers.length - 1]} minutes.`) : ""}`
        : `Airport data isn't confirmed for every ${country} resort — run a search and we'll route flights to the nearest tracked airport automatically.`],
   ];
   return qa;
@@ -1519,7 +1519,7 @@ function countryPage(country) {
     about: { "@type": "TouristDestination", name: country },
     mainEntity: {
       "@type": "ItemList",
-      numberOfItems: familyList.length,
+      numberOfItems: Math.min(familyList.length, 50),
       itemListElement: familyList.slice(0, 50).map((r, i) => ({
         "@type": "ListItem", position: i + 1, name: displayName(r), url: `${ORIGIN}${resortPath(r)}`,
       })),
@@ -1544,10 +1544,10 @@ function countryPage(country) {
     ["Beachfront", `${s.beach}`],
     ["All-inclusive (live rates seen)", `${s.ai}`],
     ["Infant-friendly signals", `${s.infant}`],
-    ["Rooms sleeping 5+", `${s.sleeps5}`],
+    ["Rooms that may sleep 5+", `${s.sleeps5}`],
     ["Connecting rooms", `${s.connecting}`],
     ["Airports", s.airports.length ? s.airports.slice(0, 3).join(", ") + (s.airports.length > 3 ? ` +${s.airports.length - 3}` : "") : "Not confirmed"],
-    ...(s.transfers.length ? [["Transfer range", `~${s.transfers[0]}–${s.transfers[s.transfers.length - 1]} min`]] : []),
+    ...(s.transfers.length ? [["Transfer time", s.transfers[0] === s.transfers[s.transfers.length - 1] ? `~${s.transfers[0]} min` : `~${s.transfers[0]}–${s.transfers[s.transfers.length - 1]} min`]] : []),
     ["Ease with toddlers", easeToddlers],
     ["Teen appeal", teenAppeal],
   ];
@@ -1684,7 +1684,9 @@ ${faqHtml(faq)}
 `;
 
   return shell({
-    title: `${country} Family Vacation Guide — ${s.total} Resort${s.total === 1 ? "" : "s"} Ranked by Trip Cost | KindredTrips`,
+    title: noindex
+      ? `${country} Family Resort Guide | KindredTrips`
+      : `${country} Family Vacation Guide — ${s.total} Resort${s.total === 1 ? "" : "s"} Ranked by Trip Cost | KindredTrips`,
     description: clip(intro, 155),
     canonical: url,
     image: toAbs(hero),
@@ -1797,7 +1799,7 @@ function themeCountryPage(t, country, matches) {
     name: title, description: clip(intro, 200), url,
     about: { "@type": "TouristDestination", name: country },
     mainEntity: {
-      "@type": "ItemList", numberOfItems: n,
+      "@type": "ItemList", numberOfItems: Math.min(n, 50),
       itemListElement: matches.slice(0, 50).map((r, i) => ({
         "@type": "ListItem", position: i + 1, name: displayName(r), url: `${ORIGIN}${resortPath(r)}`,
       })),
@@ -1890,7 +1892,7 @@ function themeGlobalPage(t, matches) {
     "@context": "https://schema.org", "@type": "CollectionPage",
     name: t.globalH, description: clip(intro, 200), url,
     mainEntity: {
-      "@type": "ItemList", numberOfItems: matches.length,
+      "@type": "ItemList", numberOfItems: Math.min(matches.length, 50),
       itemListElement: matches.slice(0, 50).map((r, i) => ({
         "@type": "ListItem", position: i + 1, name: displayName(r), url: `${ORIGIN}${resortPath(r)}`,
       })),
