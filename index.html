@@ -182,13 +182,13 @@
         <label for="po_origin">From</label>
         <input id="po_origin" type="text" list="origin-airports" placeholder="City or airport" required autocomplete="off" />
       </div>
-      <div class="search-field">
-        <label for="po_date_start">Check-in</label>
-        <input id="po_date_start" type="date" required onchange="syncEndDateMin('po_date_start','po_date_end')" />
-      </div>
-      <div class="search-field">
-        <label for="po_date_end">Check-out</label>
-        <input id="po_date_end" type="date" required />
+      <div class="search-field search-field-dates" id="po-dates-field">
+        <label id="po-dates-label">Dates</label>
+        <button type="button" class="dates-trigger" id="po-dates-trigger" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="po-dates-label po-dates-text">
+          <span class="dates-trigger-text" id="po-dates-text">Add dates</span>
+        </button>
+        <input id="po_date_start" type="hidden" />
+        <input id="po_date_end" type="hidden" />
       </div>
       <div class="search-field">
         <label for="po_adults">Adults</label>
@@ -327,13 +327,13 @@
             <option value="YYZ">Toronto Pearson (YYZ)</option>
           </datalist>
         </div>
-        <div class="search-field search-field-combo" onclick="this.querySelector('input').focus()">
-          <label>Dates</label>
-          <div class="search-field-row">
-            <input id="date_start" type="date" required aria-label="Check-in" onchange="syncEndDateMin()" />
-            <span class="search-field-sep" aria-hidden="true">→</span>
-            <input id="date_end" type="date" required aria-label="Check-out" />
-          </div>
+        <div class="search-field search-field-dates" id="hero-dates-field">
+          <label id="hero-dates-label">Dates</label>
+          <button type="button" class="dates-trigger" id="hero-dates-trigger" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="hero-dates-label hero-dates-text">
+            <span class="dates-trigger-text" id="hero-dates-text">Add dates</span>
+          </button>
+          <input id="date_start" type="hidden" />
+          <input id="date_end" type="hidden" />
         </div>
         <div class="search-field search-field-popover" id="travelers-field">
           <label for="travelers-display">Travelers</label>
@@ -896,7 +896,9 @@
     start.setDate(start.getDate() + 90);
     const end = new Date(start);
     end.setDate(end.getDate() + 7);
-    const fmt = (d) => d.toISOString().slice(0, 10);
+    // Format from LOCAL components — toISOString() converts to UTC and can
+    // shift the date back a day for users west of UTC.
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     document.getElementById("date_start").value = fmt(start);
     document.getElementById("date_end").value = fmt(end);
   })();
@@ -914,6 +916,233 @@
   }
   syncEndDateMin();
   syncEndDateMin("po_date_start", "po_date_end");
+
+  /* =====================================================================
+   * KindredTrips date-range picker. Replaces the two native <input
+   * type="date"> fields (which were fiddly: two separate pickers, no range
+   * selection, no nights readout, past dates selectable) with ONE friendly
+   * two-month range calendar. It writes YYYY-MM-DD into the SAME hidden
+   * inputs (#date_start/#date_end and #po_date_start/#po_date_end), so all
+   * existing search, deep-link, and popover-sync code is untouched. After
+   * any programmatic write to those inputs, call KT_refreshDatePickers().
+   * ===================================================================== */
+  var KT_pickers = [];
+  var KT_cal = null, KT_backdrop = null, KT_calCtx = null, KT_viewMonth = null, KT_closeTimer = null;
+  var KT_sel = { start: null, end: null };
+  const KT_MS_DAY = 86400000;
+  function KT_fmtLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+  function KT_parse(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function KT_today() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function KT_addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function KT_addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+  function KT_firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function KT_defaultStart() { return KT_addDays(KT_today(), 90); }
+  function KT_shortLabel(s) { const d = KT_parse(s); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; }
+  function KT_nights(a, b) { const da = KT_parse(a), db = KT_parse(b); return (da && db) ? Math.round((db - da) / KT_MS_DAY) : 0; }
+  function KT_triggerLabel(sStr, eStr) {
+    if (sStr && eStr) { const n = KT_nights(sStr, eStr); return `${KT_shortLabel(sStr)} – ${KT_shortLabel(eStr)}  ·  ${n} night${n === 1 ? "" : "s"}`; }
+    if (sStr) return `${KT_shortLabel(sStr)} – Add check-out`;
+    return "Add dates";
+  }
+  function KT_setTriggerLabel(ctx, sStr, eStr) {
+    ctx.textEl.textContent = KT_triggerLabel(sStr, eStr);
+    ctx.textEl.classList.toggle("kt-has", !!(sStr && eStr));
+  }
+  function KT_refreshDatePickers() { KT_pickers.forEach((ctx) => KT_setTriggerLabel(ctx, ctx.startInput.value, ctx.endInput.value)); }
+  window.KT_refreshDatePickers = KT_refreshDatePickers;
+
+  function KT_buildCal() {
+    if (KT_cal) return;
+    KT_backdrop = document.createElement("div");
+    KT_backdrop.className = "kt-cal-sheet-backdrop";
+    KT_backdrop.hidden = true;
+    KT_backdrop.addEventListener("click", KT_closeCal);
+    document.body.appendChild(KT_backdrop);
+
+    KT_cal = document.createElement("div");
+    KT_cal.className = "kt-cal";
+    KT_cal.setAttribute("role", "dialog");
+    KT_cal.setAttribute("aria-label", "Choose your check-in and check-out dates");
+    KT_cal.hidden = true;
+    KT_cal.innerHTML =
+      '<div class="kt-cal-head">' +
+        '<button type="button" class="kt-cal-nav" data-nav="-1" aria-label="Previous month">‹</button>' +
+        '<div class="kt-cal-months" id="kt-cal-months"></div>' +
+        '<button type="button" class="kt-cal-nav" data-nav="1" aria-label="Next month">›</button>' +
+      '</div>' +
+      '<div class="kt-cal-foot">' +
+        '<div class="kt-cal-nights" id="kt-cal-nights"></div>' +
+        '<div class="kt-cal-presets" id="kt-cal-presets"></div>' +
+        '<button type="button" class="kt-cal-done" id="kt-cal-done">Done</button>' +
+      '</div>';
+    document.body.appendChild(KT_cal);
+    KT_cal.querySelectorAll("[data-nav]").forEach((b) =>
+      b.addEventListener("click", () => { KT_viewMonth = KT_addMonths(KT_viewMonth, +b.dataset.nav); KT_renderCal(); }));
+    const pc = KT_cal.querySelector("#kt-cal-presets");
+    [5, 7, 10, 14].forEach((n) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "kt-cal-preset"; b.textContent = `${n} nights`;
+      b.addEventListener("click", () => KT_applyPreset(n));
+      pc.appendChild(b);
+    });
+    KT_cal.querySelector("#kt-cal-done").addEventListener("click", KT_closeCal);
+  }
+
+  function KT_renderMonth(first) {
+    const wrap = document.createElement("div"); wrap.className = "kt-month";
+    const cap = document.createElement("div"); cap.className = "kt-month-cap";
+    cap.textContent = first.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    wrap.appendChild(cap);
+    const grid = document.createElement("div"); grid.className = "kt-grid";
+    ["S", "M", "T", "W", "T", "F", "S"].forEach((d) => { const h = document.createElement("div"); h.className = "kt-dow"; h.textContent = d; grid.appendChild(h); });
+    for (let i = 0; i < first.getDay(); i++) { const pad = document.createElement("div"); pad.className = "kt-day kt-pad"; grid.appendChild(pad); }
+    const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    const today = KT_today(), s = KT_sel.start, e = KT_sel.end;
+    const same = (a, b) => a && b && a.getTime() === b.getTime();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(first.getFullYear(), first.getMonth(), day);
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "kt-day"; btn.textContent = day;
+      btn.setAttribute("aria-label", d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }));
+      if (d < today) { btn.disabled = true; btn.classList.add("kt-day-past"); }
+      else {
+        if (same(d, s)) btn.classList.add("kt-day-start", "kt-day-sel");
+        if (same(d, e)) btn.classList.add("kt-day-end", "kt-day-sel");
+        if (s && e && d > s && d < e) btn.classList.add("kt-day-in");
+        if (same(d, s) && e) btn.setAttribute("aria-current", "date");
+        btn.addEventListener("click", () => KT_pick(d));
+      }
+      grid.appendChild(btn);
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function KT_renderCal() {
+    if (!KT_cal) return;
+    const wide = window.matchMedia("(min-width: 720px)").matches;
+    const months = KT_cal.querySelector("#kt-cal-months");
+    months.classList.toggle("kt-two", wide);
+    months.innerHTML = "";
+    for (let i = 0; i < (wide ? 2 : 1); i++) months.appendChild(KT_renderMonth(KT_addMonths(KT_viewMonth, i)));
+    KT_updateNights();
+  }
+
+  function KT_updateNights() {
+    const el = KT_cal.querySelector("#kt-cal-nights");
+    const s = KT_sel.start, e = KT_sel.end;
+    if (s && e) { const n = Math.round((e - s) / KT_MS_DAY); el.textContent = `${KT_shortLabel(KT_fmtLocal(s))} – ${KT_shortLabel(KT_fmtLocal(e))} · ${n} night${n === 1 ? "" : "s"}`; }
+    else if (s) el.textContent = `${KT_shortLabel(KT_fmtLocal(s))} — now pick check-out`;
+    else el.textContent = "Select your check-in date";
+  }
+
+  function KT_pick(d) {
+    if (!KT_sel.start || KT_sel.end) { KT_sel.start = d; KT_sel.end = null; }
+    else if (d <= KT_sel.start) { KT_sel.start = d; KT_sel.end = null; }
+    else { KT_sel.end = d; KT_writeCtx(); KT_renderCal(); clearTimeout(KT_closeTimer); KT_closeTimer = setTimeout(KT_closeCal, 420); return; }
+    KT_writeCtx(); KT_renderCal();
+  }
+
+  function KT_applyPreset(n) {
+    let start = KT_sel.start || KT_parse(KT_calCtx.startInput.value) || KT_defaultStart();
+    if (start < KT_today()) start = KT_defaultStart();
+    KT_sel.start = start; KT_sel.end = KT_addDays(start, n);
+    KT_viewMonth = KT_firstOfMonth(start);
+    KT_writeCtx(); KT_renderCal();
+    clearTimeout(KT_closeTimer); KT_closeTimer = setTimeout(KT_closeCal, 420);
+  }
+
+  function KT_writeCtx() {
+    const ctx = KT_calCtx; if (!ctx) return;
+    const sStr = KT_sel.start ? KT_fmtLocal(KT_sel.start) : "";
+    const eStr = KT_sel.end ? KT_fmtLocal(KT_sel.end) : "";
+    ctx.startInput.value = sStr; ctx.endInput.value = eStr;
+    try { ctx.startInput.dispatchEvent(new Event("change", { bubbles: true })); } catch (_) {}
+    KT_setTriggerLabel(ctx, sStr, eStr);
+  }
+
+  function KT_positionCal(trigger) {
+    const wide = window.matchMedia("(min-width: 720px)").matches;
+    KT_cal.classList.toggle("kt-cal-sheet", !wide);
+    KT_backdrop.hidden = wide;
+    if (wide) {
+      KT_cal.style.position = "absolute";
+      KT_cal.style.transform = "none"; KT_cal.style.bottom = "auto"; KT_cal.style.right = "auto";
+      const r = trigger.getBoundingClientRect();
+      const cw = KT_cal.offsetWidth || 620;
+      const vw = document.documentElement.clientWidth;
+      let left = r.left + window.scrollX;
+      if (left + cw > window.scrollX + vw - 12) left = window.scrollX + vw - cw - 12;
+      if (left < window.scrollX + 12) left = window.scrollX + 12;
+      KT_cal.style.top = (r.bottom + window.scrollY + 8) + "px";
+      KT_cal.style.left = left + "px";
+    } else {
+      KT_cal.style.position = "fixed";
+      KT_cal.style.left = "0"; KT_cal.style.right = "0"; KT_cal.style.bottom = "0";
+      KT_cal.style.top = "auto"; KT_cal.style.transform = "none";
+    }
+  }
+
+  function KT_openCal(ctx) {
+    KT_buildCal();
+    if (KT_calCtx && KT_calCtx !== ctx) KT_closeCal();
+    KT_calCtx = ctx;
+    KT_sel.start = KT_parse(ctx.startInput.value);
+    KT_sel.end = KT_parse(ctx.endInput.value);
+    const base = (KT_sel.start && KT_sel.start >= KT_today()) ? KT_sel.start : KT_defaultStart();
+    KT_viewMonth = KT_firstOfMonth(base);
+    KT_cal.hidden = false;
+    KT_renderCal();
+    KT_positionCal(ctx.trigger);
+    ctx.trigger.setAttribute("aria-expanded", "true");
+    setTimeout(() => document.addEventListener("mousedown", KT_outside, true), 0);
+    document.addEventListener("keydown", KT_escClose, true);
+  }
+
+  function KT_outside(e) {
+    if (!KT_cal || KT_cal.hidden) return;
+    if (KT_cal.contains(e.target)) return;
+    if (KT_calCtx && (e.target === KT_calCtx.trigger || KT_calCtx.trigger.contains(e.target))) return;
+    KT_closeCal();
+  }
+  function KT_escClose(e) { if (e.key === "Escape") { e.stopPropagation(); KT_closeCal(); } }
+
+  function KT_closeCal() {
+    if (!KT_cal || KT_cal.hidden) return;
+    clearTimeout(KT_closeTimer);
+    if (KT_calCtx) {
+      // Never leave a half-finished range: if only check-in was picked,
+      // fill a sensible 7-night stay on close.
+      if (KT_sel.start && !KT_sel.end) { KT_sel.end = KT_addDays(KT_sel.start, 7); KT_writeCtx(); }
+      KT_calCtx.trigger.setAttribute("aria-expanded", "false");
+    }
+    KT_cal.hidden = true;
+    KT_backdrop.hidden = true;
+    document.removeEventListener("mousedown", KT_outside, true);
+    document.removeEventListener("keydown", KT_escClose, true);
+    KT_calCtx = null;
+  }
+
+  function KT_registerPicker(triggerId, textId, startId, endId) {
+    const trigger = document.getElementById(triggerId);
+    const ctx = { trigger, textEl: document.getElementById(textId), startInput: document.getElementById(startId), endInput: document.getElementById(endId) };
+    if (!trigger || !ctx.startInput || !ctx.endInput || !ctx.textEl) return;
+    trigger.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const openOnThis = KT_cal && !KT_cal.hidden && KT_calCtx && KT_calCtx.trigger === trigger;
+      if (openOnThis) KT_closeCal(); else KT_openCal(ctx);
+    });
+    KT_pickers.push(ctx);
+    KT_setTriggerLabel(ctx, ctx.startInput.value, ctx.endInput.value);
+  }
+
+  function KT_initDatePickers() {
+    KT_registerPicker("hero-dates-trigger", "hero-dates-text", "date_start", "date_end");
+    KT_registerPicker("po-dates-trigger", "po-dates-text", "po_date_start", "po_date_end");
+    window.addEventListener("resize", () => { if (KT_cal && !KT_cal.hidden && KT_calCtx) { KT_renderCal(); KT_positionCal(KT_calCtx.trigger); } });
+  }
+  // Run after the rest of this script (default dates + deep-link hydration).
+  queueMicrotask(KT_initDatePickers);
 
   // Deep-link entry from a generated SEO page (/resort/<slug>,
   // /caribbean/<country>). Accepted params:
@@ -1270,6 +1499,7 @@
     document.getElementById("po_origin").value = lastSearchSummary.origin_iata || "";
     document.getElementById("po_date_start").value = lastSearchSummary.date_start || "";
     document.getElementById("po_date_end").value = lastSearchSummary.date_end || "";
+    if (window.KT_refreshDatePickers) window.KT_refreshDatePickers();
     document.getElementById("po_adults").value = lastSearchSummary.adults || 2;
     document.getElementById("po_child_ages").value = (lastSearchSummary.child_ages || []).join(", ");
     document.getElementById("po_budget").value = lastSearchSummary.budget_total || "";
@@ -1308,6 +1538,7 @@
     f("origin").value = f("po_origin").value;
     f("date_start").value = f("po_date_start").value;
     f("date_end").value = f("po_date_end").value;
+    if (window.KT_refreshDatePickers) window.KT_refreshDatePickers();
     f("adults").value = f("po_adults").value;
     // Sync the popover's comma-list kids ages back into our internal kidsAges
     // model so the hero Travelers display + stepper UI reflect the change.
