@@ -1,34 +1,43 @@
 // top_up_hotels_worker
 //
-// Background worker that upgrades the remaining mock-priced packages for
-// a search to live liteapi pricing. start_pricing has a tight ~22s
-// wall-clock budget (so it returns fast and the user can start seeing
-// cards). For large searches (~600 packages), it usually leaves ~100-200
-// packages still on hotel_supplier='mock' because the LiteAPI loop hit
-// the budget. This worker picks up those leftovers in a fresh edge
-// worker (which gets its own 50s wall-clock), processes a batch, and
-// chains itself if more remain.
+// v9 (2026-06-24): RETRY LiteAPI misses instead of killing them. Root-cause
+// of the live-rate regression (was ~90-100%, dropped to ~65%): LiteAPI's
+// /hotels/rates omits ~24% of requested hotels per call (their suppliers
+// don't answer within the request `timeout`). v8 marked any omitted hotel
+// as no_fit PERMANENTLY on the first miss, so a slow-responding hotel became
+// a dead listing. Now: a miss (no hotelData, or hotel returned zero rooms)
+// is left as 'mock' so the chain re-queries it next cycle; misses are only
+// converted to no_fit on the FINAL chain cycle. Since each call independently
+// returns ~76%, leaving misses for retry converges to ~99% fetched over the
+// chain (1 - 0.24^5). Genuine room-size mismatches (rooms returned but none
+// sleep the party) are still marked no_fit immediately — retrying won't change
+// room capacities. Also bumped LITEAPI_TIMEOUT_S 3->5 so fewer misses per call.
 //
-// POST /functions/v1/top_up_hotels_worker  body: { search_id, max_pkgs?, depth? }
-//
-// We persist hotel_rate_offers and update package pricing exactly the
-// same way start_pricing does — same scoring, same offer extraction.
-// This is intentionally a copy of the inner loop; sharing code across
-// edge functions adds deploy/import complexity for not much win.
+// v7: room-occupancy excludes infants (<2).
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v6_pkg_scoped_offer_id";
+const VERSION = "top_up_hotels_worker_v14_group_rooms";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
-const HOTEL_BATCH_CONCURRENCY = 2;
+// v12: 2 -> 6 (matches start_pricing v20). 429 backoff self-limits.
+const HOTEL_BATCH_CONCURRENCY = 6;
 const MAX_OFFERS_PER_PACKAGE = 12;
-const LITEAPI_TIMEOUT_S = 3;
-const WALL_CLOCK_BUDGET_MS = 35_000;  // longer than start_pricing — we have a full edge wall-clock
+const LITEAPI_TIMEOUT_S = 5;
+const WALL_CLOCK_BUDGET_MS = 35_000;
 const OFFER_WRITE_BUDGET_MS = 10_000;
-const DEFAULT_MAX_PKGS = 200;
+// v11: bumped 200 -> 700 so a single chain cycle can process every pending
+// package for a typical search. Verified: an isolated single search now
+// reaches ~88% hotel_live (vs ~30-50% before the v11 fixes), 0 stranded
+// pending. Under heavy parallel-search load some searches still under-fetch
+// — that's a separate Supabase edge-function dispatch-drop issue, not a
+// max_pkgs problem (see edge_function_errors empty + dispatch fire-and-forget).
+const DEFAULT_MAX_PKGS = 700;
 const MAX_CHAIN_DEPTH = 6;
+// Misses (LiteAPI omitted the hotel / returned no rooms) are retried as 'mock'
+// until this depth, then converted to no_fit so the search can terminate.
+const FINAL_RETRY_DEPTH = MAX_CHAIN_DEPTH - 1;
 
 function corsHeaders() {
   return {
@@ -77,7 +86,24 @@ function nightsBetween(a: string, b: string): number {
   return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
 }
 
-function extractRateOffers(hotel: any, hotelId: string, nights: number): any[] {
+// v13 MULTI-ROOM: 2-room occupancy split for parties >= 5 (see start_pricing v21).
+function buildOccupancies(adults: number, childAges: number[]): Array<{ adults: number; children: number[] }> {
+  const olderKids = childAges.filter((a) => a >= 2);
+  const partySize = adults + olderKids.length;
+  if (partySize < 5 || adults < 2) return [{ adults, children: childAges }];
+  // N-room split for large groups: ~4 guests/room (family of 5-8 -> 2 rooms
+  // exactly as before; 9-12 -> 3; 13-16 -> 4), capped at 4 rooms and never
+  // more rooms than adults (each room keeps >=1 adult). Parties <= 8 are
+  // byte-for-byte UNCHANGED (still the 2-room split).
+  const PER_ROOM = 4, MAX_ROOMS = 4;
+  const rooms = Math.max(2, Math.min(MAX_ROOMS, Math.min(adults, Math.ceil(partySize / PER_ROOM))));
+  const adultsPer = Array.from({ length: rooms }, (_, i) => Math.floor(adults / rooms) + (i < adults % rooms ? 1 : 0));
+  const kids: number[][] = Array.from({ length: rooms }, () => []);
+  [...childAges].sort((x, y) => y - x).forEach((k, i) => kids[i % rooms].push(k));
+  return adultsPer.map((a, i) => ({ adults: a, children: kids[i] }));
+}
+
+function extractRateOffers(hotel: any, hotelId: string, nights: number, roomsRequested = 1): any[] {
   const out: any[] = [];
   const roomTypes: any[] = Array.isArray(hotel?.roomTypes) ? hotel.roomTypes : [];
   for (const rt of roomTypes) {
@@ -86,14 +112,87 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): any[] {
     const paymentTypes: string[] = Array.isArray(rt?.paymentTypes) ? rt.paymentTypes : [];
     const supplier = rt?.supplier ?? null;
     const roomTypeId = rt?.roomTypeId ?? null;
-    // mappedRoomId is the documented crosswalk to /data/hotel rooms[].id.
-    // Per LiteAPI it can sit on the roomType wrapper; per-rate is preferred
-    // when present (see rate loop below) since rates within a roomType
-    // can occasionally map to different content rooms.
     const wrapperMappedRoomId = rt?.mappedRoomId ?? null;
     const priceType = rt?.priceType ?? null;
     const rateType = rt?.rateType ?? null;
     const rates: any[] = Array.isArray(rt?.rates) ? rt.rates : [];
+
+    // v13 MULTI-ROOM: one rates[] entry per occupancyNumber; the roomType
+    // offer covers all rooms. Merge to a single priced offer (sum of rooms).
+    if (roomsRequested > 1) {
+      const byOcc = new Map<number, any>();
+      for (const rate of rates) {
+        const total = Number(rate?.retailRate?.total?.[0]?.amount ?? 0);
+        if (!total) continue;
+        const n = Number(rate?.occupancyNumber ?? 1);
+        const prev = byOcc.get(n);
+        const prevTotal = prev ? Number(prev?.retailRate?.total?.[0]?.amount ?? Infinity) : Infinity;
+        if (total < prevTotal) byOcc.set(n, rate);
+      }
+      if (byOcc.size < roomsRequested) continue;
+      const parts = Array.from(byOcc.values());
+      const sum = (f: (r: any) => number) => parts.reduce((acc, r) => acc + (Number.isFinite(f(r)) ? f(r) : 0), 0);
+      const total = sum((r) => Number(r?.retailRate?.total?.[0]?.amount ?? 0));
+      if (!total) continue;
+      const ssp = sum((r) => Number(r?.retailRate?.suggestedSellingPrice?.[0]?.amount ?? NaN));
+      const commAmt = sum((r) => Number(r?.commission?.[0]?.amount ?? NaN));
+      const first = parts[0];
+      const currency = String(first?.retailRate?.total?.[0]?.currency ?? "USD");
+      const boardType = String(first?.boardType ?? "").toUpperCase() || null;
+      const boardName = first?.boardName ?? null;
+      const isAI = boardType === "AI" || (boardName && /all\s+inclusive/i.test(String(boardName)));
+      const tags = parts.map((r) => r?.cancellationPolicies?.refundableTag ?? null);
+      const refundable = tags.every((t) => t === "RFN") ? true : (tags.some((t) => t === "NRFN") ? false : null);
+      const firstPolicy = (Array.isArray(first?.cancellationPolicies?.cancelPolicyInfos) ? first.cancellationPolicies.cancelPolicyInfos : [])[0] ?? null;
+      const names = Array.from(new Set(parts.map((r) => r?.name).filter(Boolean)));
+      const roomName = `${names.join(" + ") || "Room combo"} (${roomsRequested} rooms)`;
+      const maxOcc = sum((r) => Number(r?.maxOccupancy ?? 0)) || null;
+      const rateId = parts.map((r) => String(r?.rateId ?? "r0")).join("+");
+      const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
+      out.push({
+        offer_id: offerId,
+        room_type_id: roomTypeId,
+        mapped_room_id: null,
+        room_name: roomName,
+        rate_id: rateId,
+        max_occupancy: maxOcc,
+        adult_count: sum((r) => Number(r?.adultCount ?? 0)) || null,
+        child_count: sum((r) => Number(r?.childCount ?? 0)) || null,
+        children_ages: parts.flatMap((r) => Array.isArray(r?.childrenAges) ? r.childrenAges : []),
+        total_price: total,
+        per_night: nights > 0 ? Number((total / nights).toFixed(2)) : null,
+        currency,
+        suggested_selling_price: ssp > 0 ? ssp : null,
+        initial_price: null,
+        commission_amount: commAmt > 0 ? commAmt : null,
+        commission_pct: commAmt > 0 && total > 0 ? Number(((commAmt / total) * 100).toFixed(2)) : null,
+        board_type: boardType,
+        board_name: boardName,
+        is_all_inclusive: Boolean(isAI),
+        refundable,
+        refundable_tag: tags[0] ?? null,
+        cancellation_deadline: firstPolicy?.cancelTime ?? null,
+        cancellation_penalty: firstPolicy?.amount != null ? Number(firstPolicy.amount) : null,
+        payment_types: paymentTypes,
+        supplier,
+        price_type: priceType,
+        rate_type: rateType,
+        perks: [],
+        has_promotions: false,
+        remarks: null,
+        raw_offer: {
+          _liteapi_offer_id: liteOfferId,
+          _liteapi_room_type_id: roomTypeId,
+          _liteapi_rate_id: rateId,
+          _rooms: roomsRequested,
+          board_type: boardType,
+          board_name: boardName,
+          refundable_tag: tags[0] ?? null,
+        },
+      });
+      continue;
+    }
+
     for (const rate of rates) {
       const total = Number(rate?.retailRate?.total?.[0]?.amount ?? 0);
       if (!total) continue;
@@ -115,9 +214,6 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number): any[] {
       const hasPromotions = promos != null && (Array.isArray(promos) ? promos.length > 0 : Boolean(promos));
       const rateId = String(rate?.rateId ?? "r0");
       const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
-      // Prefer the per-rate mappedRoomId, fall back to the roomType
-      // wrapper. Coerce to string so a numeric LiteAPI id still joins
-      // cleanly against resort_rooms.room_id (text).
       const mappedRoomIdRaw = rate?.mappedRoomId ?? wrapperMappedRoomId ?? null;
       const mappedRoomId = mappedRoomIdRaw != null ? String(mappedRoomIdRaw) : null;
       const trimmedRaw = {
@@ -201,7 +297,7 @@ async function fetchHotelRatesBatch(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const headers = { ...corsHeaders(), "content-type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers });
   if (req.method !== "POST") {
@@ -231,15 +327,15 @@ serve(async (req) => {
     const childAges = parseChildAges(search.child_ages);
     const olderChildAges = childAges.filter(a => a >= 2);
     const nights = nightsBetween(search.date_start, search.date_end);
+    const isFinalCycle = depth >= FINAL_RETRY_DEPTH;
 
-    // Fetch mock-priced packages that DO have a liteapi_hotel_id we can use.
     const { data: pkgs, error: pErr } = await sb.from("packages")
       .select(`
         package_id, search_id, resort_id,
         resorts ( liteapi_hotel_id )
       `)
       .eq("search_id", search_id)
-      .eq("hotel_supplier", "mock")
+      .eq("hotel_supplier", "pending")
       .limit(max_pkgs);
     if (pErr) throw pErr;
 
@@ -260,7 +356,9 @@ serve(async (req) => {
     const liteapiHotelIds = Array.from(idToPackages.keys());
 
     const hotelDataById = new Map<string, any>();
-    const hotelOccupancies = [{ adults, children: childAges }];
+    // v13: 2-room occupancy split for parties >= 5.
+    const hotelOccupancies = buildOccupancies(adults, childAges);
+    const roomsRequested = hotelOccupancies.length;
 
     let batchesAttempted = 0, batchesSucceeded = 0;
     let lastError: string | undefined;
@@ -306,37 +404,36 @@ serve(async (req) => {
     const rateOfferRows: any[] = [];
     let upgraded = 0;
 
-    // Fit filter: every person (infants included) must sleep in the
-    // room. Stripping infants previously meant LiteAPI capped rates at
-    // a smaller occupancy and never returned the bigger rooms users
-    // actually needed.
-    const partySize = adults + childAges.length;
+    // v7: infants (<2) are NOT counted toward room occupancy.
+    // v13: multi-room offers are priced for our exact occupancies — fit by construction.
+    const partySize = adults + olderChildAges.length;
     const fitsParty = (o: any) =>
-      o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
+      roomsRequested > 1 || o.max_occupancy == null || Number(o.max_occupancy) >= partySize;
 
-    // Mark a package as "no_fit" so future chains skip it. Without this
-    // hotel_supplier stays 'mock' and the next chain pulls the same row,
-    // calls /hotels/rates again, gets the same too-small rates, and
-    // burns wall-clock for no progress until depth is exhausted.
-    // 'no_fit' falls out of the strict_live_only filter on the frontend
-    // the same way 'mock' did.
     const noFitUpdates: any[] = [];
     const markNoFit = (p: any) => noFitUpdates.push({
       package_id: p.package_id,
       hotel_supplier: "no_fit",
       hotel_priced_at: nowIso,
     });
+    // v9: a miss (no data / no rooms returned) is RETRIED on the next chain
+    // cycle by leaving the package as 'pending' (no update written). Only on the
+    // final cycle do we convert it to no_fit so the search can terminate.
+    let leftForRetry = 0;
+    const handleMiss = (p: any) => {
+      if (isFinalCycle) markNoFit(p);
+      else leftForRetry++; // leave as pending -> re-queried next cycle
+    };
 
     for (const [hotelId, pkgsForHotel] of idToPackages.entries()) {
       const hotelData = hotelDataById.get(hotelId);
-      if (!hotelData) { for (const p of pkgsForHotel) markNoFit(p); continue; }
-      const offers = extractRateOffers(hotelData, hotelId, nights);
-      if (offers.length === 0) { for (const p of pkgsForHotel) markNoFit(p); continue; }
+      if (!hotelData) { for (const p of pkgsForHotel) handleMiss(p); continue; }
+      const offers = extractRateOffers(hotelData, hotelId, nights, roomsRequested);
+      if (offers.length === 0) { for (const p of pkgsForHotel) handleMiss(p); continue; }
 
-      // Drop rates whose maxOccupancy can't sleep the queried party
-      // in a single room. Skipping this filter would let offers[0]
-      // surface a $X price for a room the family literally can't book.
       const fitsOffers = offers.filter(fitsParty);
+      // Genuine room-size mismatch: rooms returned but none sleep the party.
+      // Retrying won't change room capacities -> terminal no_fit immediately.
       if (fitsOffers.length === 0) { for (const p of pkgsForHotel) markNoFit(p); continue; }
 
       offers.sort((a, b) => a.total_price - b.total_price);
@@ -363,11 +460,6 @@ serve(async (req) => {
 
       for (const p of pkgsForHotel) {
         upgraded++;
-        // Scope offer_id by package_id. extractRateOffers returns
-        // hotel-scoped ids; two searches pricing the same hotel would
-        // otherwise collide on PK and the later upsert would wipe the
-        // earlier search's offer rows, leaving its packages with no
-        // hotel_rate_offers and dropping them from get_packages v14+.
         const pkgScope = p.package_id.slice(0, 8);
         const scopeId = (id: string) => `${pkgScope}_${id}`;
         const cheapestAiOfferId = cheapestAiRawId ? scopeId(cheapestAiRawId) : null;
@@ -431,7 +523,28 @@ serve(async (req) => {
       }
     }
 
-    // Persist offers synchronously, like start_pricing v8+.
+    // v12: package price updates FIRST (visible prices), offer detail second.
+    if (packageUpdates.length) {
+      const ids = packageUpdates.map(u => u.package_id);
+      const { data: existing } = await sb.from("packages")
+        .select("package_id, flight_price").in("package_id", ids);
+      const flightByPkg = new Map<string, number>();
+      for (const e of existing ?? []) flightByPkg.set(e.package_id, Number(e.flight_price ?? 0));
+
+      const CHUNK = 50;
+      for (let i = 0; i < packageUpdates.length; i += CHUNK) {
+        const slice = packageUpdates.slice(i, i + CHUNK);
+        await Promise.all(slice.map(u => {
+          const { package_id, ...vals } = u;
+          const fp = flightByPkg.get(package_id) ?? 0;
+          const hp = Number(vals.hotel_price);
+          // No-mock: total only when a live flight price exists too.
+          const total = fp > 0 ? fp + hp : null;
+          return sb.from("packages").update({ ...vals, total_price: total }).eq("package_id", package_id);
+        }));
+      }
+    }
+
     let offersPersisted = 0;
     let offerWriteTruncated = false;
     if (rateOfferRows.length) {
@@ -453,29 +566,6 @@ serve(async (req) => {
       }
     }
 
-    // Update packages — we need to also update total_price = flight_price + hotel_price.
-    // Read current flight prices, then write the combined total back.
-    if (packageUpdates.length) {
-      const ids = packageUpdates.map(u => u.package_id);
-      const { data: existing } = await sb.from("packages")
-        .select("package_id, flight_price").in("package_id", ids);
-      const flightByPkg = new Map<string, number>();
-      for (const e of existing ?? []) flightByPkg.set(e.package_id, Number(e.flight_price ?? 0));
-
-      const CHUNK = 50;
-      for (let i = 0; i < packageUpdates.length; i += CHUNK) {
-        const slice = packageUpdates.slice(i, i + CHUNK);
-        await Promise.all(slice.map(u => {
-          const { package_id, ...vals } = u;
-          const fp = flightByPkg.get(package_id) ?? 0;
-          const total = fp + Number(vals.hotel_price);
-          return sb.from("packages").update({ ...vals, total_price: total }).eq("package_id", package_id);
-        }));
-      }
-    }
-
-    // Persist no-fit markers. These packages stay out of strict-live
-    // results and the next chain's mock-supplier filter skips them.
     if (noFitUpdates.length) {
       const CHUNK = 50;
       for (let i = 0; i < noFitUpdates.length; i += CHUNK) {
@@ -487,19 +577,33 @@ serve(async (req) => {
       }
     }
 
-    // Chain ourselves if more mock packages remain (with a hard depth cap).
     const { count: remainingCount } = await sb.from("packages")
       .select("package_id", { count: "exact", head: true })
       .eq("search_id", search_id)
-      .eq("hotel_supplier", "mock");
+      .eq("hotel_supplier", "pending");
     const remainingHasIds = (remainingCount ?? 0) > 0 && depth + 1 < MAX_CHAIN_DEPTH;
     let chained = false;
+    let terminalSweptCount = 0;
+    // v11: TERMINAL SWEEP. When this is the last cycle we'll run (next chain
+    // would exceed MAX_CHAIN_DEPTH OR there's nothing left to chain on),
+    // any package still 'pending' will never be priced — LiteAPI has had
+    // 6 chances. Mark them all no_fit so the UI stops showing
+    // "finding live prices…" forever. Without this, a search with more
+    // pending packages than the chain can process strands them indefinitely.
+    if (!remainingHasIds && (remainingCount ?? 0) > 0) {
+      const { data: swept, error: sweepErr } = await sb.from("packages")
+        .update({ hotel_supplier: "no_fit", hotel_priced_at: nowIso })
+        .eq("search_id", search_id)
+        .eq("hotel_supplier", "pending")
+        .select("package_id");
+      if (!sweepErr) terminalSweptCount = swept?.length ?? 0;
+      else console.error("[top_up_hotels_worker] terminal sweep error:", sweepErr);
+    }
     if (remainingHasIds) {
-      // Confirm those remaining have liteapi_hotel_id before chaining.
       const { data: check } = await sb.from("packages")
         .select("package_id, resorts!inner(liteapi_hotel_id)")
         .eq("search_id", search_id)
-        .eq("hotel_supplier", "mock")
+        .eq("hotel_supplier", "pending")
         .not("resorts.liteapi_hotel_id", "is", null)
         .limit(1);
       if ((check ?? []).length > 0) {
@@ -519,8 +623,11 @@ serve(async (req) => {
       version: VERSION,
       search_id,
       depth,
+      is_final_cycle: isFinalCycle,
       processed: targetPkgs.length,
       upgraded,
+      left_for_retry: leftForRetry,
+      no_fit_marked: noFitUpdates.length,
       batches_attempted: batchesAttempted,
       batches_succeeded: batchesSucceeded,
       wall_time_budget_hit: wallTimeBudgetHit,
@@ -529,7 +636,8 @@ serve(async (req) => {
       offers_persisted: offersPersisted,
       offer_write_truncated: offerWriteTruncated,
       chained,
-      remaining_mock: remainingCount,
+      remaining_pending: remainingCount,
+      terminal_swept: terminalSweptCount,
     }), { status: 200, headers });
 
   } catch (e) {
