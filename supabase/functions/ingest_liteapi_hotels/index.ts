@@ -313,7 +313,8 @@ serve(async (req) => {
             hotel_brand: h?.chain ? String(h.chain) : null,
             cap_star_rating: stars || null,
             cap_hotel_type: h?.hotelTypeId != null ? String(h.hotelTypeId) : null,
-            avg_user_rating: rating10 > 0 ? Math.round(rating10 * 10) : null, // resorts.avg_user_rating is 0-100
+            // resorts.avg_user_rating is 0-100 but typed numeric(4,2) → max 99.99; a perfect 10.0 must cap.
+            avg_user_rating: rating10 > 0 ? Math.min(99, Math.round(rating10 * 10)) : null,
             review_count: reviews,
             liteapi_description: typeof h?.hotelDescription === "string" ? h.hotelDescription.slice(0, 8000) : null,
             liteapi_hotel_photos: h?.main_photo ? [{ url: String(h.main_photo), is_main: true, source: "liteapi_list" }] : null,
