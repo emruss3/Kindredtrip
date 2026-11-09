@@ -9631,3 +9631,39 @@ body.body-lock {
 .kt-cal.kt-cal-sheet .kt-grid { grid-template-columns: repeat(7, 1fr); }
 .kt-cal.kt-cal-sheet .kt-day { width: 100%; }
 .kt-cal.kt-cal-sheet .kt-cal-nights { width: 100%; margin-bottom: 2px; }
+
+/* "Finding real prices…" — rendered in place of a price until a package is
+   fully live (hotel AND flight from LiteAPI). Deliberately carries no dollar
+   figure. Sentence case + a soft pulse so it reads as in-progress rather
+   than as a missing or broken price. Appended last so it wins equal-
+   specificity ties with context rules such as `.trip-rail .price-from`. */
+.price-from.pending,
+.hero-price-eyebrow.pending {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--ink-3);
+  padding: 6px 0;
+}
+.price-from.pending::before,
+.hero-price-eyebrow.pending::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--ink-4);
+  animation: kt-pending-pulse 1.4s ease-in-out infinite;
+}
+@keyframes kt-pending-pulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .price-from.pending::before,
+  .hero-price-eyebrow.pending::before { animation: none; opacity: 1; }
+}
