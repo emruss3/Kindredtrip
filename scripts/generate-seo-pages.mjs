@@ -181,10 +181,12 @@ const ORIGIN_AIRPORTS = [
 // in-page so the user never leaves /resort/<slug>. On country hubs the
 // form falls back to GET / for now, and the homepage's hydrate IIFE picks
 // up the params (no inline booking on country hubs yet).
-function searchWidget({ country, resortId, headline, sub, selfPath, originDefault }) {
+function searchWidget({ country, resortId, headline, sub, selfPath, originDefault, theme, kidsRequired, kidsPlaceholder, submitLabel }) {
   const opts = ORIGIN_AIRPORTS
     .map(([c, n]) => `<option value="${c}">${esc(n)} (${c})</option>`).join("");
   const hiddenCountry = country ? `<input type="hidden" name="country" value="${esc(country)}" />` : "";
+  // Guide intent carried into the homepage search (allowlisted there).
+  const hiddenTheme = theme ? `<input type="hidden" name="theme" value="${esc(theme)}" />` : "";
   // Resort pages: form points at its own URL so resort-booking.js can
   // intercept and orchestrate everything in-page. JS-disabled visitors
   // get a graceful fallback (URL just gets ?origin=… appended).
@@ -198,7 +200,7 @@ function searchWidget({ country, resortId, headline, sub, selfPath, originDefaul
   <h2 id="seo-wiz-h" class="seo-wizard-headline">${esc(headline)}</h2>
   ${sub ? `<p class="seo-wizard-sub">${esc(sub)}</p>` : ""}
   <form class="seo-wizard-form" action="${esc(action)}" method="GET">
-    ${hiddenCountry}
+    ${hiddenCountry}${hiddenTheme}
     ${autostartHidden}
     <label class="seo-wizard-field">
       <span>From</span>
@@ -219,9 +221,9 @@ function searchWidget({ country, resortId, headline, sub, selfPath, originDefaul
     </label>
     <label class="seo-wizard-field seo-wizard-field-wide">
       <span>Kids' ages</span>
-      <input type="text" name="kids" placeholder="e.g. 8, 5, 1" autocomplete="off" />
+      <input type="text" name="kids" placeholder="${esc(kidsPlaceholder || "e.g. 8, 5, 1")}" autocomplete="off"${kidsRequired ? ` required pattern="\\s*\\d{1,2}(\\s*[,\\s]\\s*\\d{1,2})*\\s*" title="Enter each child's age, separated by commas"` : ""} />
     </label>
-    <button type="submit" class="seo-wizard-submit">${resortId ? "See live prices →" : "Compare trips →"}</button>
+    <button type="submit" class="seo-wizard-submit">${esc(submitLabel || (resortId ? "See live prices →" : "Compare trips →"))}</button>
   </form>
   <p class="seo-wizard-fine">Live flights + hotel rates ranked for your exact family. No fees, no markup.</p>
 </aside>`;
@@ -2122,6 +2124,24 @@ ${faqHtml(qa)}
   });
 }
 
+// Guides whose page-level search carries their intent into the results
+// (instead of a generic link to the homepage form).
+const THEME_SEARCH = {
+  "water-park-resorts": {
+    theme: "water_park",
+    headline: "Compare water-park resort trips",
+    sub: "Enter your airport, dates and every child's age. We'll price live flights plus hotel and keep the results to resorts with a water park.",
+    submitLabel: "Compare total trip cost →",
+  },
+  "resorts-for-family-of-5": {
+    headline: "Price a trip for your family of five",
+    sub: "Two adults and three kids? Enter each child's age — we only price rooms, or explicit room combinations, that sleep all five, and show the full combined cost.",
+    kidsRequired: true,
+    kidsPlaceholder: "Each child's age, e.g. 9, 6, 3",
+    submitLabel: "Compare total trip cost →",
+  },
+};
+
 function themeGlobalPage(t, matches) {
   const url = `${ORIGIN}${themeGlobalPath(t)}`;
   const ranked = matches.slice(0, 20);
@@ -2166,7 +2186,7 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loadi
 <h1>${esc(t.globalH)}</h1>
 <p class="seo-sub">${matches.length} resorts across ${countryList.length} destinations · ${rankLabel}</p>
 <p class="seo-lede">${esc(intro)}</p>
-<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
+${THEME_SEARCH[t.slug] ? searchWidget(THEME_SEARCH[t.slug]) : `<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>`}
 
 ${isToddler ? toddlerMethodologyBlock() : (isFamily5 ? familyRoomMethodologyBlock() : methodologyBlock())}
 

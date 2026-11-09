@@ -1171,6 +1171,10 @@
   // initial-population block at the end of this script (see below). Declared
   // BEFORE hydrateFromDeepLink: a later `var x = null` would reset it.
   var KT_deepLinkParty = null;
+  // Guide-page intent carried into search (e.g. ?theme=water_park from the
+  // water-park guide's form). Allowlisted; shown as a removable filter pill.
+  var KT_themeFilter = null;
+  const KT_THEME_LABELS = { water_park: "Water park" };
 
   (function hydrateFromDeepLink() {
     const qp = new URLSearchParams(location.search);
@@ -1199,6 +1203,9 @@
         if (av) av.textContent = String(party.adults);
       }
     }
+
+    const theme = qp.get("theme");
+    if (theme && Object.prototype.hasOwnProperty.call(KT_THEME_LABELS, theme)) KT_themeFilter = theme;
 
     const country = qp.get("country");
     if (country) {
@@ -1992,8 +1999,17 @@
     return packageMatchesFiltersExcluding(pkg, null);
   }
 
+  // Same water-park evidence the trip detail uses: the structured field or a
+  // water-park amenity tag.
+  function hasWaterPark(pkg) {
+    const r = pkg.resorts || {};
+    if (r.water_park === true || r.cap_has_water_park === true) return true;
+    const am = (pkg._tags || extractTags(pkg)).amenities || [];
+    return am.some((t) => /water ?park/i.test(t));
+  }
   function packageMatchesFiltersExcluding(pkg, exclude) {
     const r = pkg.resorts || {};
+    if (exclude !== "theme" && KT_themeFilter === "water_park" && !hasWaterPark(pkg)) return false;
     // Strict search-time requirements (require_kids_club, require_all_inclusive)
     // — applied here so sidebar counts also reflect the active toggles.
     if (!packageMeetsSearchRequirements(pkg)) return false;
@@ -2013,7 +2029,7 @@
   }
 
   function activeFilterCount() {
-    return filters.country.size +
+    return (KT_themeFilter ? 1 : 0) + filters.country.size +
       filters.amenities.size + filters.rooms.size + filters.styles.size +
       filters.highlights.size + filters.brands.size +
       (filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
@@ -2022,6 +2038,7 @@
   }
 
   function clearAllFilterState() {
+    KT_themeFilter = null;
     filters.country.clear();
     filters.amenities.clear();
     filters.rooms.clear();
@@ -2723,11 +2740,15 @@
     // filter state. We want both to persist into the results sidebar so the
     // user can pull countries off / change budget without re-searching.
     const homepageCountries = Array.from(filters.country);
+    // Guide intent (e.g. water park) is search intent like the countries:
+    // it survives the reset below; the user removes it via its pill.
+    const homepageTheme = KT_themeFilter;
     const budgetRaw = parseInt(document.getElementById("budget").value, 10);
     const homepageBudget = !isNaN(budgetRaw) && budgetRaw > 0 ? budgetRaw : null;
 
     clearAllFilterState();
     homepageCountries.forEach((c) => filters.country.add(c));
+    KT_themeFilter = homepageTheme;
     if (homepageBudget) filters.priceMax = homepageBudget;
     syncHomepageDestinationChips();
 
@@ -3734,6 +3755,9 @@
     if (filters.country.size > 0) {
       fixes.push({ label: `All Caribbean countries (${filters.country.size} selected)`, onclick: "loosenFilter('country')" });
     }
+    if (KT_themeFilter) {
+      fixes.push({ label: `Drop the ${KT_THEME_LABELS[KT_themeFilter].toLowerCase()} filter`, onclick: "KT_themeFilter=null;renderResults();" });
+    }
     if (filters.amenities.size + filters.rooms.size + filters.styles.size + filters.highlights.size + filters.brands.size > 0) {
       fixes.push({ label: "Clear all sidebar filters", onclick: "clearAllFilters()" });
     }
@@ -4291,6 +4315,9 @@
 
   function renderActiveFilterPills() {
     const pills = [];
+    if (KT_themeFilter) {
+      pills.push(`<button class="active-filter-pill" onclick="KT_themeFilter=null;renderResults();">${escapeHtml(KT_THEME_LABELS[KT_themeFilter])}<span class="x">×</span></button>`);
+    }
     filters.country.forEach((country) => {
       pills.push(`<button class="active-filter-pill" onclick="setCountryFilter(${jsArg(country)})">${escapeHtml(country)}<span class="x">×</span></button>`);
     });
