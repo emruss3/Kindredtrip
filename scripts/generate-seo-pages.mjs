@@ -42,6 +42,7 @@ import {
   familyFitScore, mayCallAllInclusive, countAnswer, cleanSnippet,
   sentimentConflict, airportDisplay, GATES, indexability,
 } from "./lib/family-rules.mjs";
+import { loadOfficialRooms, officialLargest, capsText, connectingText } from "./lib/room-evidence.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -282,6 +283,38 @@ const EDITORIAL = (() => {
   }
   return m;
 })();
+// Official room evidence (hotel-published occupancy), separate from partner
+// inventory (family_max). See scripts/lib/room-evidence.mjs.
+const OFFICIAL = loadOfficialRooms(join(ROOT, "data/room-evidence/official.json"));
+const officialRoomsFor = (r) => OFFICIAL.bySlug.get(slugById.get(r.resort_id)) || [];
+function roomFacts(r) {
+  const rooms = officialRoomsFor(r);
+  const off = officialLargest(rooms);
+  const partner = Number(r.family_max) || null;
+  const eff = off ? { n: off.max_occupancy, basis: "hotel", room: off.room_name } : (partner ? { n: partner, basis: "partner" } : null);
+  return { rooms, off, partner, eff };
+}
+// Hotel-published largest room when it beats partner coverage — the case
+// where partner-only copy ("larger families may need two rooms") misleads.
+function hotelBeyondPartner(r) {
+  const { off, partner } = roomFacts(r);
+  return off && off.max_occupancy >= 5 && (partner == null || off.max_occupancy > partner) ? { off, partner } : null;
+}
+// Named hotel-published rooms (caps kept separate, linked source, date).
+function officialRoomsTable(r) {
+  const { rooms, partner } = roomFacts(r);
+  if (!rooms.length) return "";
+  return `<table class="seo-roomfit"><thead><tr><th>Room (hotel-published)</th><th>Who fits</th><th>Unit</th></tr></thead><tbody>${rooms.map((rm) => {
+    const beyondPartner = Number.isFinite(rm.max_occupancy) && partner != null && rm.max_occupancy > partner;
+    return `<tr><td><a href="${esc(rm.official_url)}" rel="nofollow noopener">${esc(rm.room_name)}</a>${beyondPartner ? `<br><span class="seo-link-meta">Confirmed by the hotel; our partner doesn't currently price this room — book it directly with the resort.</span>` : ""}</td><td>${esc(capsText(rm))}${rm.combinations && rm.combinations.length ? `<br><span class="seo-link-meta">Listed: ${esc(rm.combinations.join("; "))}</span>` : ""}</td><td>${esc(connectingText(rm))}</td></tr>`;
+  }).join("")}</tbody></table>
+<p class="seo-sub">Source: the hotel's own room pages (linked), checked ${esc(rooms[0].verified || "—")}.${[...new Set(rooms.map((rm) => rm.source_note).filter(Boolean))].map((n) => ` ${esc(n)}`).join("")} Occupancy rules can change — confirm with the resort.</p>`;
+}
+const partnerCoverageText = (r) => {
+  const { partner } = roomFacts(r);
+  return partner ? `the largest room our booking partner currently prices here sleeps ${partner}` : "our booking partner doesn't currently report room occupancy here";
+};
+
 const countryIndexable = (c) => indexability({
   template: "country",
   eligibleResultCount: (byCountry.get(c) || []).filter(familyEligible).length,
@@ -347,7 +380,9 @@ function watchOutsFor(r) {
   if (r.transfer_min != null && r.transfer_min > 90) out.push(`Long airport transfer — roughly ${r.transfer_min} minutes from ${r.airport_name || r.airport_iata || "the nearest airport"}.`);
   if (!r.on_beach) out.push("Not directly on the beach in our data.");
   if (r.rating != null && Number(r.rating) < 75) out.push(`Guest rating (${ratingTo5(r.rating)}/5) is below the catalogue average.`);
-  if (r.family_max != null && Number(r.family_max) <= 4) out.push(`Largest room configuration we track sleeps ${r.family_max} — larger families may need two rooms.`);
+  const hb = hotelBeyondPartner(r);
+  if (hb) out.push(`The hotel publishes a room for ${hb.off.max_occupancy} (${hb.off.room_name}), but ${hb.partner ? `our booking partner currently prices rooms up to ${hb.partner}` : "our booking partner doesn't price it"} — book that room directly with the resort.`);
+  else if (r.family_max != null && Number(r.family_max) <= 4) out.push(`Largest room configuration we track sleeps ${r.family_max} — larger families may need two rooms.`);
   if (knownFieldCount(r) < 5) out.push("We have limited family-fit data for this resort — verify details before booking.");
   return out;
 }
@@ -376,7 +411,7 @@ function notIdealFor(r) {
   if (!r.kids_club) return "Parents who need drop-off childcare";
   if (!r.on_beach) return "Beach-first families";
   if (r.transfer_min != null && r.transfer_min > 90) return "Kids who melt down on long transfer drives";
-  if (r.family_max != null && Number(r.family_max) <= 4 && !r.connecting) return "Families of 5+ wanting a single room";
+  if (r.family_max != null && Number(r.family_max) <= 4 && !r.connecting && !hotelBeyondPartner(r)) return "Families of 5+ wanting a single room";
   return "Families who need every detail confirmed up front — verify specifics when booking";
 }
 
@@ -386,7 +421,7 @@ function skipIfList(r) {
   if (!r.kids_club) out.push("You need drop-off childcare — no kids club is confirmed here.");
   if (!r.on_beach) out.push("Walking straight onto the sand is the whole point of your trip.");
   if (r.transfer_min != null && r.transfer_min > 90) out.push("Your kids melt down on long drives — the airport transfer is significant.");
-  if (r.family_max != null && Number(r.family_max) <= 4 && !r.connecting) out.push("You're a family of 5+ and want to stay in one room.");
+  if (r.family_max != null && Number(r.family_max) <= 4 && !r.connecting && !hotelBeyondPartner(r)) out.push("You're a family of 5+ and want to stay in one room.");
   if (!out.length) out.push("You want a guarantee on a specific room type — always confirm the exact room when booking.");
   return out.slice(0, 3);
 }
@@ -728,6 +763,8 @@ function resortFaq(r) {
   qa.push([`Can ${name} sleep a family of 5?`,
     r.qual_room
       ? `Yes — the ${r.qual_room.room} sleeps up to ${r.qual_room.occ} (max ${r.qual_room.ad} adults + ${r.qual_room.ch} children) in one unit${r.connecting ? ", and connecting rooms are available for bigger groups" : ""}. Verified ${r.qual_room.v} from the LiteAPI room catalogue; confirm the exact room for your dates when you book.`
+      : hotelBeyondPartner(r)
+      ? `Yes — ${name} publishes the ${hotelBeyondPartner(r).off.room_name} for ${capsText(hotelBeyondPartner(r).off)} (from the hotel's own room page). ${hotelBeyondPartner(r).partner ? `Our booking partner currently prices rooms up to ${hotelBeyondPartner(r).partner} here, so book that room directly with the resort.` : "Our booking partner doesn't currently price it, so book it directly with the resort."}`
       : Number(r.family_max) >= 5
       ? `Property data indicates at least one room here may sleep ${r.family_max}${r.connecting ? ", and connecting rooms are available for bigger groups" : ""} — but room categories and occupancy vary by date, so confirm the exact qualifying room before booking. Search your dates to see rooms that fit your exact party.`
       : `The largest single-room configuration we track sleeps ${r.family_max ?? "an unconfirmed number"}. Room fit varies by date and party size — search your dates and kids' ages and we'll show which rooms (or two-room combinations) actually fit.`]);
@@ -1210,7 +1247,7 @@ function resortPage(r) {
     ["Beachfront", r.on_beach ? "Yes" : "Not confirmed"],
     ["Pools", r.water_park ? "Yes + water park" : (r.pool ? "Yes" : "Not confirmed")],
     ["All-inclusive", r.all_inclusive ? "Yes — live AI rates seen" : "Not confirmed"],
-    ["Family room fit", qualifyingRoom5(r) ? `Verified: ${qualifyingRoom5(r).room} sleeps up to ${qualifyingRoom5(r).occ}` : (r.family_max ? `A room may sleep up to ${r.family_max} (confirm exact room)` : "Varies — search your dates")],
+    ["Family room fit", qualifyingRoom5(r) ? `Verified: ${qualifyingRoom5(r).room} sleeps up to ${qualifyingRoom5(r).occ}` : hotelBeyondPartner(r) ? `Hotel publishes: ${hotelBeyondPartner(r).off.room_name}, up to ${hotelBeyondPartner(r).off.max_occupancy} (book direct)` : (r.family_max ? `A room may sleep up to ${r.family_max} (confirm exact room)` : "Varies — search your dates")],
   ];
 
   const qroom = qualifyingRoom5(r);
@@ -1274,7 +1311,7 @@ ${watchOuts.map((w) => `<li>${esc(w)}</li>`).join("")}
 </div>
 
 <h2>Room fit for families</h2>
-${roomFit.length ? `<ul class="seo-signal-list">${roomFit.map((l) => `<li>${l}</li>`).join("")}</ul>
+${officialRoomsTable(r) ? `${officialRoomsTable(r)}\n<p><b>Partner inventory:</b> ${partnerCoverageText(r)}. Dated availability comes from your live search.</p>\n` : ""}${roomFit.length ? `<ul class="seo-signal-list">${roomFit.map((l) => `<li>${l}</li>`).join("")}</ul>
 <p>Room fit can still vary by date and party size. Search your dates and kids' ages to see which rooms actually fit your family.</p>`
   : `<p>Room fit can vary by date and party size. Search your dates and kids' ages to see which rooms actually fit your family.</p>`}
 
@@ -2411,8 +2448,15 @@ function compareValue(r, key) {
     case "beach": return r.on_beach ? "Yes" : "Not confirmed";
     case "pool": return r.water_park ? "Yes + water park" : (r.pool ? "Yes" : "Not confirmed");
     case "infant": return (r.infants || r.cribs) ? [r.infants ? "accepts infants" : null, r.cribs ? "cribs" : null].filter(Boolean).join(", ") : "Not confirmed";
-    case "sleeps5": return Number(r.family_max) >= 5 ? `Yes (up to ${r.family_max})` : (r.family_max ? `No (max ${r.family_max})` : "Not confirmed");
-    case "sleeps6": return Number(r.family_max) >= 6 ? `Yes (up to ${r.family_max})` : (r.family_max ? `No (max ${r.family_max})` : "Not confirmed");
+    case "sleeps5": case "sleeps6": {
+      const need = key === "sleeps5" ? 5 : 6;
+      const { eff } = roomFacts(r);
+      if (!eff) return "Not confirmed";
+      const basis = eff.basis === "hotel" ? `hotel: ${eff.room}` : "partner data";
+      return eff.n >= need ? `Yes — up to ${eff.n} (${basis})` : `Not in ${eff.basis === "hotel" ? "the hotel's published rooms" : "partner data"} (max ${eff.n})`;
+    }
+    case "official_max": { const { off } = roomFacts(r); return off ? `${off.room_name} — ${capsText(off)}` : "Not yet verified with the hotel"; }
+    case "partner_max": { const { partner } = roomFacts(r); return partner ? `Up to ${partner} guests` : "None priced"; }
     case "connecting": return r.connecting ? "Yes" : "Not confirmed";
     case "ai": return r.all_inclusive ? "Yes — live rates seen" : "Not confirmed";
     default: return "—";
@@ -2430,7 +2474,8 @@ function comparePage(a, b) {
     ["Destination", "dest"], ["Star class", "stars"], ["Guest rating", "rating"],
     ["Closest airport", "airport"], ["Transfer time", "transfer"],
     ["Kids club", "kids_club"], ["Beachfront", "beach"], ["Pools", "pool"],
-    ["Infant-friendly", "infant"], ["Sleeps 5+", "sleeps5"], ["Sleeps 6+", "sleeps6"],
+    ["Infant-friendly", "infant"], ["Largest room (hotel-published)", "official_max"], ["Largest room our partner prices", "partner_max"],
+    ["Sleeps 5+", "sleeps5"], ["Sleeps 6+", "sleeps6"],
     ["Connecting rooms", "connecting"], ["All-inclusive", "ai"],
   ];
 
@@ -2444,10 +2489,20 @@ function comparePage(a, b) {
   diff(flag(toddlerFit(a), toddlerFit(b)), `you're traveling with an infant or toddler — ${an} has confirmed infant-friendly signals`, `you're traveling with an infant or toddler — ${bn} has confirmed infant-friendly signals`);
   diff(flag(a.all_inclusive, b.all_inclusive), `you want all-inclusive (we've seen live AI rates at ${an} but not ${bn})`, `you want all-inclusive (we've seen live AI rates at ${bn} but not ${an})`);
   diff(flag(a.connecting, b.connecting), `you need connecting rooms (confirmed at ${an} only)`, `you need connecting rooms (confirmed at ${bn} only)`);
-  if (Number(a.family_max) >= 5 || Number(b.family_max) >= 5) {
-    const fa = Number(a.family_max || 0), fb = Number(b.family_max || 0);
-    if (fa > fb) chooseA.push(`your family is bigger — largest ${an} room sleeps ${fa} vs ${fb || "unconfirmed"} at ${bn}`);
-    else if (fb > fa) chooseB.push(`your family is bigger — largest ${bn} room sleeps ${fb} vs ${fa || "unconfirmed"} at ${an}`);
+  {
+    // Room-size verdicts come ONLY from hotel-published occupancy on both
+    // sides. Partner inventory is coverage, not policy — comparing it is how
+    // this page once called Hyatt Ziva "max 4" when Hyatt publishes 5- and
+    // 6-person suites.
+    const ea = roomFacts(a).eff, eb = roomFacts(b).eff;
+    if (ea && eb && ea.basis === "hotel" && eb.basis === "hotel" && (ea.n >= 5 || eb.n >= 5) && ea.n !== eb.n) {
+      const src = "per the hotels' published room pages";
+      // If the winning room is beyond what our partner prices, say so —
+      // the visitor will need to book that room directly with the hotel.
+      const direct = (r, e) => { const p = roomFacts(r).partner; return p != null && e.n > p ? `; our booking partner currently prices rooms up to ${p} there, so book the ${e.n}-person room directly with the resort` : ""; };
+      if (ea.n > eb.n) chooseA.push(`your family is bigger — ${an}'s largest room sleeps ${ea.n} vs ${eb.n} at ${bn} (${src}${direct(a, ea)})`);
+      else chooseB.push(`your family is bigger — ${bn}'s largest room sleeps ${eb.n} vs ${ea.n} at ${an} (${src}${direct(b, eb)})`);
+    }
   }
   if (a.transfer_min != null && b.transfer_min != null && Math.abs(a.transfer_min - b.transfer_min) >= 15) {
     if (a.transfer_min < b.transfer_min) chooseA.push(`you want the shorter travel day — ~${a.transfer_min} min transfer vs ~${b.transfer_min} min`);
@@ -2500,16 +2555,15 @@ function comparePage(a, b) {
     .filter((s) => s.resort_id !== r.resort_id && s.resort_id !== other.resort_id && familyEligible(s))
     .sort(byScore).slice(0, 3);
 
-  const roomFitCompare = (() => {
-    const fa = Number(a.family_max || 0), fb = Number(b.family_max || 0);
-    if (!fa && !fb) return `We don't have confirmed room-occupancy data for either resort. Room fit can vary by date and party size — search your dates and kids' ages to see which rooms actually fit your family at both.`;
-    const bits = [];
-    if (fa) bits.push(`${an}'s largest tracked room sleeps ${fa}${a.connecting ? " with connecting rooms available" : ""}${a.sofa_bed ? " (sofa beds in some rooms)" : ""}`);
-    else bits.push(`${an} has no confirmed occupancy data`);
-    if (fb) bits.push(`${bn}'s largest tracked room sleeps ${fb}${b.connecting ? " with connecting rooms available" : ""}${b.sofa_bed ? " (sofa beds in some rooms)" : ""}`);
-    else bits.push(`${bn} has no confirmed occupancy data`);
-    return bits.join(". ") + ". Availability changes by date — search your party to see rooms that actually fit.";
-  })();
+  // Room fit: hotel-published rooms first (named, caps kept separate, source +
+  // date), then what our partner can actually price. Rooms the hotel confirms
+  // but the partner can't price are labeled with a direct-hotel action.
+  const roomFitHtml = [a, b].map((r) => {
+    const name = displayName(r);
+    const official = officialRoomsTable(r) || `<p>We haven't verified ${esc(name)}'s room occupancy on the hotel's own site yet.</p>`;
+    const partnerLine = `<p><b>Partner inventory:</b> ${partnerCoverageText(r)}${r.connecting ? "; connecting rooms are listed (on request, not guaranteed)" : ""}. Dated availability comes from your live search.</p>`;
+    return `<h3>${esc(name)}</h3>` + official + partnerLine;
+  }).join("\n");
 
   const travelCompare = sameAirport
     ? `Both resorts fly into ${a.airport_name || a.airport_iata} (${a.airport_iata}) — identical flights, so your travel day differs only in the transfer${a.transfer_min && b.transfer_min ? `: roughly ${a.transfer_min} minutes to ${an} vs ${b.transfer_min} minutes to ${bn}` : ""}.`
@@ -2550,7 +2604,7 @@ ${rows.map(([label, key]) => `<tr><th>${esc(label)}</th><td>${esc(compareValue(a
 <p>${esc(`${an}: ${familySignals(a).length ? familySignals(a).join(", ") : "limited confirmed family amenities in our data"}. ${bn}: ${familySignals(b).length ? familySignals(b).join(", ") : "limited confirmed family amenities in our data"}.`)}</p>
 
 <h2>Room fit</h2>
-<p>${esc(roomFitCompare)}</p>
+${roomFitHtml}
 
 <h2>Travel day</h2>
 <p>${esc(travelCompare)}</p>
@@ -2564,7 +2618,7 @@ ${searchWidget({
 })}
 
 <h2>Which one should you pick?</h2>
-<p>${esc(`If the table above is close, let two things decide: the travel day (flights + transfer for your actual dates) and the room your family will really occupy. ${Number(a.family_max) >= 5 || Number(b.family_max) >= 5 ? "For families of 5+, room fit is usually the tiebreak." : "Both favor smaller parties in a single room — larger families should compare two-room pricing."} Run the live search and let total trip cost settle it.`)}</p>
+<p>${esc(`If the table above is close, let two things decide: the travel day (flights + transfer for your actual dates) and the room your family will really occupy. ${(roomFacts(a).eff?.n ?? 0) >= 5 || (roomFacts(b).eff?.n ?? 0) >= 5 ? "For families of 5+, room fit is usually the tiebreak — check the named rooms above." : "Neither has a verified room for 5+ in our data — larger families should compare two-room pricing."} Run the live search and let total trip cost settle it.`)}</p>
 
 <h2>Similar alternatives</h2>
 <ul class="seo-link-grid">

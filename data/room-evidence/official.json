@@ -1,0 +1,623 @@
+{
+  "collected_at": "2026-11-09",
+  "rooms": [
+    {
+      "resort_slug": "hyatt-ziva-cancun",
+      "resort_name": "Hyatt Ziva Cancún",
+      "max_adults": null,
+      "combinations": [],
+      "bedding": null,
+      "age_rules": null,
+      "extra_beds": null,
+      "evidence_method": "manual_review",
+      "source_note": "Hyatt blocks automated checks, so these figures come from a manual review of the hotel page (not re-fetched by our crawler) — confirm on hyatt.com.",
+      "verified": "2026-11-09",
+      "room_name": "Oceanfront Pyramid Suite With Sofa Bed",
+      "room_code": "BLST",
+      "official_url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/BLST",
+      "max_occupancy": 5,
+      "max_children": 3,
+      "connecting": "not_stated",
+      "quotes": [
+        "Maximum five guests, including up to three children (owner review; page returns 403 to automated fetches)"
+      ],
+      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Re-verify in a browser."
+    },
+    {
+      "resort_slug": "hyatt-ziva-cancun",
+      "resort_name": "Hyatt Ziva Cancún",
+      "max_adults": null,
+      "combinations": [],
+      "bedding": null,
+      "age_rules": null,
+      "extra_beds": null,
+      "evidence_method": "manual_review",
+      "source_note": "Hyatt blocks automated checks, so these figures come from a manual review of the hotel page (not re-fetched by our crawler) — confirm on hyatt.com.",
+      "verified": "2026-11-09",
+      "room_name": "Club Two Bedroom Oceanfront Suite",
+      "room_code": "2BDS",
+      "official_url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/2BDS",
+      "max_occupancy": 6,
+      "max_children": 4,
+      "connecting": "connected_unit",
+      "quotes": [
+        "Maximum six guests, including up to four children (owner review; page returns 403 to automated fetches)"
+      ],
+      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Two-bedroom suite = one bookable unit. Re-verify in a browser."
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Family Suite",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/family-suite/",
+      "max_occupancy": 5,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 1 Child, 2 Infants",
+        "2 Adults, 2 Children, 1 Infant",
+        "2 Adults, 3 Children",
+        "3 Adults, 1 Child, 1 Infant",
+        "3 Adults, 2 Children"
+      ],
+      "bedding": "1 King, 1 Sofa Bed, 2 Twin/Single",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed, 2 Twin/Single",
+        "Guests: 2 Adults, 1 Child, 2 Infants | 2 Adults, 2 Children, 1 Infant | 2 Adults, 3 Children | 3 Adults, 1 Child, 1 Infant | 3 Adults, 2 Children",
+        "Separate bedroom for kids",
+        "Our Family Suites at Finest Playa Mujeres give you lots of space to spread out - over three times the size of a typical hotel room - and they fit up to five people comfortably. Think of it as your family’s own private apartment with elevated style and spaces created for all ages. King bed for the grown-ups and a separate bedroom for the kids with two single beds.",
+        "Family Suite — 5 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Finest Club Family Suite",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/finest-club-family-suite/",
+      "max_occupancy": 5,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 1 Child, 2 Infants",
+        "2 Adults, 2 Children, 1 Infant",
+        "2 Adults, 3 Children",
+        "3 Adults, 1 Child, 1 Infant",
+        "3 Adults, 2 Children"
+      ],
+      "bedding": "1 King, 2 Twin/Single, 1 Sofa Bed",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 2 Twin/Single, 1 Sofa Bed",
+        "Guests: 2 Adults, 1 Child, 2 Infants | 2 Adults, 2 Children, 1 Infant | 2 Adults, 3 Children | 3 Adults, 1 Child, 1 Infant | 3 Adults, 2 Children",
+        "Beachfront location, separate bedroom for kids, and Finest Club amenities",
+        "There’s room for everyone with 950 luxurious square feet to spread out. The Finest Club Family Suite accommodates five comfortably, and it features a king bed for the grown-ups and two singles for the kids in their own separate bedroom. It’s less a hotel suite than a private apartment. The stylishly appointed bathroom has a rain shower for two, separate water closet, and double vanities.",
+        "Finest Club Family Suite — 5 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Pool Family Suite",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/pool-family-suite/",
+      "max_occupancy": 5,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 3 Children",
+        "3 Adults, 1 Child",
+        "2 Adults, 2 Children",
+        "2 Adults, 1 Child",
+        "3 Adults, 2 Children"
+      ],
+      "bedding": "1 King, 2 Twin/Single, 1 Sofa Bed",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 2 Twin/Single, 1 Sofa Bed",
+        "Guests: 2 Adults, 3 Children | 3 Adults, 1 Child | 2 Adults, 2 Children | 2 Adults, 1 Child | 3 Adults, 2 Children",
+        "Separate bedroom for kids plus a 140 sq. ft. private pool",
+        "Among the largest suites at Finest Playa Mujeres, our Pool Family Suite is a space where the whole family can cool off by the private pool without leaving the comfort of your luxurious suite. The fully furnished terrace features a lounge bed and two sun beds, and indoors the family can spread out thanks to smart layout featuring a separate bedroom with two single beds for the kids.",
+        "Pool Family Suite — 5 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Junior Swim-Up Suite",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/junior-swim-up-suite/",
+      "max_occupancy": 4,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 2 Infants",
+        "2 Adults, 1 Child, 1 Infant",
+        "2 Adults, 2 Children",
+        "3 Adults, 1 Infant",
+        "3 Adults, 1 Child"
+      ],
+      "bedding": "1 King, 1 Sofa Bed OR 2 Double",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed | 2 Double",
+        "Guests: 2 Adults, 2 Infants | 2 Adults, 1 Child, 1 Infant | 2 Adults, 2 Children | 3 Adults, 1 Infant | 3 Adults, 1 Child",
+        "Private pool area that connects to your building’s shared pool",
+        "Ideal for vacationers who just love to cool off with a dip in the pool, our oversized Junior Swim-Up Suites are a delight from the inside out. With direct access to your building’s bright and blissful pool, you’ll be connected but effortlessly secluded throughout your Playa Mujeres escape.",
+        "Junior Swim-Up Suite — 4 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Junior Suite Spa or Pool View",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/junior-suite-spa-pool-view/",
+      "max_occupancy": 4,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 2 Infants",
+        "2 Adults, 1 Child, 1 Infant",
+        "2 Adults, 2 Children",
+        "3 Adults, 1 Infant",
+        "3 Adults, 1 Child"
+      ],
+      "bedding": "1 King, 1 Sofa Bed OR 2 Double/Full, 1 Sofa Bed",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed | 2 Double/Full, 1 Sofa Bed",
+        "Guests: 2 Adults, 2 Infants | 2 Adults, 1 Child, 1 Infant | 2 Adults, 2 Children | 3 Adults, 1 Infant | 3 Adults, 1 Child",
+        "Oversized jacuzzi for two",
+        "Every detail of this modern Junior Suite exudes an uplifting sensation of maximum relaxation and tranquility, down to its spa-like bathroom with a rain shower for two, an expansive private terrace or balcony where you’ll unwind on a lounge bed, and the oversized jacuzzi for two. Each features a king or two double beds.",
+        "Junior Suite Spa or Pool View — 4 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Junior Suite with Private Pool",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/junior-suite-with-private-pool/",
+      "max_occupancy": 4,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 2 Infants",
+        "2 Adults, 1 Child, 1 Infant",
+        "2 Adults, 2 Children",
+        "3 Adults, 1 Infant",
+        "3 Adults, 1 Child"
+      ],
+      "bedding": "1 King, 1 Sofa Bed OR 2 Double",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed | 2 Double",
+        "Guests: 2 Adults, 2 Infants | 2 Adults, 1 Child, 1 Infant | 2 Adults, 2 Children | 3 Adults, 1 Infant | 3 Adults, 1 Child",
+        "Private 140 sq. ft. outdoor pool.",
+        "Craving a pool all to yourselves? Our romantic suites with private pools give you the perfect place to unwind and connect while we uplift your All-Inclusive vacation with ahead-of-the-curve amenities and truly spacious accommodations. During your stay in this space, you’ll find yourself stepping out onto the terrace every afternoon to stretch out in the sunbeds and take a cool dip in your very own 140 square foot pool.",
+        "Junior Suite with Private Pool — 4 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Finest Club Imperial Suite with Private Pool",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/finest-club-imperial-suite-private-pool/",
+      "max_occupancy": 4,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 2 Infants",
+        "2 Adults, 1 Child, 1 Infant",
+        "2 Adults, 2 Children",
+        "3 Adults, 1 Infant",
+        "3 Adults, 1 Child"
+      ],
+      "bedding": "1 King, 1 Sofa Bed",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed",
+        "Guests: 2 Adults, 2 Infants | 2 Adults, 1 Child, 1 Infant | 2 Adults, 2 Children | 3 Adults, 1 Infant | 3 Adults, 1 Child",
+        "One-bedroom beachfront suite with living room, private pool, Finest Club amenities, and upgraded services",
+        "Part of our coveted Finest Club section, the Imperial Suite with Private Pool is just waiting for you to relax and unwind in it. The extensive beachfront suite boasts a private pool and garden, along with a separate bedroom, living room, bar, and full array of elite Finest Club amenities and services designed to help you make the most of every exquisite moment of your Cancun escape.",
+        "Finest Club Imperial Suite with Private Pool — 4 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "finest-playa-mujeres",
+      "resort_name": "Finest Playa Mujeres",
+      "room_name": "Two-Story Rooftop Terrace Suite w/ Plunge Pool",
+      "room_code": null,
+      "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/two-story-rooftop-terrace-suite-w-plunge-pool/",
+      "max_occupancy": 4,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 Adults, 2 Infants",
+        "2 Adults, 1 Child, 1 Infant",
+        "2 Adults, 2 Children",
+        "3 Adults, 1 Child",
+        "3 Adults, 1 Infant"
+      ],
+      "bedding": "1 King, 1 Sofa Bed",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "Sofa bed listed in Bed Options",
+      "quotes": [
+        "Bed Options: 1 King, 1 Sofa Bed",
+        "Guests: 2 Adults, 2 Infants | 2 Adults, 1 Child, 1 Infant | 2 Adults, 2 Children | 3 Adults, 1 Child | 3 Adults, 1 Infant",
+        "Huge rooftop terrace with plunge pool and lounge areas",
+        "Ranking among our most coveted accommodations, this two-story suite includes a spa-like bathroom with a rain shower for two, a terrace with a jacuzzi tub for two, and of course the massive 800 square foot rooftop terrace with its plunge pool and lounge areas - your own private sanctuary for reveling in the breeze and the sunshine.",
+        "Two-Story Rooftop Terrace Suite w/ Plunge Pool — 4 Guests (rooms listing page https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/)"
+      ],
+      "notes": "max_occupancy is the \"N Guests\" figure from the official rooms listing page; per-room page lists allowed party combinations. No numeric child/infant age definitions stated on the page; no per-category caps stated, so max_adults/max_children left null.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Jr. Suite with sea view",
+      "room_code": "SJMB",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm) or one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "The Sea View Junior Suites at the Hotel Riu Palace Peninsula are specially designed to offer you all the amenities you need. In these 40-m2 rooms, you'll find two small double beds (125x200 cm) or one king-size bed (200x200 cm), a sofa in the lounge area, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace with views of the Caribbean.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Connecting Junior Suite with Sea View (2 rooms)",
+      "room_code": "SJMF",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "one super king size bed (200x200 cm) or two twin extra long beds (125x200 cm)",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "\"sofa or sofa bed\" in living area (as stated)",
+      "quotes": [
+        "Wonderful 40 m2 rooms with incredible sea views. They all have one super king size bed (200x200 cm) or two twin extra long beds (125x200 cm), a hydromassage bathtub, a lounge area with a sofa or sofa bed, satellite TV, a safe, a minibar, a drinks dispenser, a coffee maker and a balcony or terrace.\n\n* Remember that you will be booking two connecting rooms.",
+        "Room services list: \"Sofa or sofa bed\""
+      ],
+      "notes": "Official page sells this as two connecting rooms booked together (\"you will be booking two connecting rooms\"); no occupancy stated. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Jr. Suite Superior with sea view",
+      "room_code": "SJEB",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm) or one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "\"sofa or sofa bed\" in living area (as stated)",
+      "quotes": [
+        "These 40-m2 rooms are the perfect accommodations for enjoying a holiday in Mexico. In the Superior Sea View Junior Suites at the Hotel Riu Palace Peninsula, you'll find two small double beds (125x200 cm) or one king-size bed (200x200 cm), a sofa in the lounge area, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, and a coffee maker. Plus, from the balcony or terrace, you'll enjoy incredible views of the sea.",
+        "Room services list: \"Sofa or sofa bed\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Connecting Superior Junior Suite with Sea View (2 rooms)",
+      "room_code": "SJEF",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "one super king size bed (200x200 cm) or two twin extra long beds (125x200 cm)",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "\"sofa or sofa bed\" in living area (as stated)",
+      "quotes": [
+        "Enjoy a unique holiday in these rooms that are just what you’re looking for. These 40 m2 rooms have one super king size bed (200x200 cm) or two twin extra long beds (125x200 cm), a hydromassage bathtub, a lounge area with a sofa or sofa bed, satellite TV, a safe, a minibar, a drinks dispenser, a coffee maker and a balcony or terrace.\n\n* Remember that you will be booking two connecting rooms.",
+        "Room services list: \"Sofa or sofa bed\""
+      ],
+      "notes": "Official page sells this as two connecting rooms booked together (\"you will be booking two connecting rooms\"); no occupancy stated. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Jr. Suite with garden view",
+      "room_code": "SJJB",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "2 Queen beds measuring 150x200 cm. or a King bed measuring 200x200 cm.",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": "\"sofa or sofa bed\" in living area (as stated)",
+      "quotes": [
+        "Enjoy a perfect stay in Cancún in these 40 m2 rooms in which you will find 2 Queen beds measuring 150x200 cm. or a King bed measuring 200x200 cm., a sofa or sofa bed in the living area, WiFi connection, TV streaming with your own device, air conditioning, minibar, drink dispensers, coffee maker, safe and a balcony or terrace where you can enjoy the hotel's beautiful gardens.",
+        "Room services list: \"Sofa or sofa bed\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "resort_name": "Hotel Riu Palace Peninsula",
+      "room_name": "Connecting Junior Suite with Garden View (2 rooms)",
+      "room_code": "SJJF",
+      "official_url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "one bedroom with a 200x200 cm bed and a second bedroom with two 150x200cm beds",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": "\"sofa or sofa bed\" in living area (as stated)",
+      "quotes": [
+        "Spacious and comfortable 40m2 rooms featuring one bedroom with a 200x200 cm bed and a second bedroom with two 150x200cm beds, a sofa or sofa bed in the living area, WiFi connection, TV streaming with your own device, air conditioning, minibar, drink dispensers, coffee maker, safe, and a balcony or terrace with views of the hotel gardens.",
+        "Room services list: \"Sofa or sofa bed\""
+      ],
+      "notes": "Official page sells this as two connecting rooms booked together (\"you will be booking two connecting rooms\"); no occupancy stated. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Jr. Suite",
+      "room_code": "SJSB",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm) or one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "The Junior Suites at the Hotel Riu Palace Punta Cana are equipped with everything you need to enjoy an unforgettable holiday. In these 35-m2 rooms, you'll find two small double beds (125x200 cm) or one king-size bed (200x200 cm), a sofa in the lounge area, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Superior Junior Suite",
+      "room_code": "SJEB",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm) or one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "The Superior Junior Suites at the Hotel Riu Palace Punta Cana offer countless amenities for you to enjoy your stay to the utmost. In these 35-m2 rooms, you'll find two small double beds (125x200 cm) or one king-size bed (200x200 cm), a sofa in the lounge area, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Connecting Junior Suite (2 rooms)",
+      "room_code": "SJSF",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm)",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": null,
+      "quotes": [
+        "These 35-m2 rooms have two small double beds (125x200 cm), a sofa in the lounge area, a hydromassage bathtub, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace.\n\n* Remember that you will be booking two connecting rooms.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "Official page sells this as two connecting rooms booked together (\"you will be booking two connecting rooms\"); no occupancy stated. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Jr. Suite with sea view",
+      "room_code": "SJMB",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "two small double beds (125x200 cm) or one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "If you want accommodations with incredible views of the sea, the Sea View Junior Suites at the Hotel Riu Palace Punta Cana are a perfection option for you. In these 35-m2 rooms, you'll find two small double beds (125x200 cm) or one king-size bed (200x200 cm), a sofa in the lounge area, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Suite",
+      "room_code": "SUSB",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "one king-size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "The Hotel Riu Palace Punta Cana offers you its Suites, 67-m2 rooms with the best services and amenities. In these rooms, you'll find one king-size bed (200x200 cm), a sofa in the lounge area, a dressing room, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "resort_name": "Hotel Riu Palace Punta Cana",
+      "room_name": "Suite with sea view",
+      "room_code": "SUMB",
+      "official_url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "a super king size bed (200x200 cm)",
+      "age_rules": null,
+      "connecting": "not_stated",
+      "extra_beds": null,
+      "quotes": [
+        "These 67-m2 rooms at the Hotel Riu Palace Punta Cana offer you maximum comfort so that you can rest during your holiday. These Suites have a super king size bed (200x200 cm), a sofa in the lounge area, a dressing room, WiFi, satellite TV, air conditioning, a minibar and beverage dispenser, a coffee maker, and a balcony or terrace with lovely views of the sea.",
+        "Room services list: \"Sofa\""
+      ],
+      "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room.",
+      "evidence_method": "automated_fetch"
+    }
+  ],
+  "failures": [
+    {
+      "resort_slug": "hyatt-ziva-cancun",
+      "url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/BLST",
+      "error": "HTTP 403 from site (Hyatt bot protection, page text: \"We’re sorry. Your browser did something unexpected and we were unable to process your request.\" ERROR:E6020) — same result with curl and headless Chromium"
+    },
+    {
+      "resort_slug": "hyatt-ziva-cancun",
+      "url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/2BDS",
+      "error": "HTTP 403 from site (Hyatt bot protection, page text: \"We’re sorry. Your browser did something unexpected and we were unable to process your request.\" ERROR:E6020) — same result with curl and headless Chromium"
+    },
+    {
+      "resort_slug": "hyatt-ziva-cancun",
+      "url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms",
+      "error": "HTTP 403 from site (Hyatt bot protection, page text: \"We’re sorry. Your browser did something unexpected and we were unable to process your request.\" ERROR:E6020) — same result with curl and headless Chromium"
+    },
+    {
+      "resort_slug": "dreams-vista-cancun-golf-and-spa-resort",
+      "url": "https://www.hyatt.com/dreams/en-US/cunvc-dreams-vista-cancun-golf-and-spa-resort/rooms",
+      "error": "HTTP 403 from site (Hyatt bot protection, page text: \"We’re sorry. Your browser did something unexpected and we were unable to process your request.\" ERROR:E6020) — same result with curl and headless Chromium"
+    },
+    {
+      "resort_slug": "dreams-flora-resort-and-spa",
+      "url": "https://www.hyatt.com/dreams/en-US/pujdf-dreams-flora-resort-and-spa/rooms",
+      "error": "HTTP 403 from www.hyatt.com bot protection (host blocks every page tried, so the property URL slug itself could not be verified)"
+    },
+    {
+      "resort_slug": "dreams-macao-beach-punta-cana",
+      "url": "https://www.hyatt.com/dreams/en-US/pujdm-dreams-macao-beach-punta-cana/rooms",
+      "error": "HTTP 403 from www.hyatt.com bot protection (host blocks every page tried, so the property URL slug itself could not be verified)"
+    },
+    {
+      "resort_slug": "grand-velas-riviera-maya",
+      "url": "https://www.velasresorts.com/grand-velas-riviera-maya/rooms-and-suites",
+      "error": "HTTP 403 Cloudflare block: \"Attention Required! | Cloudflare — Sorry, you have been blocked. You are unable to access cf01.milestonecms.net\" (curl and headless Chromium); homepage /grand-velas-riviera-maya/ also 403"
+    },
+    {
+      "resort_slug": "hotel-xcaret-mexico",
+      "url": "https://www.hotelxcaret.com/en/rooms/",
+      "error": "HTTP 403 Akamai \"Access Denied — You don't have permission to access ... on this server\" (curl and headless Chromium); /en/ also 403"
+    },
+    {
+      "resort_slug": "hilton-cancun-an-all-inclusive-resort",
+      "url": "https://www.hilton.com/en/hotels/cunhihh-hilton-cancun-all-inclusive/rooms/",
+      "error": "HTTP 403 \"Hilton Page Reference Code — SOMETHING WENT WRONG Maybe it’s us, maybe it’s you.\" (curl and headless Chromium)"
+    },
+    {
+      "resort_slug": "moon-palace-cancun",
+      "url": "https://www.palaceresorts.com/moon-palace-cancun/rooms",
+      "error": "HTTP 403 DataDome-style challenge: \"Please enable JS and disable any ad blocker\" (curl and headless Chromium)"
+    },
+    {
+      "resort_slug": "beach-palace-all-inclusive",
+      "url": "https://www.palaceresorts.com/beach-palace/rooms",
+      "error": "HTTP 403 bot challenge: \"Please enable JS and disable any ad blocker\""
+    },
+    {
+      "resort_slug": "paradisus-grand-cana-all-suites",
+      "url": "https://www.melia.com/en/hotels/dominican-republic/punta-cana/paradisus-grand-cana/rooms",
+      "error": "HTTP 403 Akamai \"Access Denied — You don't have permission to access ... on this server\" (curl and headless Chromium)"
+    },
+    {
+      "resort_slug": "melia-caribe-beach-resort",
+      "url": "https://www.melia.com/en/hotels/dominican-republic/punta-cana/melia-caribe-beach-resort/rooms",
+      "error": "HTTP 403 Akamai \"Access Denied\""
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "url": "https://www.nickresorts.com/destinations/riviera-maya/nick-resorts-riviera",
+      "error": "Page loads (HTTP 200) but contains no room/occupancy content; nickresorts.com has no room pages in its sitemap (/riviera-maya/accommodations/ returns 404) and links out to karismahotels.com / reservations.karismahotels.com, which this environment's proxy refuses (CONNECT tunnel failed, 403)"
+    },
+    {
+      "resort_slug": "hotel-riu-palace-peninsula",
+      "url": "https://www.riu.com/en/hotel/mexico/cancun/hotel-riu-palace-peninsula/rooms",
+      "error": "Partial: rooms page loads but publishes no per-room occupancy; RIU room APIs (/api/riucom-bff/v1/rooms, /api/hotel-product/v3/hotels) return SOAP fault \"MessageBlocked\". Rooms recorded with occupancy null."
+    },
+    {
+      "resort_slug": "hotel-riu-palace-punta-cana",
+      "url": "https://www.riu.com/en/hotel/dominican-republic/punta-cana/hotel-riu-palace-punta-cana/rooms",
+      "error": "Partial: rooms page loads but publishes no per-room occupancy. Rooms recorded with occupancy null."
+    }
+  ]
+}
