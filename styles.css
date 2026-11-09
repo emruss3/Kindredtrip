@@ -9667,3 +9667,16 @@ body.body-lock {
   .price-from.pending::before,
   .hero-price-eyebrow.pending::before { animation: none; opacity: 1; }
 }
+
+/* Deep-link party we couldn't fully read (party.js) — ask, never guess. */
+.party-notice {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--r-sm, 10px);
+  background: var(--warn-soft, #fdf2e3);
+  color: var(--warn, #c2691a);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.party-notice[hidden] { display: none; }

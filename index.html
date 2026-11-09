@@ -391,6 +391,8 @@
         </div>
       </div>
 
+      <p class="party-notice" id="party-notice" role="alert" hidden></p>
+
       <div class="search-extras">
         <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
         <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
@@ -830,6 +832,7 @@
   </div>
 </footer>
 
+<script src="/party.js"></script>
 <script>
   const SUPABASE_URL = "https://wyqbtcuoorclmirepkuo.supabase.co";
   const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5cWJ0Y3Vvb3JjbG1pcmVwa3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3MzQ0MDMsImV4cCI6MjA4NjMxMDQwM30.LfZX0hMgJJQ5f-euBE4nRZnPQ4Kpc7IN3c1t9ht4Zbc";
@@ -1163,6 +1166,11 @@
   // Only fields actually present in the URL are overridden — anything
   // absent keeps its current default so a user clicking through with a
   // partial URL still ends up with a runnable search.
+  // Party parsed from a deep link, applied to the kids model by the
+  // initial-population block at the end of this script (see below). Declared
+  // BEFORE hydrateFromDeepLink: a later `var x = null` would reset it.
+  var KT_deepLinkParty = null;
+
   (function hydrateFromDeepLink() {
     const qp = new URLSearchParams(location.search);
     if (![...qp.keys()].length) return;
@@ -1173,25 +1181,21 @@
     setVal("date_start", qp.get("date_start"));
     setVal("date_end", qp.get("date_end"));
 
-    const adults = parseInt(qp.get("adults") || "", 10);
-    if (Number.isFinite(adults) && adults > 0) {
-      const a = document.getElementById("adults");
-      const av = document.getElementById("adults-value");
-      if (a) a.value = String(adults);
-      if (av) av.textContent = String(adults);
-    }
-
-    const kidsRaw = qp.get("kids");
-    if (kidsRaw != null) {
-      const ages = kidsRaw.split(/[,\s]+/)
-        .map((s) => parseInt(s, 10))
-        .filter((n) => Number.isFinite(n) && n >= 0 && n <= 17);
-      setVal("child_ages", ages.join(","));
-      const kc = document.getElementById("kids-count-value");
-      if (kc) kc.textContent = String(ages.length);
-      // Re-derive kid-age pills if the stepper UI cares about it.
-      if (typeof window.renderKidsAges === "function") {
-        try { window.renderKidsAges(ages.length, ages); } catch {}
+    // Party, normalized by the shared parser (party.js). The kids model
+    // (`kidsAges`, declared further down with `let`) is still in its
+    // temporal dead zone while this IIFE runs, so the parsed party is parked
+    // in KT_deepLinkParty and applied by the initial-population block before
+    // it syncs #child_ages. Previously the ages were written to #child_ages
+    // here and then overwritten by the default one-kid model, so
+    // "kids=8%2C+6%2C+3" searched as "family of 3, kids ages 8".
+    const party = window.KTParty ? window.KTParty.parseParty(qp) : null;
+    if (party) {
+      KT_deepLinkParty = party;
+      if (party.adults != null) {
+        const a = document.getElementById("adults");
+        const av = document.getElementById("adults-value");
+        if (a) a.value = String(party.adults);
+        if (av) av.textContent = String(party.adults);
       }
     }
 
@@ -1207,7 +1211,9 @@
     const resortId = qp.get("resort_id");
     if (resortId) pendingAutoOpenResortId = resortId;
 
-    const autostart = qp.get("autostart") === "1";
+    // Never auto-run a search on a party we couldn't read — the parent sees
+    // the notice and corrects the ages first.
+    const autostart = qp.get("autostart") === "1" && !(party && party.invalid.length);
     // Resort deep-link: go straight to the trip detail behind a loader,
     // never showing the results grid.
     if (resortId && autostart) {
@@ -1414,6 +1420,7 @@
     renderKidsAges();
     syncKidsHiddenInput();
     updateTravelersDisplay();
+    clearPartyNotice();
   }
   function setKidAge(idx, value) {
     const n = parseInt(value, 10);
@@ -1421,6 +1428,7 @@
     kidsAges[idx] = Math.max(0, Math.min(17, n));
     syncKidsHiddenInput();
     updateTravelersDisplay();
+    clearPartyNotice();
   }
   function renderKidsAges() {
     const row = document.getElementById("kids-ages-row");
@@ -1443,6 +1451,18 @@
   function syncKidsHiddenInput() {
     const hidden = document.getElementById("child_ages");
     if (hidden) hidden.value = kidsAges.join(", ");
+  }
+  // Ask the parent to fix travelers we couldn't read from a link, instead of
+  // silently dropping them. Cleared as soon as they edit the party.
+  function showPartyNotice(invalid) {
+    const el = document.getElementById("party-notice");
+    if (!el) return;
+    el.textContent = `We couldn't read part of your travelers (${invalid.join(", ")}). Check each child's age under Travelers before you search.`;
+    el.hidden = false;
+  }
+  function clearPartyNotice() {
+    const el = document.getElementById("party-notice");
+    if (el) el.hidden = true;
   }
   function updateTravelersDisplay() {
     const adultsInput = document.getElementById("adults");
@@ -1540,6 +1560,20 @@
   async function runSearchFromPopover() {
     // Mirror values to the hero form, then run the existing search
     const f = (id) => document.getElementById(id);
+    // Validate the edited party FIRST (shared parser, party.js): unreadable
+    // ages stop the edit with a field-level message instead of being dropped,
+    // and nothing is copied into the hero form until the party is valid.
+    const kidsField = f("po_child_ages");
+    const parsedKids = window.KTParty
+      ? window.KTParty.parseKids(kidsField.value)
+      : { kids: parseChildAges(kidsField.value), invalid: [] };
+    if (parsedKids.invalid.length) {
+      kidsField.setCustomValidity(`Couldn't read: ${parsedKids.invalid.join(", ")}. Enter each child's age 0-17, separated by commas.`);
+      kidsField.reportValidity();
+      kidsField.addEventListener("input", () => kidsField.setCustomValidity(""), { once: true });
+      return;
+    }
+    kidsField.setCustomValidity("");
     f("origin").value = f("po_origin").value;
     f("date_start").value = f("po_date_start").value;
     f("date_end").value = f("po_date_end").value;
@@ -1547,7 +1581,8 @@
     f("adults").value = f("po_adults").value;
     // Sync the popover's comma-list kids ages back into our internal kidsAges
     // model so the hero Travelers display + stepper UI reflect the change.
-    kidsAges = parseChildAges(f("po_child_ages").value);
+    kidsAges = (parsedKids.kids || []).slice();
+    clearPartyNotice();
     const kidsCountDisplay = f("kids-count-value");
     if (kidsCountDisplay) kidsCountDisplay.textContent = String(kidsAges.length);
     renderKidsAges();
@@ -8327,12 +8362,22 @@
 
   // Initial population — runs after all const/let declarations above are initialized
   syncHomepageDestinationChips();
-  // Render the default kid age picker (defaults to 1 kid age 8) +
-  // sync the hidden #child_ages CSV so a fresh page-load submission
+  // A deep-linked party (parsed by hydrateFromDeepLink via party.js) wins
+  // over the default model: apply it BEFORE syncing #child_ages, or the
+  // default one-kid model overwrites the URL's ages. kids === null means no
+  // `kids` param (keep the default); [] means an explicit adults-only party.
+  if (KT_deepLinkParty && KT_deepLinkParty.kids !== null) {
+    kidsAges = KT_deepLinkParty.kids.slice();
+    const kc = document.getElementById("kids-count-value");
+    if (kc) kc.textContent = String(kidsAges.length);
+  }
+  // Render the kid age picker (default: 1 kid age 8, unless a deep link set
+  // the party) and sync the hidden #child_ages CSV so the first submission
   // posts the right party shape.
   renderKidsAges();
   syncKidsHiddenInput();
   updateTravelersDisplay();
+  if (KT_deepLinkParty && KT_deepLinkParty.invalid.length) showPartyNotice(KT_deepLinkParty.invalid);
 
   // Pre-fill the search form when a homepage SEO link (or family-decision
   // CTA) is clicked. The links live as <a data-preset="..."> targeting
