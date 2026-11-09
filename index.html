@@ -1673,6 +1673,10 @@
   function pendingPriceHtml(cls = "price-from") {
     return `<div class="${cls} pending">Finding real prices…</div>`;
   }
+  // Shared live check for every place a package price is drawn.
+  function isLivePkg(p) {
+    return !!p && p.hotel_supplier === "liteapi" && p.flight_supplier === "liteapi";
+  }
 
   // Edge-function warming is handled SERVER-SIDE by the pg_cron job
   // `keep_edge_functions_warm` (every 4 min), which keeps the whole
@@ -3666,7 +3670,7 @@
             <img class="compare-slot-photo" src="${photo}" alt="${escapeHtml(r.resort_name || "")}" loading="lazy" />
             <div class="compare-slot-info">
               <div class="compare-slot-name">${escapeHtml(r.resort_name || "")}</div>
-              <div class="compare-slot-meta">${escapeHtml(r.country || "")} · <b>${fmtMoney(p.total_price)}</b></div>
+              <div class="compare-slot-meta">${escapeHtml(r.country || "")} · ${isLivePkg(p) ? `<b>${fmtMoney(p.total_price)}</b>` : "Finding real prices…"}</div>
             </div>
             <button class="compare-slot-x" onclick="toggleCompare('${p.package_id}', event)" aria-label="Remove from compare">×</button>
           </div>
@@ -3706,7 +3710,7 @@
       const photo = photoForResort({ resort_id: p.resort_id, resort_name: rr.resort_name, photo_refs: rr.photo_refs, liteapi_hotel_photos: rr.liteapi_hotel_photos }, 320);
       return `<div class="compare-cell-photo"><img src="${photo}" alt="${escapeHtml(rr.resort_name || "")}" loading="lazy" /><div class="compare-cell-name">${escapeHtml(rr.resort_name || "")}</div><div class="compare-cell-sub">${escapeHtml(rr.area || rr.country || "")}</div></div>`;
     };
-    const priceCell = (p) => `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${renderFlightCostBreakdown(p)} · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
+    const priceCell = (p) => !isLivePkg(p) ? `<div class="compare-cell-price">${pendingPriceHtml()}</div>` : `<div class="compare-cell-price"><div class="compare-cell-price-total">${fmtMoney(p.total_price)}</div><div class="compare-cell-price-sub">${renderFlightCostBreakdown(p)} · ${fmtMoney(p.hotel_price)} hotel</div></div>`;
     const fitCell = (p) => `<div class="compare-cell-fit"><span class="compare-cell-fit-num">${familyFitScore(p)}</span><span class="compare-cell-fit-lbl">Family Fit</span></div>`;
     const gradeCell = (p, k) => {
       const g = gradesFor(p)[k];
@@ -4347,7 +4351,9 @@
 
   function budgetDelta(p) {
     const b = getUserBudget();
-    if (b == null || p.total_price == null) return null;
+    // A dollar delta is derived from the trip total, so it's a price too:
+    // never compute one for a package that isn't fully live.
+    if (b == null || p.total_price == null || !isLivePkg(p)) return null;
     const diff = b - p.total_price;
     return { diff: Math.abs(Math.round(diff)), under: diff >= 0, budget: b };
   }
@@ -5321,9 +5327,9 @@
         <div class="budget-scenarios">
           <div class="budget-scenario active">
             <div class="scenario-tag">Best overall</div>
-            <div class="scenario-total">${fmtMoney(pkg.total_price)}</div>
-            <div class="scenario-meta">${fmtMoney(pkg.flight_price)} flights · ${fmtMoney(pkg.hotel_price)} hotel</div>
-            ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : `<div class="scenario-meta">No budget set</div>`}
+            ${isLive ? `<div class="scenario-total">${fmtMoney(pkg.total_price)}</div>
+            <div class="scenario-meta">${fmtMoney(pkg.flight_price)} flights · ${fmtMoney(pkg.hotel_price)} hotel</div>` : pendingPriceHtml()}
+            ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : (isLive && getUserBudget() == null ? `<div class="scenario-meta">No budget set</div>` : "")}
           </div>
           <div class="budget-scenario placeholder">
             <div class="scenario-tag">Cheapest flight</div>
@@ -5382,8 +5388,8 @@
                   <div class="alt-card-why">${escapeHtml(why)}</div>
                   <div class="alt-card-name">${escapeHtml(ar.resort_name || "Alternative")}</div>
                   <div class="alt-card-meta">${escapeHtml(ar.country || "")}${a.stops != null ? ` · ${a.stops === 0 ? "Direct" : `${a.stops} stop${a.stops === 1 ? "" : "s"}`}` : ""}${a.duration_hours ? ` · ${fmtFlightDuration(a.duration_hours)}` : ""}</div>
-                  <div class="alt-card-price"><b>${fmtMoney(a.total_price)}</b><span class="alt-card-price-sub"> total</span></div>
-                  ${aDelta ? `<div class="budget-delta small ${aDelta.under ? "under" : "over"}">${fmtMoney(aDelta.diff)} ${aDelta.under ? "under" : "over"}</div>` : ""}
+                  ${isLivePkg(a) ? `<div class="alt-card-price"><b>${fmtMoney(a.total_price)}</b><span class="alt-card-price-sub"> total</span></div>` : pendingPriceHtml()}
+                  ${isLivePkg(a) && aDelta ? `<div class="budget-delta small ${aDelta.under ? "under" : "over"}">${fmtMoney(aDelta.diff)} ${aDelta.under ? "under" : "over"}</div>` : ""}
                 </div>
               </button>`;
           }).join("")}
@@ -5628,8 +5634,9 @@
 
       <div class="trip-mobile-cta">
         <div class="trip-mobile-cta-info">
+          ${isLive ? `
           <div class="trip-mobile-cta-price"><b>${fmtMoney(pkg.total_price)}</b></div>
-          <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>
+          <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>` : pendingPriceHtml()}
         </div>
         <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
       </div>
@@ -7945,7 +7952,9 @@
     const totalLabel = "Live trip total";
     const lines = [
       `${r.resort_name || "Resort"}${r.country ? ` — ${r.country}` : ""}`,
-      `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`,
+      isLive
+        ? `${totalLabel}: ${fmtMoney(pkg.total_price)} (${fmtMoney(pkg.flight_price)} flights + ${fmtMoney(pkg.hotel_price)} hotel)`
+        : "Live prices are still loading — open the link for the current total.",
     ];
     if (delta) lines.push(`${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget (${fmtMoney(delta.budget)})`);
     if (pkg.stops != null) lines.push(`Travel: ${pkg.stops === 0 ? "Direct" : `${pkg.stops} stop${pkg.stops === 1 ? "" : "s"}`}${pkg.duration_hours ? ` · ${fmtFlightDuration(pkg.duration_hours)}` : ""}`);
