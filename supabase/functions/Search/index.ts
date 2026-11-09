@@ -1,7 +1,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "Search_v12_validation_errorlog";
+const VERSION = "Search_v14_flags_default_off";
+
+// v14: require_kids_club / require_all_inclusive now default to FALSE when a
+// caller omits them (was `?? true`). The homepage no longer ships these
+// toggles checked, and the kids-club requirement drops ~84% of island
+// hotels that carry no kids-club tag — so it must be an explicit opt-in,
+// never a silent server-side default. Callers that send the flag explicitly
+// (index.html runSearch, resort-booking.js) are unaffected.
+// v13: single-resort scope forces the gating flags off.
 
 type SearchRequest = {
   origin_iata: string;
@@ -19,6 +27,7 @@ type SearchRequest = {
   require_connecting_rooms?: boolean;
   excluded_countries?: string[];
   included_countries?: string[];
+  included_resort_ids?: string[];
   session_id?: string | null;
   is_internal?: boolean;
   skip_auto_process?: boolean;
@@ -32,8 +41,6 @@ function corsHeaders() {
   };
 }
 
-// Best-effort error sink. Never throws — logging must not mask the
-// original failure. Writes to edge_function_errors (service-role only).
 async function logError(
   sb: any,
   fields: { search_id?: string | null; context?: unknown; error: unknown },
@@ -75,7 +82,6 @@ serve(async (req) => {
     const childAges = body.child_ages ?? [];
     const children = childAges.length;
 
-    // --- Input validation at the API boundary ---
     const origin = String(body.origin_iata ?? "").trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(origin)) {
       return new Response(
@@ -107,6 +113,15 @@ serve(async (req) => {
     const session_id = /^[A-Za-z0-9_-]{8,64}$/.test(rawSession) ? rawSession : null;
     const is_internal = body.is_internal === true;
 
+    // Single-resort scope (resort deep-link): when present we must NOT apply
+    // the family-fit defaults that could drop the chosen resort, so force
+    // the gating flags off for the stored search row too.
+    const included_resort_ids: string[] | null =
+      Array.isArray(body.included_resort_ids) && body.included_resort_ids.length > 0
+        ? body.included_resort_ids.filter((x) => typeof x === "string" && /^[0-9a-fA-F-]{36}$/.test(x))
+        : null;
+    const scoped = !!(included_resort_ids && included_resort_ids.length);
+
     const { data: searchRow, error: searchErr } = await sb
       .from("searches")
       .insert({
@@ -120,10 +135,10 @@ serve(async (req) => {
         budget_total: body.budget_total ?? null,
         max_flight_hours: body.max_flight_hours ?? null,
         max_stops: body.max_stops ?? null,
-        require_all_inclusive: body.require_all_inclusive ?? true,
-        require_kids_club: body.require_kids_club ?? true,
-        require_direct_flight: body.require_direct_flight ?? false,
-        require_connecting_rooms: body.require_connecting_rooms ?? false,
+        require_all_inclusive: scoped ? false : (body.require_all_inclusive ?? false),
+        require_kids_club: scoped ? false : (body.require_kids_club ?? false),
+        require_direct_flight: scoped ? false : (body.require_direct_flight ?? false),
+        require_connecting_rooms: scoped ? false : (body.require_connecting_rooms ?? false),
         session_id,
         is_internal,
       })
@@ -161,6 +176,7 @@ serve(async (req) => {
             search_id,
             excluded_countries: body.excluded_countries ?? [],
             included_countries: body.included_countries ?? [],
+            included_resort_ids: included_resort_ids ?? [],
           }),
         });
         // deno-lint-ignore no-explicit-any
@@ -192,7 +208,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ version: VERSION, search_id, auto_invoked, auto_invoke_error }),
+      JSON.stringify({ version: VERSION, search_id, scoped, auto_invoked, auto_invoke_error }),
       { headers, status: 200 },
     );
   } catch (e) {
