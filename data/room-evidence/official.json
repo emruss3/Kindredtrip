@@ -472,6 +472,312 @@
         "Room services list: \"Sofa\""
       ],
       "notes": "No room-level occupancy stated on the official rooms page. Hotel-level booking-widget JSON on the same page shows max_capacity {\"adults\":6,\"children\":7,\"total\":8} — this is a search limit, NOT a room capacity, so it is not recorded per room."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim-Up Oceanfront King Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-oceanfront-king-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "1 King Bed | Murphy Bed | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Murphy Bed, Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Swim-Up Oceanfront King Suite features a private master bedroom with a King-size bed and in-suite bathroom. The living area is furnished with a Murphy bed, sofa bed, 2 Smart TVs, 2 bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests can step directly into their ocean view infinity swim-up pool from their spacious terrace with sitting area.*Pools are not heated.",
+        "Room Amenities: 1 King Bed | Murphy Bed | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim Up Oceanfront Queen Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-oceanfront-queen-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "2 Queen Beds | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Swim-Up Oceanfront Queen Suite features two Queen-size beds. The living area is furnished with a sofa bed, 2 Smart TVs, 2 bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests can step directly into their ocean view infinity plunge pool from their spacious terrace with sitting area. *The pools are not heated.",
+        "Room Amenities: 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim-Up Oceanfront Pool Deck Level King Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-up-oceanfront-pool-deck-level-king-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "1 King Bed | Murphy Bed | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Murphy Bed, Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Swim-Up Oceanfront Pool Deck Level King Suite features a private master bedroom with a King-size bed and in-suite bathroom. The living area is furnished with a Murphy bed, sofa bed, 2 Smart TVs, two bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests have the convenience of direct access to the main pool right from their spacious terrace with sitting area. *Pools are not heated.",
+        "Room Amenities: 1 King Bed | Murphy Bed | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim-Up Oceanfront Pool Deck Level Queen Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-up-oceanfront-pool-deck-level-queen-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "2 Queen Beds | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Swim-Up Oceanfront Pool Deck Level Queen Suite features two Queen-size beds. The living area is furnished with a sofa bed, 2 Smart TVs, 2 bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests have the convenience of direct access to the main pool right from their spacious terrace with sitting area. *The pools are not heated.",
+        "Room Amenities: 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Penthouse Swim-Up Oceanfront King Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/penthouse-swim-oceanfront-king-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "Murphy Bed | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Murphy Bed, Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Penthouse Swim-Up Oceanfront King Suite features a private master bedroom with a King-size bed and in-suite bathroom. The living area is furnished with a Murphy bed, sofa bed, 2 Smart TVs, 2 bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests can step directly into their ocean view infinity swim-up pool from their spacious terrace with sitting area. *The pools are not heated.",
+        "Room Amenities: Murphy Bed | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Penthouse Swim-Up Oceanfront Queen Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/penthouse-swim-oceanfront-queen-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "3 adults & 2 children(3-12)",
+        "2 adults & 3 children(3-12)",
+        "4 adults (2 adults & 2 teens)"
+      ],
+      "bedding": "2 Queen Beds | Pull Out Sofa Bed",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "not_stated",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 3 adults & 2 children(3-12) or 2 adults & 3 children(3-12) or 4 adults (2 adults & 2 teens)",
+        "The Penthouse Swim-Up Oceanfront Queen Suite features two Queen-size beds. The living area is furnished with a sofa bed, 2 Smart TVs, 2 bathrooms and table with chairs. The terrace features a seating area with a table and couch, perfect for lazy days or stargazing at night. Guests can step directly into their ocean view infinity plunge pool from their spacious terrace with sitting area. *The pools are not heated.",
+        "Room Amenities: 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim-Up Oceanfront Connecting Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-oceanfront-connecting-suite",
+      "max_occupancy": 5,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "Not listed per bed; unit is \"A Swim-Up Oceanfront King Suite connected to a Swim-Up Oceanfront Queen Suite.\"",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": null,
+      "quotes": [
+        "Sleeps up to 5",
+        "Perfect for families and double the fun, this Swim-Up Oceanfront Connect Suite is attached to a",
+        "Swim-Up Oceanfront Queen Suite",
+        ".",
+        "A Swim-Up Oceanfront King Suite connected to a Swim-Up Oceanfront Queen Suite.",
+        "Location: floors 2 through 5",
+        "*The pools are not heated."
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner).  Sold as two connecting suites in one booking (A Swim-Up Oceanfront King Suite connected to a Swim-Up Oceanfront Queen Suite.). Stated \"Sleeps up to 5\". CAUTION: each component suite on its own lists combinations of up to 5 guests, yet the two-suite unit also says 5 (the penthouse equivalent says 10) — possible error on the official page; verify before relying on it."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Swim-Up Pool Deck Level Connecting Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/swim-up-pool-deck-level-connecting-suite",
+      "max_occupancy": 5,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "Not listed per bed; unit is \"A Swim-Up Oceanfront Pool Deck Level King Suite connected to a Swim-Up Oceanfront Pool Deck Level Queen Suite.\"",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": null,
+      "quotes": [
+        "Sleeps up to 5",
+        "Perfect for families, this Swim-Up Pool Deck Level Connecting Suite connects to a",
+        "Swim-Up Oceanfront Pool Deck Level Queen Suite",
+        ".",
+        "A Swim-Up Oceanfront Pool Deck Level King Suite connected to a Swim-Up Oceanfront Pool Deck Level Queen Suite.",
+        "Location: ground floor",
+        "*Pools are not heated."
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner).  Sold as two connecting suites in one booking (A Swim-Up Oceanfront Pool Deck Level King Suite connected to a Swim-Up Oceanfront Pool Deck Level Queen Suite.). Stated \"Sleeps up to 5\". CAUTION: each component suite on its own lists combinations of up to 5 guests, yet the two-suite unit also says 5 (the penthouse equivalent says 10) — possible error on the official page; verify before relying on it."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Penthouse Swim-Up Oceanfront Connecting Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/penthouse-swim-oceanfront-connecting-suite",
+      "max_occupancy": 10,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [],
+      "bedding": "Not listed per bed; unit is \"Penthouse Swim-Up Oceanfront King Suite connected to a Penthouse Swim-Up Oceanfront Queen Suite\"",
+      "age_rules": null,
+      "connecting": "connected_unit",
+      "extra_beds": null,
+      "quotes": [
+        "Sleeps up to 10",
+        "Ideal for families and double the fun.",
+        "Enjoy two connecting suites:",
+        "Penthouse Swim-Up Oceanfront King Suite connected to a Penthouse Swim-Up Oceanfront Queen Suite",
+        "Location: 6th floor"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner).  Sold as two connecting suites in one booking (Penthouse Swim-Up Oceanfront King Suite connected to a Penthouse Swim-Up Oceanfront Queen Suite). Stated \"Sleeps up to 10\"."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Pineapple Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/pineapple-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 adults & 5 children(3-12)",
+        "5 adults (2 adults & 3 teens)"
+      ],
+      "bedding": "Master suite with a King bed; double bedroom with two Queen beds; living space with Murphy bed and sofa bed (as stated)",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "connected_unit",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 2 adults & 5 children(3-12), or 5 adults (2 adults & 3 teens)",
+        "Inspired by SpongeBob’s pineapple home under the sea, this sumptuous villa is the resort’s signature dwelling. The modern amenities and luxurious accommodations come with a unique twist - all who enter are instantly immersed in SpongeBob’s world.",
+        "• Master suite with a King bed, spa-inspired bathroom with free-standing tub, rain shower, toilet and double sinks",
+        "• Double bedroom with two Queen beds, bathroom with a rain shower, toilet and double sinks connecting to the living and dining space area",
+        "• A family-friendly living and dining space complete with a dining table for six, Murphy bed, sofa bed and Smart TV",
+        "Room Amenities: 1 King Bed | 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null. Multi-bedroom suite (master bedroom + double bedroom + living area) in a single unit."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Lair Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/lair-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 adults & 5 children(3-12)",
+        "5 adults (2 adults & 3 teens)"
+      ],
+      "bedding": "Master suite with a King bed; double bedroom with two Queen beds; living space with Murphy bed and sofa bed (as stated)",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "connected_unit",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 2 adults & 5 children(3-12), or 5 adults (2 adults & 3 teens)",
+        "The Teenage Mutant Ninja Turtles’ subterranean lair has never felt cooler or more luxurious! With nods to all the different versions of the Turtles through the years, this suite is the perfect place for a super fan to unwind or throw a private pizza party.",
+        "• Master suite with a King bed, spa-inspired bathroom with free-standing tub, rain shower, toilet and double sinks",
+        "• Double bedroom with two Queen beds, bathroom with a rain shower, toilet and double sinks connecting to the living and dining space area",
+        "• A family-friendly living and dining space complete with a dining table for six, Murphy bed, sofa bed and Smart TV",
+        "Room Amenities: 1 King Bed | 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null. Multi-bedroom suite (master bedroom + double bedroom + living area) in a single unit."
+    },
+    {
+      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
+      "resort_name": "Nickelodeon Hotels & Resorts Riviera Maya Gourmet Inclusive by Karisma",
+      "room_name": "Big Kahuna Suite",
+      "room_code": null,
+      "official_url": "https://www.karismahotels.com/nickelodeon-hotels-resorts/riviera-maya/accommodations/big-kahuna-suite",
+      "max_occupancy": null,
+      "max_adults": null,
+      "max_children": null,
+      "combinations": [
+        "2 adults & 5 children (3-12)",
+        "5 adults (2 adults & 3 teens)"
+      ],
+      "bedding": "Master suite with a King bed; double bedroom with two Queen beds; living space with Murphy bed and sofa bed (as stated)",
+      "age_rules": "Children defined as ages 3-12 (\"children(3-12)\"). Teens are counted within adult totals (e.g. \"4 adults (2 adults & 2 teens)\"); no teen age range stated.",
+      "connecting": "connected_unit",
+      "extra_beds": "Pull Out Sofa Bed",
+      "quotes": [
+        "Sleeps up to 2 adults & 5 children (3-12) or 5 adults (2 adults & 3 teens)",
+        "For the true connoisseur, this sophisticated suite pays tribute to the history of Nickelodeon animation. Every detail is lovingly curated to delight the lifelong fan from curated art pieces of beloved shows to furnishings inspired by Nickelodeon’s iconic colors and characters.",
+        "• Master suite with a King bed, spa-inspired bathroom with free-standing tub, rain shower, toilet and double sinks",
+        "• Double bedroom with two Queen beds, bathroom with a rain shower, toilet and double sinks connecting to the living and dining space area",
+        "• A family-friendly living and dining space complete with a dining table for six, Murphy bed, sofa bed and Smart TV",
+        "Personal Sliming Experience",
+        "1 character dining experience",
+        "Room Amenities: 1 King Bed | 2 Queen Beds | Pull Out Sofa Bed"
+      ],
+      "notes": "Official page on karismahotels.com (Karisma Hotels & Resorts operates the resort; nickresorts.com links here as its booking partner). No single total stated; \"Sleeps up to\" gives the allowed combinations only, so max_occupancy/max_adults/max_children are null. Multi-bedroom suite (master bedroom + double bedroom + living area) in a single unit."
     }
   ],
   "failures": [
@@ -539,11 +845,6 @@
       "resort_slug": "melia-caribe-beach-resort",
       "url": "https://www.melia.com/en/hotels/dominican-republic/punta-cana/melia-caribe-beach-resort/rooms",
       "error": "HTTP 403 Akamai \"Access Denied\""
-    },
-    {
-      "resort_slug": "nickelodeon-hotels-and-resorts-riviera-maya-gourmet-all-inclusive-by-karisma",
-      "url": "https://www.nickresorts.com/destinations/riviera-maya/nick-resorts-riviera",
-      "error": "Page loads (HTTP 200) but contains no room/occupancy content; nickresorts.com has no room pages in its sitemap (/riviera-maya/accommodations/ returns 404) and links out to karismahotels.com / reservations.karismahotels.com, which this environment's proxy refuses (CONNECT tunnel failed, 403)"
     },
     {
       "resort_slug": "hotel-riu-palace-peninsula",
