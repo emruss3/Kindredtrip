@@ -10,7 +10,8 @@
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-4WHVMCP4Z0');
+  // Analytics never receives search details (dates, kids' ages): page URLs keep only campaign params.
+  gtag('config', 'G-4WHVMCP4Z0', (function(){var k=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid'];function c(h,q){try{var u=new URL(h),p=new URLSearchParams();if(q)k.forEach(function(n){var v=u.searchParams.get(n);if(v)p.set(n,v)});u.search=p.toString();u.hash='';return u.toString()}catch(e){return ''}}return{page_location:c(location.href,1),page_referrer:document.referrer?c(document.referrer,0):''}})());
 </script>
 <title>JOIA Bávaro By Iberostar — Adults-Only Resort in Dominican Republic | KindredTrips</title>
 <meta name="description" content="JOIA Bávaro By Iberostar is an adults-only resort in Bavaro, Dominican Republic, about 25 minutes from Punta Cana. KindredTrips tracks this resort as…" />
@@ -229,6 +230,7 @@
   </div>
 </footer>
 <script>
+(function(){try{if(sessionStorage.getItem("kt_attr"))return;var p=new URLSearchParams(location.search),r="";try{var u=document.referrer&&new URL(document.referrer);if(u&&u.host!==location.host)r=u.host}catch(e){}var a={landing_path:location.pathname.replace(/\.html$/,""),referrer_host:r||null};["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].forEach(function(n){a[n]=p.get(n)||null});sessionStorage.setItem("kt_attr",JSON.stringify(a))}catch(e){}})();
 (function(){var f=function(d){return d.toISOString().slice(0,10)};var a=new Date();a.setDate(a.getDate()+90);var b=new Date(a);b.setDate(b.getDate()+7);document.querySelectorAll(".seo-wizard-form").forEach(function(fm){var s=fm.elements.date_start,e=fm.elements.date_end;if(s&&!s.value){s.value=f(a);s.min=f(new Date())}if(e&&!e.value){e.value=f(b);e.min=f(a)}});})();
 </script>
 <script>

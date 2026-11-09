@@ -92,6 +92,25 @@ for (const gone of ["/caribbean/brazil", "/caribbean/ecuador", "/caribbean/peru"
   if (res.status === 404 || res.status === 0) fail("RETIRED", `${gone} → ${res.status} (expected redirect)`);
 }
 
+// Consolidated ranking URLs: exactly ONE permanent 301 hop to a 200 that is
+// indexable and self-canonical. Query strings (attribution) must survive.
+for (const [old, target] of [
+  ["/caribbean/belize/beachfront-resorts", "/caribbean/belize"],
+  ["/caribbean/belize/beachfront-resorts/", "/caribbean/belize"],
+  ["/caribbean/belize/beachfront-resorts?utm_source=kt-check", "/caribbean/belize?utm_source=kt-check"],
+]) {
+  const res = await head(`${BASE}${old}`);
+  if (res.status !== 301) { fail("CONSOLIDATED", `${old} → ${res.status} (expected one-hop 301)`); continue; }
+  const loc = new URL(res.location || "", BASE);
+  if (loc.pathname + loc.search !== target) { fail("CONSOLIDATED", `${old} → ${res.location} (expected ${target})`); continue; }
+  const page = await fetch(loc, fetchOpts).catch(() => null);
+  if (!page || page.status !== 200) { fail("CONSOLIDATED", `${old}: target ${target} → ${page?.status} (expected 200, no second hop)`); continue; }
+  const html = await page.text();
+  if (/name="robots" content="[^"]*noindex/.test(html) || /noindex/i.test(page.headers.get("x-robots-tag") || ""))
+    fail("CONSOLIDATED", `${target} is noindex`);
+  if (!html.includes(`rel="canonical" href="${CANON}${target.split("?")[0]}"`)) fail("CONSOLIDATED", `${target} canonical is not self-referencing`);
+}
+
 // www host must not be a separately accessible canonical host.
 if (BASE === CANON) {
   const res = await head("https://www.kindredtrips.com/");

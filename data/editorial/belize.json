@@ -1,0 +1,102 @@
+{
+  "_comment": "Editorial guide for /caribbean/belize. Its presence makes the Belize country guide indexable even though Belize has fewer than GATES.COUNTRY_MIN family-eligible resorts (see indexability() in scripts/lib/family-rules.mjs). Every fact below cites its source and verification date. Re-verify before changing; never add a resort that does not admit children.",
+  "country": "Belize",
+  "slug": "belize",
+  "title": "Best Family Resorts in Belize: Where to Stay With Kids",
+  "h1": "Best Family Resorts in Belize: Where to Stay With Kids",
+  "description": "4 Belize resorts admit children; 2 fit a family of 4+ in one unit. Verified rooms, age rules and the full arrival route from BZE, plus a live trip search.",
+  "verified": "2026-05-12",
+  "sources": {
+    "liteapi": "LiteAPI hotel data — room catalogue (room names, max occupancy, max adults/children, bedding), policies, hotel description and important info. Fetched 2026-05-12.",
+    "routing": "KindredTrips airport-transfer data (road routing estimate). Confirm with the resort.",
+    "location": "Resort coordinates from LiteAPI hotel data."
+  },
+  "airport": { "code": "BZE", "name": "Philip S. W. Goldson International Airport (Belize City)" },
+  "quickAnswer": "Four Belize resorts in our catalogue admit children. Only two can sleep a family of four or more in a single unit: Alaia Belize on Ambergris Caye (2-bedroom suites for up to 5, 3-bedroom suites for up to 7) and Belizean Dreams in Hopkins (2-bedroom suites for 4, 3-bedroom villas for up to 6). Every family flies into BZE; Alaia and the cayes then need a boat or a short domestic flight, while Hopkins is a road transfer.",
+  "resorts": [
+    {
+      "slug": "alaia-belize-autograph-collection",
+      "name": "Alaia Belize, Autograph Collection",
+      "area": "San Pedro, Ambergris Caye",
+      "searchable": true,
+      "fitsFour": true,
+      "ageRule": "Children of any age are allowed; children 2 and under stay free in an available cot (cots and extra beds on request).",
+      "ageSource": "liteapi",
+      "beach": "Oceanfront. The resort notes a seawall, so direct water entry is limited; the Belize Barrier Reef Reserve is about 600 yards offshore.",
+      "beachSource": "liteapi",
+      "allInclusive": "All-inclusive rates have been seen for this resort.",
+      "rooms": [
+        { "name": "Garden View / Oceanfront Reef House 2-Bedroom Suite", "beds": "1 king + 1 queen", "occupancy": 5, "maxAdults": 5, "maxChildren": 4 },
+        { "name": "Alaia Vista 2-Bedroom Suite (resort or ocean view)", "beds": "2 kings", "occupancy": 5, "maxAdults": 5, "maxChildren": 4 },
+        { "name": "Oceanfront 3-Bedroom Villa with Private Plunge Pool", "beds": "3 kings", "occupancy": 6, "maxAdults": 6, "maxChildren": 5 },
+        { "name": "Oceanfront Reef House 3-Bedroom Suite", "beds": "1 king + 2 queens", "occupancy": 7, "maxAdults": 7, "maxChildren": 6 },
+        { "name": "Resort View Alaia Vista 3-Bedroom Suite", "beds": "3 kings", "occupancy": 7, "maxAdults": 7, "maxChildren": 6 }
+      ],
+      "smallRooms": "Studios and 1-bedroom suites sleep 2.",
+      "route": [
+        { "leg": "International flight", "detail": "Fly into BZE (Belize City)." },
+        { "leg": "Onward to Ambergris Caye", "detail": "Ambergris Caye is an island: take a short domestic flight to San Pedro or a water taxi from Belize City. Transfer time not verified — confirm with the resort." }
+      ]
+    },
+    {
+      "slug": "belizean-dreams-resort",
+      "name": "Belizean Dreams Resort",
+      "area": "Hopkins (mainland coast)",
+      "searchable": true,
+      "fitsFour": true,
+      "ageRule": "Not stated in partner data — confirm the resort's child policy before booking. No rollaway or extra beds are available.",
+      "ageSource": "liteapi",
+      "beach": "Beachfront in Hopkins.",
+      "beachSource": "liteapi",
+      "note": "Alcohol is not permitted at this property. Connecting/adjoining rooms exist on request.",
+      "noteSource": "liteapi",
+      "rooms": [
+        { "name": "Two-Bedroom Executive Suite (garden view, ocean view or ocean front)", "beds": "2 kings + 1 sofa bed", "occupancy": 4, "maxAdults": 4, "maxChildren": 3 },
+        { "name": "Three-Bedroom Villa (garden view, ocean view or ocean front)", "beds": "3 kings + 2 sofa beds", "occupancy": 6, "maxAdults": 6, "maxChildren": 3 }
+      ],
+      "smallRooms": "One-bedroom rooms and suites sleep 2.",
+      "route": [
+        { "leg": "International flight", "detail": "Fly into BZE (Belize City)." },
+        { "leg": "Road transfer", "detail": "About 1 h 52 min by road from BZE to Hopkins (routing estimate — confirm with the resort)." }
+      ]
+    },
+    {
+      "slug": "thatch-caye-a-muy-ono-resort",
+      "name": "Thatch Caye, A Muy'Ono Resort",
+      "area": "Private caye off the coast near Dangriga",
+      "searchable": true,
+      "fitsFour": false,
+      "ageRule": "Not stated in partner data — confirm with the resort. Babysitting is listed as available.",
+      "ageSource": "liteapi",
+      "beach": "Private island with oceanfront cabanas and overwater bungalows.",
+      "beachSource": "liteapi",
+      "allInclusive": "All-inclusive rates have been seen for this resort.",
+      "rooms": [
+        { "name": "Oceanfront Cabanas and Overwater Bungalows (all types)", "beds": "1 king", "occupancy": 2, "maxAdults": 2, "maxChildren": 1 }
+      ],
+      "fitNote": "Every room type sleeps 2, so a family of four would need two units; connecting units are not confirmed.",
+      "route": [
+        { "leg": "International flight", "detail": "Fly into BZE (Belize City)." },
+        { "leg": "Onward to Dangriga", "detail": "Continue south to the Dangriga area by domestic flight or road." },
+        { "leg": "Boat", "detail": "Boat transfer out to the caye. Leg times not verified — confirm with the resort." }
+      ]
+    },
+    {
+      "slug": "manta-island-resort",
+      "name": "Manta Island Resort",
+      "area": "Glover's Reef Atoll",
+      "searchable": false,
+      "fitsFour": null,
+      "ageRule": "Check directly with the resort.",
+      "beach": "Check directly with the resort.",
+      "rooms": [],
+      "fitNote": "Check directly with the resort — we have no verified room or age data and can't price it live.",
+      "route": [
+        { "leg": "International flight", "detail": "Fly into BZE (Belize City)." },
+        { "leg": "Onward to Dangriga", "detail": "Continue to the Dangriga area (domestic flight to DGA or road)." },
+        { "leg": "Boat", "detail": "Boat transfer out to Glover's Reef Atoll. Check directly with the resort for schedules." }
+      ]
+    }
+  ],
+  "excludedAdultsOnly": ["coco-plum-island-resort", "matachica-resort-and-spa"]
+}

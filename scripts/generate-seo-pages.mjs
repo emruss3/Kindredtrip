@@ -30,7 +30,7 @@
 //
 //   node scripts/generate-seo-pages.mjs
 //
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,10 +181,12 @@ const ORIGIN_AIRPORTS = [
 // in-page so the user never leaves /resort/<slug>. On country hubs the
 // form falls back to GET / for now, and the homepage's hydrate IIFE picks
 // up the params (no inline booking on country hubs yet).
-function searchWidget({ country, resortId, headline, sub, selfPath, originDefault }) {
+function searchWidget({ country, resortId, headline, sub, selfPath, originDefault, theme, kidsRequired, kidsPlaceholder, submitLabel }) {
   const opts = ORIGIN_AIRPORTS
     .map(([c, n]) => `<option value="${c}">${esc(n)} (${c})</option>`).join("");
   const hiddenCountry = country ? `<input type="hidden" name="country" value="${esc(country)}" />` : "";
+  // Guide intent carried into the homepage search (allowlisted there).
+  const hiddenTheme = theme ? `<input type="hidden" name="theme" value="${esc(theme)}" />` : "";
   // Resort pages: form points at its own URL so resort-booking.js can
   // intercept and orchestrate everything in-page. JS-disabled visitors
   // get a graceful fallback (URL just gets ?origin=… appended).
@@ -198,7 +200,7 @@ function searchWidget({ country, resortId, headline, sub, selfPath, originDefaul
   <h2 id="seo-wiz-h" class="seo-wizard-headline">${esc(headline)}</h2>
   ${sub ? `<p class="seo-wizard-sub">${esc(sub)}</p>` : ""}
   <form class="seo-wizard-form" action="${esc(action)}" method="GET">
-    ${hiddenCountry}
+    ${hiddenCountry}${hiddenTheme}
     ${autostartHidden}
     <label class="seo-wizard-field">
       <span>From</span>
@@ -219,9 +221,9 @@ function searchWidget({ country, resortId, headline, sub, selfPath, originDefaul
     </label>
     <label class="seo-wizard-field seo-wizard-field-wide">
       <span>Kids' ages</span>
-      <input type="text" name="kids" placeholder="e.g. 8, 5, 1" autocomplete="off" />
+      <input type="text" name="kids" placeholder="${esc(kidsPlaceholder || "e.g. 8, 5, 1")}" autocomplete="off"${kidsRequired ? ` required pattern="\\s*\\d{1,2}(\\s*[,\\s]\\s*\\d{1,2})*\\s*" title="Enter each child's age, separated by commas"` : ""} />
     </label>
-    <button type="submit" class="seo-wizard-submit">${resortId ? "See live prices →" : "Compare trips →"}</button>
+    <button type="submit" class="seo-wizard-submit">${esc(submitLabel || (resortId ? "See live prices →" : "Compare trips →"))}</button>
   </form>
   <p class="seo-wizard-fine">Live flights + hotel rates ranked for your exact family. No fees, no markup.</p>
 </aside>`;
@@ -263,6 +265,28 @@ for (const r of resorts) {
 }
 const resortPath = (r) => `/resort/${slugById.get(r.resort_id)}`;
 const countryPath = (c) => `/caribbean/${slugify(c)}`;
+
+// ---------- editorial country guides ----------
+// data/editorial/<slug>.json: hand-verified guides (rooms, age rules,
+// arrival routes, each with source + verification date). A guide makes its
+// country page render the answer-first editorial template and lets it be
+// indexable below GATES.COUNTRY_MIN (see indexability()). It depends on
+// this curated file, not on day-to-day booking availability.
+const EDITORIAL = (() => {
+  const dir = join(ROOT, "data/editorial");
+  const m = new Map();
+  if (!existsSync(dir)) return m;
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
+    const g = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    m.set(g.country, g);
+  }
+  return m;
+})();
+const countryIndexable = (c) => indexability({
+  template: "country",
+  eligibleResultCount: (byCountry.get(c) || []).filter(familyEligible).length,
+  editorialGuide: EDITORIAL.has(c),
+}).indexable;
 
 // Group by country
 const byCountry = new Map();
@@ -404,6 +428,15 @@ function pageHero(resort) {
 }
 
 // ---------- shared shell ----------
+// Shared analytics snippets. GA_CONFIG strips search details from page URLs
+// (only utm_*/gclid survive); ATTR_SNIPPET records first-touch attribution
+// (landing path, external referrer host, utm_*) in sessionStorage so the
+// homepage can attribute searches and partner clicks to the landing page.
+// GA_CONFIG_LEGACY / the pre-ATTR script are kept for the lastmod migration.
+const GA_CONFIG = "  // Analytics never receives search details (dates, kids' ages): page URLs keep only campaign params.\n  gtag('config', 'G-4WHVMCP4Z0', (function(){var k=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid'];function c(h,q){try{var u=new URL(h),p=new URLSearchParams();if(q)k.forEach(function(n){var v=u.searchParams.get(n);if(v)p.set(n,v)});u.search=p.toString();u.hash='';return u.toString()}catch(e){return ''}}return{page_location:c(location.href,1),page_referrer:document.referrer?c(document.referrer,0):''}})());";
+const GA_CONFIG_LEGACY = "  gtag('config', 'G-4WHVMCP4Z0');";
+const ATTR_SNIPPET = '(function(){try{if(sessionStorage.getItem("kt_attr"))return;var p=new URLSearchParams(location.search),r="";try{var u=document.referrer&&new URL(document.referrer);if(u&&u.host!==location.host)r=u.host}catch(e){}var a={landing_path:location.pathname.replace(/\\.html$/,""),referrer_host:r||null};["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].forEach(function(n){a[n]=p.get(n)||null});sessionStorage.setItem("kt_attr",JSON.stringify(a))}catch(e){}})();';
+
 function shell({ title, description, canonical, image, imageAlt, jsonld, body, breadcrumbTrail, bodyScripts, noindex }) {
   const img = image || `${ORIGIN}/og-image.jpg`;
   const imgAlt = imageAlt || title || "KindredTrips — Caribbean family vacations";
@@ -427,7 +460,7 @@ function shell({ title, description, canonical, image, imageAlt, jsonld, body, b
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-4WHVMCP4Z0');
+${GA_CONFIG}
 </script>
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}" />
@@ -491,6 +524,7 @@ ${body}
   </div>
 </footer>
 <script>
+${ATTR_SNIPPET}
 (function(){var f=function(d){return d.toISOString().slice(0,10)};var a=new Date();a.setDate(a.getDate()+90);var b=new Date(a);b.setDate(b.getDate()+7);document.querySelectorAll(".seo-wizard-form").forEach(function(fm){var s=fm.elements.date_start,e=fm.elements.date_end;if(s&&!s.value){s.value=f(a);s.min=f(new Date())}if(e&&!e.value){e.value=f(b);e.min=f(a)}});})();
 </script>
 ${bodyScripts || ""}
@@ -1566,7 +1600,159 @@ function countryFaq(country, list) {
   return qa;
 }
 
+// ---------- editorial country guide (answer-first) ----------
+// Rendered instead of the generic hub when data/editorial/<slug>.json
+// exists. Every fact comes from the guide file, which carries its source
+// and verification date; unknowns are stated as unknown, never inferred.
+function editorialCountryPage(country, g) {
+  const url = `${ORIGIN}${countryPath(country)}`;
+  const list = (byCountry.get(country) || []).slice().sort(byScore);
+  const bySlug = new Map(list.map((r) => [slugById.get(r.resort_id), r]));
+  // Hard guard: a guide may only shortlist resorts that admit children.
+  for (const x of g.resorts) {
+    const r = bySlug.get(x.slug);
+    if (!r) throw new Error(`editorial ${g.slug}: unknown resort "${x.slug}"`);
+    if (!familyEligible(r)) throw new Error(`editorial ${g.slug}: "${x.slug}" is not family_allowed`);
+  }
+  // Split non-family properties honestly: confirmed adults-only vs resorts
+  // whose age policy we simply don't know (never claim the latter exclude kids).
+  const adultList = list.filter((r) => ["adults_only", "couples_only", "minimum_age_restricted"].includes(familyEligibility(r)));
+  const unknownList = list.filter((r) => !familyEligible(r) && !adultList.includes(r));
+  const heroResort = list.find((r) => r.photo_ref && familyEligible(r));
+  const hero = photoUrl(countryHero.get(country) || heroResort?.photo_ref, 1200);
+  const n = g.resorts.length;
+  const fits = g.resorts.filter((x) => x.fitsFour === true);
+  const link = (x) => `<a href="/resort/${x.slug}">${esc(x.name)}</a>`;
+  const maxOcc = (x) => (x.rooms.length ? Math.max(...x.rooms.map((rm) => rm.occupancy)) : null);
+  const familyRooms = (x) => x.rooms.filter((rm) => rm.occupancy >= 4);
+  const searchCell = (x) => (x.searchable ? "Yes — price it in the search above" : "Check directly with the resort");
+  const routeText = (x) => x.route.map((leg) => leg.leg).join(" → ");
+
+  const compareRows = g.resorts.map((x) => `<tr>
+<th scope="row">${link(x)}<br><span class="seo-link-meta">${esc(x.area)}</span></th>
+<td>${esc(x.ageRule)}</td>
+<td>${familyRooms(x).length ? esc(familyRooms(x).map((rm) => rm.name).join("; ")) : esc(x.fitNote || x.smallRooms || "—")}</td>
+<td>${maxOcc(x) != null ? `${maxOcc(x)} guests` : "Check directly with the resort"}</td>
+<td>${esc(routeText(x))}</td>
+<td>${esc(searchCell(x))}</td>
+</tr>`).join("\n");
+
+  const fitSections = fits.map((x) => `<h3>${link(x)} — ${esc(x.area)}</h3>
+<table class="seo-roomfit"><thead><tr><th>Room type</th><th>Bedding</th><th>Who fits (verified)</th></tr></thead><tbody>
+${familyRooms(x).map((rm) => `<tr><td>${esc(rm.name)}</td><td>${esc(rm.beds)}</td><td>Up to ${rm.occupancy} guests total (max ${rm.maxAdults} adults, max ${rm.maxChildren} children)</td></tr>`).join("\n")}
+</tbody></table>
+${x.smallRooms ? `<p class="seo-sub">${esc(x.smallRooms)}</p>` : ""}`).join("\n");
+
+  const notFits = g.resorts.filter((x) => x.fitsFour !== true);
+  const beachSections = g.resorts.map((x) => `<h3>${link(x)}</h3>
+<p><b>Beach:</b> ${esc(x.beach)}${x.allInclusive ? ` ${esc(x.allInclusive)}` : ""}${x.note ? ` ${esc(x.note)}` : ""}</p>
+<ol class="seo-route">
+${x.route.map((leg) => `<li><b>${esc(leg.leg)}:</b> ${esc(leg.detail)}</li>`).join("\n")}
+</ol>`).join("\n");
+
+  const faq = [
+    [`Which resorts in ${country} allow children?`,
+      `${n} resorts in our ${country} catalogue admit children: ${g.resorts.map((x) => x.name).join(", ")}. Adults-only properties are excluded from this guide.`],
+    [`Which ${country} resorts fit a family of four or five in one room?`,
+      `${fits.map((x) => `${x.name} (up to ${maxOcc(x)} guests in its largest unit)`).join(" and ")}. ${notFits.filter((x) => x.rooms.length).map((x) => `${x.name}'s rooms sleep ${maxOcc(x)}`).join("; ")}.`],
+    [`How do you get to ${country}'s beach resorts with kids?`,
+      `Families fly into ${g.airport.code} (${g.airport.name}). Resorts on the cayes and atolls then need a boat or a short domestic flight; Hopkins on the mainland is a road transfer. Each resort's full route is listed above.`],
+  ];
+
+  const collectionLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: g.title,
+    description: g.description,
+    url,
+    about: { "@type": "TouristDestination", name: country },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: n,
+      itemListElement: g.resorts.map((x, i) => ({
+        "@type": "ListItem", position: i + 1, name: x.name, url: `${ORIGIN}/resort/${x.slug}`,
+      })),
+    },
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: country, item: url },
+    ],
+  };
+
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="Family beach resorts in ${esc(country)}" loading="eager" /></div>` : ""}
+<h1>${esc(g.h1)}</h1>
+<p class="seo-sub">${n} resorts that admit children · room and policy data verified ${esc(g.verified)}</p>
+<p class="seo-lede">${esc(g.quickAnswer)}</p>
+
+<h2>Compare the ${n} ${esc(country)} resorts that admit children</h2>
+<div class="seo-table-scroll"><table class="seo-compare">
+<thead><tr><th>Resort</th><th>Age rule</th><th>Family room types</th><th>Most guests in one unit</th><th>Getting there from ${esc(g.airport.code)}</th><th>Live price</th></tr></thead>
+<tbody>
+${compareRows}
+</tbody></table></div>
+
+${searchWidget({
+  country,
+  headline: `Search ${country} family trips`,
+  sub: `Enter your airport, dates and every child's age. We'll price live flights plus live hotel rates for the ${country} resorts we can book, and show which room fits your family.`,
+})}
+
+<h2>Which ${esc(country)} resorts fit a family of four or more?</h2>
+<p>${fits.length} of the ${n} can sleep a family of four or more in a single unit: ${fits.map(link).join(" and ")}. ${notFits.map((x) => `${link(x)}: ${esc(x.fitNote || "")}`).join(" ")}</p>
+${fitSections}
+
+<h2>Beachfront family resorts in ${esc(country)} — and how to reach each one</h2>
+<p>Every family arrives on an international flight into ${esc(g.airport.code)}. What happens next depends on where the resort is: the cayes and atolls need a boat or a short domestic flight, while the mainland coast is a road transfer. Leg times are shown only where verified.</p>
+${beachSections}
+
+<h2>${esc(country)} family resort FAQ</h2>
+${faqHtml(faq)}
+
+<p class="seo-sub">Sources: ${Object.values(g.sources).map(esc).join(" · ")} Room names, occupancy limits and policies can change — confirm with the resort before booking.</p>
+
+<h2>Flying from the U.S.?</h2>
+<p>See ranked family trips from your home airport: ${FROM_AIRPORTS.map((a) => `<a href="${fromPath(a)}">${esc(a.city)}</a>`).join(" · ")}.</p>
+
+${adultList.length ? `<h2>Adults-only properties in ${esc(country)}</h2>
+<p>Not included in this guide — these properties are adults-only or set a minimum age:</p>
+<ul class="seo-link-grid">
+${adultList.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a></li>`).join("")}
+</ul>` : ""}
+
+${unknownList.length ? `<h2>Not verified for families in ${esc(country)}</h2>
+<p>Not included in this guide — we don't have a verified age policy for these properties. Check with the resort before booking with children:</p>
+<ul class="seo-link-grid">
+${unknownList.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a></li>`).join("")}
+</ul>` : ""}
+
+<p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
+`;
+
+  return shell({
+    title: `${g.title} | KindredTrips`,
+    description: g.description,
+    canonical: url,
+    image: toAbs(hero),
+    imageAlt: `Family beach resorts in ${country}`,
+    jsonld: [collectionLd, faqJsonLd(faq), crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: country, url },
+    ],
+    body,
+    noindex: !countryIndexable(country),
+  });
+}
+
 function countryPage(country) {
+  if (EDITORIAL.has(country)) return editorialCountryPage(country, EDITORIAL.get(country));
   const list = byCountry.get(country).slice().sort(byScore);
   const url = `${ORIGIN}${countryPath(country)}`;
   const s = countryStats(list);
@@ -1947,6 +2133,24 @@ ${faqHtml(qa)}
   });
 }
 
+// Guides whose page-level search carries their intent into the results
+// (instead of a generic link to the homepage form).
+const THEME_SEARCH = {
+  "water-park-resorts": {
+    theme: "water_park",
+    headline: "Compare water-park resort trips",
+    sub: "Enter your airport, dates and every child's age. We'll price live flights plus hotel and keep the results to resorts with a water park.",
+    submitLabel: "Compare total trip cost →",
+  },
+  "resorts-for-family-of-5": {
+    headline: "Price a trip for your family of five",
+    sub: "Two adults and three kids? Enter each child's age — we only price rooms, or explicit room combinations, that sleep all five, and show the full combined cost.",
+    kidsRequired: true,
+    kidsPlaceholder: "Each child's age, e.g. 9, 6, 3",
+    submitLabel: "Compare total trip cost →",
+  },
+};
+
 function themeGlobalPage(t, matches) {
   const url = `${ORIGIN}${themeGlobalPath(t)}`;
   const ranked = matches.slice(0, 20);
@@ -1991,7 +2195,7 @@ ${hero ? `<div class="seo-hero"><img src="${hero}" alt="${esc(t.globalH)}" loadi
 <h1>${esc(t.globalH)}</h1>
 <p class="seo-sub">${matches.length} resorts across ${countryList.length} destinations · ${rankLabel}</p>
 <p class="seo-lede">${esc(intro)}</p>
-<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>
+${THEME_SEARCH[t.slug] ? searchWidget(THEME_SEARCH[t.slug]) : `<a class="seo-cta" href="/#search-form">Search all destinations at once →</a>`}
 
 ${isToddler ? toddlerMethodologyBlock() : (isFamily5 ? familyRoomMethodologyBlock() : methodologyBlock())}
 
@@ -2504,7 +2708,8 @@ for (const r of resorts) {
 
 const noindexedCountries = [];
 for (const c of countries) {
-  if ((byCountry.get(c) || []).filter(familyEligible).length < COUNTRY_INDEX_MIN) noindexedCountries.push(c);
+  // Same rule the page itself uses for its robots tag (editorial override included).
+  if (!countryIndexable(c)) noindexedCountries.push(c);
   write(`caribbean/${slugify(c)}.html`, countryPage(c));
 }
 write("caribbean/index.html", destinationsIndex());
@@ -2610,6 +2815,16 @@ function lastmodFor(loc) {
   const hash = createHash("sha256").update(stable).digest("hex").slice(0, 16);
   const prev = lastmodManifest[loc];
   if (prev && prev.hash === hash) return prev.lastmod;
+  // Migration: the analytics snippets changed on every page at once. If the
+  // page is otherwise identical to what was last stamped, keep its lastmod
+  // (an analytics config change is not a content change) and store the new hash.
+  if (prev) {
+    const legacy = stable.replace(GA_CONFIG, GA_CONFIG_LEGACY).replace(`${ATTR_SNIPPET}\n`, "");
+    if (createHash("sha256").update(legacy).digest("hex").slice(0, 16) === prev.hash) {
+      lastmodManifest[loc] = { hash, lastmod: prev.lastmod };
+      return prev.lastmod;
+    }
+  }
   lastmodManifest[loc] = { hash, lastmod: TODAY };
   return TODAY;
 }
