@@ -1614,7 +1614,10 @@ function editorialCountryPage(country, g) {
     if (!r) throw new Error(`editorial ${g.slug}: unknown resort "${x.slug}"`);
     if (!familyEligible(r)) throw new Error(`editorial ${g.slug}: "${x.slug}" is not family_allowed`);
   }
-  const adultList = list.filter((r) => !familyEligible(r));
+  // Split non-family properties honestly: confirmed adults-only vs resorts
+  // whose age policy we simply don't know (never claim the latter exclude kids).
+  const adultList = list.filter((r) => ["adults_only", "couples_only", "minimum_age_restricted"].includes(familyEligibility(r)));
+  const unknownList = list.filter((r) => !familyEligible(r) && !adultList.includes(r));
   const heroResort = list.find((r) => r.photo_ref && familyEligible(r));
   const hero = photoUrl(countryHero.get(country) || heroResort?.photo_ref, 1200);
   const n = g.resorts.length;
@@ -1717,9 +1720,15 @@ ${faqHtml(faq)}
 <p>See ranked family trips from your home airport: ${FROM_AIRPORTS.map((a) => `<a href="${fromPath(a)}">${esc(a.city)}</a>`).join(" · ")}.</p>
 
 ${adultList.length ? `<h2>Adults-only properties in ${esc(country)}</h2>
-<p>Not included in this guide — these properties don't admit children:</p>
+<p>Not included in this guide — these properties are adults-only or set a minimum age:</p>
 <ul class="seo-link-grid">
 ${adultList.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a></li>`).join("")}
+</ul>` : ""}
+
+${unknownList.length ? `<h2>Not verified for families in ${esc(country)}</h2>
+<p>Not included in this guide — we don't have a verified age policy for these properties. Check with the resort before booking with children:</p>
+<ul class="seo-link-grid">
+${unknownList.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a></li>`).join("")}
 </ul>` : ""}
 
 <p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>

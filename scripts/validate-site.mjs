@@ -95,7 +95,7 @@ for (const f of familySurfaces) {
   const { html } = pages.get(f);
   // Adults-only sections on country pages are explicitly labeled; slice
   // them out before checking.
-  const familyPortion = html.split(/<h2>Adults-only properties in /)[0];
+  const familyPortion = html.split(/<h2>(?:Adults-only properties|Not verified for families) in /)[0];
   for (const m of familyPortion.matchAll(/href="\/resort\/([a-z0-9-]+)"/g)) {
     const e = slugElig.get(m[1]);
     if (e && e !== "family_allowed") {
