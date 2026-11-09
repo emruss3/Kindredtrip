@@ -1,0 +1,11 @@
+{ "collected_at": "2026-11-09", "rooms": [
+  { "resort_slug": "hyatt-ziva-cancun", "resort_name": "Hyatt Ziva Cancun", "room_name": "Oceanfront Pyramid Suite With Sofa Bed", "room_code": "BLST",
+    "official_url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/BLST", "max_occupancy": 5, "max_adults": null, "max_children": 3,
+    "combinations": [], "bedding": "1 king + sofa bed", "connecting": "not_stated", "quotes": ["fixture"] },
+  { "resort_slug": "hyatt-ziva-cancun", "resort_name": "Hyatt Ziva Cancun", "room_name": "Club Two Bedroom Oceanfront Suite", "room_code": "2BDS",
+    "official_url": "https://www.hyatt.com/ziva/en-US/canif-hyatt-ziva-cancun/rooms/2BDS", "max_occupancy": 6, "max_adults": null, "max_children": 4,
+    "combinations": [], "bedding": null, "connecting": "connected_unit", "quotes": ["fixture"] },
+  { "resort_slug": "finest-playa-mujeres", "resort_name": "Finest Playa Mujeres", "room_name": "Family Suite", "room_code": null,
+    "official_url": "https://www.finestresorts.com/cancun/finest-playa-mujeres/rooms/family-suite/", "max_occupancy": null, "max_adults": 4, "max_children": 3,
+    "combinations": ["2 adults + 3 children"], "bedding": null, "connecting": "connecting_on_request", "quotes": ["fixture"] }
+] }
