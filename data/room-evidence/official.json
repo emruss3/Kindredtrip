@@ -21,7 +21,8 @@
       "quotes": [
         "Maximum five guests, including up to three children (owner review; page returns 403 to automated fetches)"
       ],
-      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Re-verify in a browser."
+      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Owner confirmed these figures on the live Hyatt page in a browser on 2026-11-09.",
+      "owner_confirmed": "2026-11-09"
     },
     {
       "resort_slug": "hyatt-ziva-cancun",
@@ -43,7 +44,8 @@
       "quotes": [
         "Maximum six guests, including up to four children (owner review; page returns 403 to automated fetches)"
       ],
-      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Two-bedroom suite = one bookable unit. Re-verify in a browser."
+      "notes": "Recorded from the owner growth handoff; automated fetch blocked (HTTP 403 E6020). Two-bedroom suite = one bookable unit. Owner confirmed these figures on the live Hyatt page in a browser on 2026-11-09.",
+      "owner_confirmed": "2026-11-09"
     },
     {
       "resort_slug": "finest-playa-mujeres",
