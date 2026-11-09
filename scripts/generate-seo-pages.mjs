@@ -426,6 +426,15 @@ function pageHero(resort) {
 }
 
 // ---------- shared shell ----------
+// Shared analytics snippets. GA_CONFIG strips search details from page URLs
+// (only utm_*/gclid survive); ATTR_SNIPPET records first-touch attribution
+// (landing path, external referrer host, utm_*) in sessionStorage so the
+// homepage can attribute searches and partner clicks to the landing page.
+// GA_CONFIG_LEGACY / the pre-ATTR script are kept for the lastmod migration.
+const GA_CONFIG = "  // Analytics never receives search details (dates, kids' ages): page URLs keep only campaign params.\n  gtag('config', 'G-4WHVMCP4Z0', (function(){var k=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid'];function c(h,q){try{var u=new URL(h),p=new URLSearchParams();if(q)k.forEach(function(n){var v=u.searchParams.get(n);if(v)p.set(n,v)});u.search=p.toString();u.hash='';return u.toString()}catch(e){return ''}}return{page_location:c(location.href,1),page_referrer:document.referrer?c(document.referrer,0):''}})());";
+const GA_CONFIG_LEGACY = "  gtag('config', 'G-4WHVMCP4Z0');";
+const ATTR_SNIPPET = '(function(){try{if(sessionStorage.getItem("kt_attr"))return;var p=new URLSearchParams(location.search),r="";try{var u=document.referrer&&new URL(document.referrer);if(u&&u.host!==location.host)r=u.host}catch(e){}var a={landing_path:location.pathname.replace(/\\.html$/,""),referrer_host:r||null};["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].forEach(function(n){a[n]=p.get(n)||null});sessionStorage.setItem("kt_attr",JSON.stringify(a))}catch(e){}})();';
+
 function shell({ title, description, canonical, image, imageAlt, jsonld, body, breadcrumbTrail, bodyScripts, noindex }) {
   const img = image || `${ORIGIN}/og-image.jpg`;
   const imgAlt = imageAlt || title || "KindredTrips — Caribbean family vacations";
@@ -449,7 +458,7 @@ function shell({ title, description, canonical, image, imageAlt, jsonld, body, b
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-4WHVMCP4Z0');
+${GA_CONFIG}
 </script>
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}" />
@@ -513,6 +522,7 @@ ${body}
   </div>
 </footer>
 <script>
+${ATTR_SNIPPET}
 (function(){var f=function(d){return d.toISOString().slice(0,10)};var a=new Date();a.setDate(a.getDate()+90);var b=new Date(a);b.setDate(b.getDate()+7);document.querySelectorAll(".seo-wizard-form").forEach(function(fm){var s=fm.elements.date_start,e=fm.elements.date_end;if(s&&!s.value){s.value=f(a);s.min=f(new Date())}if(e&&!e.value){e.value=f(b);e.min=f(a)}});})();
 </script>
 ${bodyScripts || ""}
@@ -2776,6 +2786,16 @@ function lastmodFor(loc) {
   const hash = createHash("sha256").update(stable).digest("hex").slice(0, 16);
   const prev = lastmodManifest[loc];
   if (prev && prev.hash === hash) return prev.lastmod;
+  // Migration: the analytics snippets changed on every page at once. If the
+  // page is otherwise identical to what was last stamped, keep its lastmod
+  // (an analytics config change is not a content change) and store the new hash.
+  if (prev) {
+    const legacy = stable.replace(GA_CONFIG, GA_CONFIG_LEGACY).replace(`${ATTR_SNIPPET}\n`, "");
+    if (createHash("sha256").update(legacy).digest("hex").slice(0, 16) === prev.hash) {
+      lastmodManifest[loc] = { hash, lastmod: prev.lastmod };
+      return prev.lastmod;
+    }
+  }
   lastmodManifest[loc] = { hash, lastmod: TODAY };
   return TODAY;
 }

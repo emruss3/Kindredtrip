@@ -11,7 +11,8 @@
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-4WHVMCP4Z0');
+  // Analytics never receives search details (dates, kids' ages): page URLs keep only campaign params.
+  gtag('config', 'G-4WHVMCP4Z0', (function(){var k=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid'];function c(h,q){try{var u=new URL(h),p=new URLSearchParams();if(q)k.forEach(function(n){var v=u.searchParams.get(n);if(v)p.set(n,v)});u.search=p.toString();u.hash='';return u.toString()}catch(e){return ''}}return{page_location:c(location.href,1),page_referrer:document.referrer?c(document.referrer,0):''}})());
 </script>
 
 <title>Compare Caribbean Family Vacations by Total Trip Cost | KindredTrips</title>
@@ -1667,6 +1668,9 @@
           session_id: SESSION_ID,
           search_id: lastSearchId || null,
           internal_traffic: IS_INTERNAL ? "yes" : "no",
+          // Outbound partner clicks open a new tab / navigate away: send by
+          // beacon so the event survives (log_event already uses keepalive).
+          ...(signal_type === "booking_partner_click" ? { transport_type: "beacon" } : {}),
         });
       }
       const url = `${SUPABASE_URL}/functions/v1/log_event`;
@@ -1690,6 +1694,93 @@
     } catch (_) { /* analytics must never break the page */ }
   }
   window.KT_trackEvent = trackEvent;
+
+  // ---- Trip-comparison funnel ---------------------------------------------
+  //   trip_search_started    a valid search was accepted (Search returned an id)
+  //   trip_search_results    the attempt reached an outcome: results or no match
+  //   trip_price_shown       the first COMPLETE live flight+hotel total was rendered
+  //   booking_partner_click  a click on a real outbound partner link (every click)
+  //   trip_search_error      the search ended in a user-visible error (bounded category)
+  // One of each per attempt (keyed by the anonymous search_id), except partner
+  // clicks. Payloads carry attribution and counts only — never travel dates,
+  // children's ages or raw query strings.
+  const KT_FUNNEL_SENT = new Set();
+  function ktNormPath(p) {
+    const path = String(p || "/").split(/[?#]/)[0].replace(/\.html$/, "").replace(/\/index$/, "/");
+    return path || "/";
+  }
+  function ktPageType(p) {
+    if (p === "/") return "home";
+    if (p.startsWith("/from/")) return "airport";
+    if (p.startsWith("/resort/")) return "resort";
+    if (p.startsWith("/compare/")) return "comparison";
+    if (/^\/caribbean\/?$/.test(p)) return "destination_index";
+    if (/^\/caribbean\/best-/.test(p) || /^\/caribbean\/[^/]+\/[^/]+/.test(p)) return "guide";
+    if (p.startsWith("/caribbean/")) return "destination";
+    return "other";
+  }
+  function ktChannel(a) {
+    const medium = String(a.utm_medium || "").toLowerCase();
+    if (medium) {
+      if (/^(email|newsletter)$/.test(medium)) return "email";
+      if (/cpc|ppc|paid|display/.test(medium)) return "paid";
+      if (medium === "social") return "social";
+      return "referral";
+    }
+    if (a.utm_source) return "referral";
+    const host = String(a.referrer_host || "").toLowerCase();
+    if (!host) return "direct";
+    if (/(^|\.)(google|bing|duckduckgo|yahoo|ecosia|baidu|yandex)\./.test(host)) return "organic_search";
+    if (/facebook|instagram|(^|\.)t\.co$|twitter|(^|\.)x\.com$|pinterest|reddit|tiktok|linkedin|youtube/.test(host)) return "social";
+    return "referral";
+  }
+  // First-touch attribution for this tab session. SEO landing pages record it
+  // (generator ATTR_SNIPPET); a visit that lands straight on the homepage
+  // records it here. Same-origin sessionStorage, so it survives the hop from a
+  // landing page's search form to the homepage without touching the URL.
+  const KT_ATTR = (function () {
+    let a = null;
+    try { a = JSON.parse(sessionStorage.getItem("kt_attr") || "null"); } catch {}
+    if (!a) {
+      const qp = new URLSearchParams(location.search);
+      let refHost = null;
+      try { const r = document.referrer && new URL(document.referrer); if (r && r.host !== location.host) refHost = r.host; } catch {}
+      a = { landing_path: ktNormPath(location.pathname), referrer_host: refHost };
+      ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].forEach((k) => { a[k] = qp.get(k) || null; });
+      try { sessionStorage.setItem("kt_attr", JSON.stringify(a)); } catch {}
+    }
+    const landing = ktNormPath(a.landing_path);
+    // Page whose search form started this visit's search (same-origin referrer).
+    let entry = ktNormPath(location.pathname);
+    try { const r = document.referrer && new URL(document.referrer); if (r && r.host === location.host) entry = ktNormPath(r.pathname); } catch {}
+    return {
+      landing_path: landing, landing_type: ktPageType(landing),
+      entry_path: entry, entry_type: ktPageType(entry),
+      channel: ktChannel(a),
+      utm_source: a.utm_source || null, utm_medium: a.utm_medium || null, utm_campaign: a.utm_campaign || null,
+    };
+  })();
+  window.KT_ATTR = KT_ATTR;
+  function trackFunnel(event, data, opts) {
+    const once = !(opts && opts.once === false);
+    const key = `${event}:${lastSearchId || "-"}`;
+    if (once && KT_FUNNEL_SENT.has(key)) return;
+    KT_FUNNEL_SENT.add(key);
+    trackEvent(event, { ...KT_ATTR, page_path: ktNormPath(location.pathname), ...(data || {}) });
+  }
+  window.KT_trackFunnel = trackFunnel;
+  // Bounded error categories for trip_search_error (never the raw message).
+  function ktErrorCategory(errOrMsg) {
+    const status = Number(errOrMsg && errOrMsg.status) || 0;
+    if (status >= 500) return "provider_error";
+    if (status >= 400) return "request_error";
+    const m = String((errOrMsg && errOrMsg.message) || errOrMsg || "");
+    if (/Search failed|HTTP \d|edge function|500|502|503|546/i.test(m)) return "provider_error";
+    if (/Failed to fetch|NetworkError|network|Load failed/i.test(m)) return "network";
+    if (/time(d)? ?out|too long/i.test(m)) return "timeout";
+    if (/Pricing is slow|temporarily unavailable/i.test(m)) return "pricing_unavailable";
+    return "unknown";
+  }
 
   // A package is "live" only when BOTH suppliers are LiteAPI (real, bookable
   // rates). That is a HARD precondition for drawing any price: a package
@@ -2327,7 +2418,9 @@
     let json;
     try { json = JSON.parse(text); } catch { json = { error: text }; }
     if (!res.ok) {
-      throw new Error(json.error || `HTTP ${res.status}`);
+      const err = new Error(json.error || `HTTP ${res.status}`);
+      err.status = res.status;   // lets trip_search_error classify without parsing messages
+      throw err;
     }
     return json;
   }
@@ -2654,6 +2747,7 @@
       if (!dateStart || !dateEnd || dateEnd < dateStart) {
         submitBtn.disabled = false;
         setStatus("Check-out must be on or after check-in.", { error: true });
+        trackFunnel("trip_search_error", { error_category: "invalid_input", stage: "submit" }, { once: false });
         return;
       }
       const body = {
@@ -2704,6 +2798,15 @@
         origin: body.origin_iata, nights: null,
         adults: body.adults, kids: (body.child_ages || []).length,
         countries: body.included_countries || [],
+      });
+      trackFunnel("trip_search_started", {
+        origin: body.origin_iata,
+        party_size: (body.adults || 0) + (body.child_ages || []).length,
+        kids_count: (body.child_ages || []).length,
+        destination_filter_count: (body.included_countries || []).length,
+        require_kids_club: !!body.require_kids_club,
+        require_all_inclusive: !!body.require_all_inclusive,
+        require_direct_flight: !!body.require_direct_flight,
       });
 
       // Smooth scroll to results area while skeleton shows
@@ -2830,6 +2933,7 @@
         const pricedCount = allPackages.length;
         if (pricedCount === 0) {
           showError("Pricing is slow or temporarily unavailable. Please try the search again in a moment.");
+          trackFunnel("trip_search_error", { error_category: "pricing_unavailable", stage: "pricing" });
         } else {
           setStatus("Pricing is slow right now — some trips are still finding live rates. New live results will appear as carriers confirm.");
         }
@@ -2865,6 +2969,11 @@
     } catch (err) {
       console.error(err);
       showError(err.message || String(err));
+      if (/No resorts match/.test(err?.message || "")) {
+        trackFunnel("trip_search_results", { outcome: "no_match", result_count: 0 });
+      } else {
+        trackFunnel("trip_search_error", { error_category: ktErrorCategory(err), stage: lastSearchId ? "results" : "submit" });
+      }
     } finally {
       submitBtn.disabled = false;
     }
@@ -3496,6 +3605,19 @@
       trackEvent("results_first_paint", {
         ms_to_paint: __searchStartedAt ? Date.now() - __searchStartedAt : null,
         visible_count: visible.length,
+      });
+    }
+    if (lastSearchId && visible.length > 0) {
+      trackFunnel("trip_search_results", { outcome: "results", result_count: visible.length });
+    }
+    // First COMPLETE price: judged from what was actually rendered. Only a
+    // fully live package (hotel AND flight from LiteAPI) gets the `.live`
+    // price label, so a partial price can never fire this event.
+    const liveShown = lastSearchId ? main.querySelectorAll(".price-from.live, .hero-price-eyebrow.live").length : 0;
+    if (liveShown > 0) {
+      trackFunnel("trip_price_shown", {
+        complete_price_count: liveShown,
+        ms_to_price: __searchStartedAt ? Date.now() - __searchStartedAt : null,
       });
     }
     renderCompareTray();
@@ -4561,7 +4683,7 @@
           <p class="card-pending-note">${pendingNote}</p>
         </div>
         <div class="card-price">
-          <div class="price-from live">Live price</div>
+          ${pendingPriceHtml()}
           <div class="price-skeleton" aria-hidden="true">
             <span class="skel skel-line skel-line-lg"></span>
             <span class="skel skel-line skel-line-md"></span>
@@ -5504,8 +5626,8 @@
             <div><span>Check-out</span><b>${fmtRailDate(lastSearchSummary?.date_end)}</b></div>
             <div><span>Party</span><b>${adultsRail} ${adultsRail === 1 ? "Adult" : "Adults"}${kidsRail > 0 ? `, ${kidsRail} ${kidsRail === 1 ? "Kid" : "Kids"}` : ""}${lapInfantCount() > 0 ? ` <span class="rail-lap-note">(incl. ${lapInfantCount()} lap ${lapInfantCount() === 1 ? "infant" : "infants"})</span>` : ""}</b></div>
           </div>
-          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}')">Book hotel on Booking.com →</button>
-          <button class="btn btn-secondary trip-rail-cta-flight" onclick="bookFlight('${pkg.package_id}')">Book flights on Aviasales →</button>
+          <button class="btn btn-primary trip-rail-cta" onclick="bookHotel('${pkg.package_id}', 'trip_rail')">Book hotel on Booking.com →</button>
+          <button class="btn btn-secondary trip-rail-cta-flight" onclick="bookFlight('${pkg.package_id}', 'trip_rail')">Book flights on Aviasales →</button>
           <div class="trip-rail-cta-sub">Same price as booking direct. We never add fees. Hotel and flights are booked separately.</div>
           <div class="trip-rail-actions">
             <button type="button" class="trip-rail-action" title="Send to self" onclick="sendTripToSelf('${pkg.package_id}')">
@@ -5673,7 +5795,7 @@
           <div class="trip-mobile-cta-price"><b>${fmtMoney(pkg.total_price)}</b></div>
           <div class="trip-mobile-cta-sub">flights + hotel${delta ? ` · ${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"}` : ""}</div>` : pendingPriceHtml()}
         </div>
-        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}')">Book on Booking.com →</button>
+        <button class="btn btn-primary" onclick="bookHotel('${pkg.package_id}', 'trip_mobile_bar')">Book on Booking.com →</button>
       </div>
     `;
 
@@ -8248,7 +8370,7 @@
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  async function bookHotel(packageId) {
+  async function bookHotel(packageId, placement = "trip_detail") {
     // Funnel: booking intent — the money moment. (generate_booking_redirect
     // also logs the authoritative outbound_clicks row server-side; this
     // mirrors it into search_signals so the whole funnel lives in one view.)
@@ -8259,6 +8381,7 @@
       is_live: bp ? (bp.flight_supplier === "liteapi" && bp.hotel_supplier === "liteapi") : null,
       click_type: "hotel",
     });
+    trackFunnel("booking_partner_click", { partner: "booking.com", click_type: "hotel", placement, price_complete: isLivePkg(bp) }, { once: false });
     try {
       // Pass the user's currently-selected offer + its match path through
       // to the backend. The booking flow then re-fetches /hotels/rates
@@ -8339,13 +8462,14 @@
   // (built server-side in generate_booking_redirect, affiliate-tagged).
   // Hotel and flights book separately because they come from different
   // suppliers; the integrated single-checkout is the LiteAPI path (roadmap).
-  async function bookFlight(packageId) {
+  async function bookFlight(packageId, placement = "trip_detail") {
     const bp = allPackages.find((p) => p.package_id === packageId);
     trackEvent("booking_click", {
       resort_id: bp?.resort_id || null,
       total_price: bp?.flight_price ?? null,
       click_type: "flight",
     });
+    trackFunnel("booking_partner_click", { partner: "aviasales", click_type: "flight", placement, price_complete: isLivePkg(bp) }, { once: false });
     try {
       const data = await callFn("generate_booking_redirect", {
         method: "POST",
