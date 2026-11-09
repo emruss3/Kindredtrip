@@ -22,15 +22,44 @@ jobs:
         run: node --test scripts/tests/*.test.mjs
 
       - name: Syntax-check inline JS in index.html
+        # Checks EVERY inline executable <script> block. The old step took the
+        # first `<script>` line, which is the 5-line gtag snippet, so the app
+        # script (by far the largest block) was never syntax-checked at all.
+        # The size guard fails loudly if we ever stop finding the app again.
         run: |
-          start=$(grep -n '^<script>$' index.html | head -1 | cut -d: -f1)
-          end=$(awk -v s="$start" 'NR>s && /^<\/script>$/{print NR; exit}' index.html)
-          if [ -z "$start" ] || [ -z "$end" ]; then
-            echo "Could not locate the inline <script> block"; exit 1
-          fi
-          sed -n "$((start+1)),$((end-1))p" index.html > /tmp/index-inline.js
-          node --check /tmp/index-inline.js
-          echo "index.html inline JS OK"
+          node - <<'EOF'
+          const fs = require("fs");
+          const { execFileSync } = require("child_process");
+          const html = fs.readFileSync("index.html", "utf8");
+          const blocks = [];
+          for (const m of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)) {
+            const attrs = m[1] || "";
+            if (/\bsrc\s*=/i.test(attrs)) continue; // external script
+            const type = (attrs.match(/type\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
+            if (type && !/^(text\/javascript|application\/javascript|module)$/i.test(type)) continue; // e.g. JSON-LD
+            blocks.push({ line: html.slice(0, m.index).split("\n").length, code: m[2] });
+          }
+          if (!blocks.length) { console.error("No inline <script> blocks found"); process.exit(1); }
+          let failed = false;
+          blocks.forEach((b, i) => {
+            const file = `/tmp/index-inline-${i}.js`;
+            fs.writeFileSync(file, b.code);
+            try {
+              execFileSync("node", ["--check", file], { stdio: "inherit" });
+              console.log(`OK   inline script @ line ${b.line} (${b.code.length} chars)`);
+            } catch {
+              console.error(`FAIL inline script @ line ${b.line}`);
+              failed = true;
+            }
+          });
+          const largest = Math.max(...blocks.map((b) => b.code.length));
+          if (largest < 10000) {
+            console.error(`Largest inline script is only ${largest} chars — the app script was not found`);
+            process.exit(1);
+          }
+          if (failed) process.exit(1);
+          console.log(`index.html inline JS OK (${blocks.length} blocks checked; app script = ${largest} chars)`);
+          EOF
 
       - name: Syntax-check resort-booking.js
         run: node --check resort-booking.js
