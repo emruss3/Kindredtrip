@@ -30,7 +30,7 @@
 //
 //   node scripts/generate-seo-pages.mjs
 //
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -263,6 +263,28 @@ for (const r of resorts) {
 }
 const resortPath = (r) => `/resort/${slugById.get(r.resort_id)}`;
 const countryPath = (c) => `/caribbean/${slugify(c)}`;
+
+// ---------- editorial country guides ----------
+// data/editorial/<slug>.json: hand-verified guides (rooms, age rules,
+// arrival routes, each with source + verification date). A guide makes its
+// country page render the answer-first editorial template and lets it be
+// indexable below GATES.COUNTRY_MIN (see indexability()). It depends on
+// this curated file, not on day-to-day booking availability.
+const EDITORIAL = (() => {
+  const dir = join(ROOT, "data/editorial");
+  const m = new Map();
+  if (!existsSync(dir)) return m;
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
+    const g = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    m.set(g.country, g);
+  }
+  return m;
+})();
+const countryIndexable = (c) => indexability({
+  template: "country",
+  eligibleResultCount: (byCountry.get(c) || []).filter(familyEligible).length,
+  editorialGuide: EDITORIAL.has(c),
+}).indexable;
 
 // Group by country
 const byCountry = new Map();
@@ -1566,7 +1588,150 @@ function countryFaq(country, list) {
   return qa;
 }
 
+// ---------- editorial country guide (answer-first) ----------
+// Rendered instead of the generic hub when data/editorial/<slug>.json
+// exists. Every fact comes from the guide file, which carries its source
+// and verification date; unknowns are stated as unknown, never inferred.
+function editorialCountryPage(country, g) {
+  const url = `${ORIGIN}${countryPath(country)}`;
+  const list = (byCountry.get(country) || []).slice().sort(byScore);
+  const bySlug = new Map(list.map((r) => [slugById.get(r.resort_id), r]));
+  // Hard guard: a guide may only shortlist resorts that admit children.
+  for (const x of g.resorts) {
+    const r = bySlug.get(x.slug);
+    if (!r) throw new Error(`editorial ${g.slug}: unknown resort "${x.slug}"`);
+    if (!familyEligible(r)) throw new Error(`editorial ${g.slug}: "${x.slug}" is not family_allowed`);
+  }
+  const adultList = list.filter((r) => !familyEligible(r));
+  const heroResort = list.find((r) => r.photo_ref && familyEligible(r));
+  const hero = photoUrl(countryHero.get(country) || heroResort?.photo_ref, 1200);
+  const n = g.resorts.length;
+  const fits = g.resorts.filter((x) => x.fitsFour === true);
+  const link = (x) => `<a href="/resort/${x.slug}">${esc(x.name)}</a>`;
+  const maxOcc = (x) => (x.rooms.length ? Math.max(...x.rooms.map((rm) => rm.occupancy)) : null);
+  const familyRooms = (x) => x.rooms.filter((rm) => rm.occupancy >= 4);
+  const searchCell = (x) => (x.searchable ? "Yes — price it in the search above" : "Check directly with the resort");
+  const routeText = (x) => x.route.map((leg) => leg.leg).join(" → ");
+
+  const compareRows = g.resorts.map((x) => `<tr>
+<th scope="row">${link(x)}<br><span class="seo-link-meta">${esc(x.area)}</span></th>
+<td>${esc(x.ageRule)}</td>
+<td>${familyRooms(x).length ? esc(familyRooms(x).map((rm) => rm.name).join("; ")) : esc(x.fitNote || x.smallRooms || "—")}</td>
+<td>${maxOcc(x) != null ? `${maxOcc(x)} guests` : "Check directly with the resort"}</td>
+<td>${esc(routeText(x))}</td>
+<td>${esc(searchCell(x))}</td>
+</tr>`).join("\n");
+
+  const fitSections = fits.map((x) => `<h3>${link(x)} — ${esc(x.area)}</h3>
+<table class="seo-roomfit"><thead><tr><th>Room type</th><th>Bedding</th><th>Who fits (verified)</th></tr></thead><tbody>
+${familyRooms(x).map((rm) => `<tr><td>${esc(rm.name)}</td><td>${esc(rm.beds)}</td><td>Up to ${rm.occupancy} guests total (max ${rm.maxAdults} adults, max ${rm.maxChildren} children)</td></tr>`).join("\n")}
+</tbody></table>
+${x.smallRooms ? `<p class="seo-sub">${esc(x.smallRooms)}</p>` : ""}`).join("\n");
+
+  const notFits = g.resorts.filter((x) => x.fitsFour !== true);
+  const beachSections = g.resorts.map((x) => `<h3>${link(x)}</h3>
+<p><b>Beach:</b> ${esc(x.beach)}${x.allInclusive ? ` ${esc(x.allInclusive)}` : ""}${x.note ? ` ${esc(x.note)}` : ""}</p>
+<ol class="seo-route">
+${x.route.map((leg) => `<li><b>${esc(leg.leg)}:</b> ${esc(leg.detail)}</li>`).join("\n")}
+</ol>`).join("\n");
+
+  const faq = [
+    [`Which resorts in ${country} allow children?`,
+      `${n} resorts in our ${country} catalogue admit children: ${g.resorts.map((x) => x.name).join(", ")}. Adults-only properties are excluded from this guide.`],
+    [`Which ${country} resorts fit a family of four or five in one room?`,
+      `${fits.map((x) => `${x.name} (up to ${maxOcc(x)} guests in its largest unit)`).join(" and ")}. ${notFits.filter((x) => x.rooms.length).map((x) => `${x.name}'s rooms sleep ${maxOcc(x)}`).join("; ")}.`],
+    [`How do you get to ${country}'s beach resorts with kids?`,
+      `Families fly into ${g.airport.code} (${g.airport.name}). Resorts on the cayes and atolls then need a boat or a short domestic flight; Hopkins on the mainland is a road transfer. Each resort's full route is listed above.`],
+  ];
+
+  const collectionLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: g.title,
+    description: g.description,
+    url,
+    about: { "@type": "TouristDestination", name: country },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: n,
+      itemListElement: g.resorts.map((x, i) => ({
+        "@type": "ListItem", position: i + 1, name: x.name, url: `${ORIGIN}/resort/${x.slug}`,
+      })),
+    },
+  };
+  const crumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Destinations", item: `${ORIGIN}/caribbean` },
+      { "@type": "ListItem", position: 3, name: country, item: url },
+    ],
+  };
+
+  const body = `
+${hero ? `<div class="seo-hero"><img src="${hero}" alt="Family beach resorts in ${esc(country)}" loading="eager" /></div>` : ""}
+<h1>${esc(g.h1)}</h1>
+<p class="seo-sub">${n} resorts that admit children · room and policy data verified ${esc(g.verified)}</p>
+<p class="seo-lede">${esc(g.quickAnswer)}</p>
+
+<h2>Compare the ${n} ${esc(country)} resorts that admit children</h2>
+<div class="seo-table-scroll"><table class="seo-compare">
+<thead><tr><th>Resort</th><th>Age rule</th><th>Family room types</th><th>Most guests in one unit</th><th>Getting there from ${esc(g.airport.code)}</th><th>Live price</th></tr></thead>
+<tbody>
+${compareRows}
+</tbody></table></div>
+
+${searchWidget({
+  country,
+  headline: `Search ${country} family trips`,
+  sub: `Enter your airport, dates and every child's age. We'll price live flights plus live hotel rates for the ${country} resorts we can book, and show which room fits your family.`,
+})}
+
+<h2>Which ${esc(country)} resorts fit a family of four or more?</h2>
+<p>${fits.length} of the ${n} can sleep a family of four or more in a single unit: ${fits.map(link).join(" and ")}. ${notFits.map((x) => `${link(x)}: ${esc(x.fitNote || "")}`).join(" ")}</p>
+${fitSections}
+
+<h2>Beachfront family resorts in ${esc(country)} — and how to reach each one</h2>
+<p>Every family arrives on an international flight into ${esc(g.airport.code)}. What happens next depends on where the resort is: the cayes and atolls need a boat or a short domestic flight, while the mainland coast is a road transfer. Leg times are shown only where verified.</p>
+${beachSections}
+
+<h2>${esc(country)} family resort FAQ</h2>
+${faqHtml(faq)}
+
+<p class="seo-sub">Sources: ${Object.values(g.sources).map(esc).join(" · ")} Room names, occupancy limits and policies can change — confirm with the resort before booking.</p>
+
+<h2>Flying from the U.S.?</h2>
+<p>See ranked family trips from your home airport: ${FROM_AIRPORTS.map((a) => `<a href="${fromPath(a)}">${esc(a.city)}</a>`).join(" · ")}.</p>
+
+${adultList.length ? `<h2>Adults-only properties in ${esc(country)}</h2>
+<p>Not included in this guide — these properties don't admit children:</p>
+<ul class="seo-link-grid">
+${adultList.map((r) => `<li><a href="${resortPath(r)}">${esc(displayName(r))}</a></li>`).join("")}
+</ul>` : ""}
+
+<p class="seo-back"><a href="/caribbean">← All Caribbean destinations</a></p>
+`;
+
+  return shell({
+    title: `${g.title} | KindredTrips`,
+    description: g.description,
+    canonical: url,
+    image: toAbs(hero),
+    imageAlt: `Family beach resorts in ${country}`,
+    jsonld: [collectionLd, faqJsonLd(faq), crumbLd],
+    breadcrumbTrail: [
+      { name: "Home", url: "/" },
+      { name: "Destinations", url: "/caribbean" },
+      { name: country, url },
+    ],
+    body,
+    noindex: !countryIndexable(country),
+  });
+}
+
 function countryPage(country) {
+  if (EDITORIAL.has(country)) return editorialCountryPage(country, EDITORIAL.get(country));
   const list = byCountry.get(country).slice().sort(byScore);
   const url = `${ORIGIN}${countryPath(country)}`;
   const s = countryStats(list);
@@ -2504,7 +2669,8 @@ for (const r of resorts) {
 
 const noindexedCountries = [];
 for (const c of countries) {
-  if ((byCountry.get(c) || []).filter(familyEligible).length < COUNTRY_INDEX_MIN) noindexedCountries.push(c);
+  // Same rule the page itself uses for its robots tag (editorial override included).
+  if (!countryIndexable(c)) noindexedCountries.push(c);
   write(`caribbean/${slugify(c)}.html`, countryPage(c));
 }
 write("caribbean/index.html", destinationsIndex());

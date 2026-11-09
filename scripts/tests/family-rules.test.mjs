@@ -189,3 +189,11 @@ test("qualifyingRoom5 evidence surfaces real room data", () => {
   assert.equal(hasQualifyingRoom5({ ...base }), false);
   assert.equal(roomEvidenceLine({ ...base }), null);
 });
+
+// Editorial override: a verified guide can index a small destination, but
+// never one with zero family-eligible resorts, and never without a guide.
+test("country editorial override indexes small destinations only with a guide", () => {
+  assert.equal(indexability({ template: "country", eligibleResultCount: 4 }).indexable, false);
+  assert.equal(indexability({ template: "country", eligibleResultCount: 4, editorialGuide: true }).indexable, true);
+  assert.equal(indexability({ template: "country", eligibleResultCount: 0, editorialGuide: true }).indexable, false);
+});

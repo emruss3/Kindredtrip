@@ -354,16 +354,23 @@ export const GATES = {
   COMPARE_MIN_FIELDS: 5,
 };
 
-export function indexability({ template, eligibleResultCount = 0, hasRealFlightData = false, bothSidesRich = false, resortEligibility = "family_allowed" }) {
+// Editorial override (country pages only): a destination below
+// COUNTRY_MIN is still indexable when a hand-verified editorial guide
+// exists for it (data/editorial/<slug>.json — verified rooms, age rules,
+// arrival routes, sources and dates). The exception depends on that
+// curated guide, not on day-to-day booking availability, but it still
+// requires at least one family-eligible resort so it can't keep an empty
+// destination indexed.
+export function indexability({ template, eligibleResultCount = 0, hasRealFlightData = false, bothSidesRich = false, resortEligibility = "family_allowed", editorialGuide = false }) {
   switch (template) {
     case "resort":
       return resortEligibility === "family_allowed"
         ? { indexable: true, reason: "family_allowed resort page" }
         : { indexable: false, reason: `resort eligibility=${resortEligibility}` };
     case "country":
-      return eligibleResultCount >= GATES.COUNTRY_MIN
-        ? { indexable: true, reason: `${eligibleResultCount} family-eligible resorts` }
-        : { indexable: false, reason: `only ${eligibleResultCount} family-eligible resorts (<${GATES.COUNTRY_MIN})` };
+      if (eligibleResultCount >= GATES.COUNTRY_MIN) return { indexable: true, reason: `${eligibleResultCount} family-eligible resorts` };
+      if (editorialGuide && eligibleResultCount >= 1) return { indexable: true, reason: `editorial guide with ${eligibleResultCount} verified family-eligible resorts` };
+      return { indexable: false, reason: `only ${eligibleResultCount} family-eligible resorts (<${GATES.COUNTRY_MIN})` };
     case "theme":
       return eligibleResultCount >= GATES.THEME_MIN
         ? { indexable: true, reason: `${eligibleResultCount} verified matches` }

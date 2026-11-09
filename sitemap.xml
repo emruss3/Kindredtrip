@@ -55,6 +55,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://kindredtrips.com/caribbean/belize</loc>
+    <lastmod>2026-11-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://kindredtrips.com/caribbean/colombia</loc>
     <lastmod>2026-07-20</lastmod>
     <changefreq>weekly</changefreq>
