@@ -346,26 +346,27 @@
 
   async function pollUntilPriced(search_id, package_id, deadlineMs) {
     const start = Date.now();
-    let lastPkg = null;
     while (Date.now() - start < deadlineMs) {
       const data = await callFn(
         `get_packages?search_id=${search_id}&limit=1000&only_priced=true`,
         { method: "GET" });
       const pkg = (data.packages || []).find((p) => p.package_id === package_id);
-      if (pkg) {
-        lastPkg = pkg;
-        // The hard requirement is hotel_price + full-leg flight basis. We
-        // intentionally allow flight_price_basis === null (combined-fare
-        // legacy) since those have valid totals, but reject "oneway_outbound"
-        // (matches the homepage's pending logic added earlier today).
-        if (pkg.hotel_price != null && pkg.total_price != null &&
-            pkg.flight_price_basis !== "oneway_outbound") {
-          return pkg;
-        }
+      // Hard precondition before any price is drawn: the package must be
+      // LIVE — BOTH suppliers LiteAPI (users are only ever shown real partner
+      // prices). Then hotel_price + a full-leg flight basis: we allow
+      // flight_price_basis === null (combined-fare legacy, valid totals) but
+      // reject "oneway_outbound" (matches the homepage's pending logic).
+      if (pkg && pkg.hotel_supplier === "liteapi" && pkg.flight_supplier === "liteapi" &&
+          pkg.hotel_price != null && pkg.total_price != null &&
+          pkg.flight_price_basis !== "oneway_outbound") {
+        return pkg;
       }
       await sleep(1500);
     }
-    return lastPkg;
+    // Never fall back to the last-seen package: on timeout it has by
+    // definition failed the check above, so the caller would draw a price
+    // that isn't live. Return null — the caller shows "still warming up".
+    return null;
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -140,10 +140,10 @@
     },
     {
       "@type": "Question",
-      "name": "Are KindredTrips prices live or estimates?",
+      "name": "Are KindredTrips prices live?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding live prices' placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout."
+        "text": "KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a 'finding real prices' placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout."
       }
     }
   ]
@@ -392,8 +392,8 @@
       </div>
 
       <div class="search-extras">
-        <label class="toggle"><input type="checkbox" data-flag="require_kids_club" checked />Kids club</label>
-        <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" checked />All-inclusive</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
+        <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
         <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights</label>
         <label class="toggle toggle-select" for="max_flight_hours">
           <span class="toggle-select-label">Max travel time:</span>
@@ -455,39 +455,42 @@
     <div class="proof-copy">
       <div class="section-eyebrow">What a ranked result looks like</div>
       <h2 id="proof-heading">Every Caribbean trip, scored for <em>your</em> family.</h2>
-      <p>Expedia and Booking make you pick a destination first. We rank a flight + hotel package across <b>520+ family resorts in 30 countries</b> and tell you the trade-off in dollars, travel time, and family-fit. Here's what a single result card looks like — every fact below is what KindredTrips actually shows you, not a marketing claim.</p>
+      <p>Expedia and Booking make you pick a destination first. We rank a flight + hotel package across <b>520+ family resorts in 30 countries</b> and tell you the trade-off in dollars, travel time, and family-fit. The card below is an illustration of the layout — on a real search, every field is filled from live partner data for your family and dates.</p>
       <ul class="proof-bullets">
         <li><b>Total trip cost</b> always shows flights + hotel together for your exact party — no nightly-rate guesswork.</li>
         <li><b>Travel distance</b> is part of the rank — we show total flight time and stops, and favor shorter, more direct routes so less of the trip is spent getting there.</li>
         <li><b>Family-fit</b> facts (on-the-beach, kids club, room sleeps, infants accepted) are sourced from partner data — each chip only appears when the underlying field is confirmed for that resort, not inferred from marketing text.</li>
       </ul>
     </div>
-    <article class="proof-card" aria-label="Sample result card">
+    <!-- Layout illustration only: no real resort, rating, or price. Every
+         field describes what a live result shows instead of inventing a
+         value — product policy is to never show a mock price. -->
+    <article class="proof-card" aria-label="Illustration of a result card (not a real resort or price)">
       <div class="proof-card-photo">
-        <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=70" alt="Sample Caribbean family resort — Punta Cana" loading="lazy" width="600" height="338" />
-        <span class="proof-card-rank">#1 trip for your family</span>
+        <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=70" alt="Illustrative Caribbean beach photo — not a specific resort" loading="lazy" width="600" height="338" />
+        <span class="proof-card-rank">Illustration</span>
       </div>
       <div class="proof-card-body">
         <div class="proof-card-head">
           <div>
-            <div class="proof-card-name">Sample Resort — Punta Cana</div>
-            <div class="proof-card-meta">Dominican Republic · 4.6 ★ · 2,134 reviews</div>
+            <div class="proof-card-name">Your top-ranked resort</div>
+            <div class="proof-card-meta">Destination · guest rating · review count</div>
           </div>
           <div class="proof-card-price">
-            <div class="proof-card-total">$4,228</div>
-            <div class="proof-card-total-sub">total · 2 adults, 2 kids · 7 nights</div>
-            <div class="proof-card-break">$1,840 flights · $2,388 hotel</div>
+            <div class="proof-card-total">Total trip cost</div>
+            <div class="proof-card-total-sub">flights + hotel · your party · your dates</div>
+            <div class="proof-card-break">live flight price · live hotel price</div>
           </div>
         </div>
         <div class="proof-card-flight">
           <span class="proof-card-flight-icon" aria-hidden="true">✈</span>
-          <span><b>Direct</b> from Nashville (BNA) · 4h 12m · $920/adult</span>
+          <span><b>Flights</b> from your airport · total travel time and stops</span>
         </div>
         <div class="trust-labels">
-          <span class="trust-label verified"><span class="trust-check">✈</span>Short travel · 4h 12m direct</span>
+          <span class="trust-label verified"><span class="trust-check">✈</span>Short, direct flight</span>
           <span class="trust-label verified"><span class="trust-check">✓</span>On the beach</span>
           <span class="trust-label verified"><span class="trust-check">✓</span>Kids club available</span>
-          <span class="trust-label verified"><span class="trust-check">✓</span>Sleeps 4 (1 king + sofa bed)</span>
+          <span class="trust-label verified"><span class="trust-check">✓</span>Room sleeps your family</span>
         </div>
       </div>
     </article>
@@ -523,7 +526,7 @@
     <div class="feature">
       <div class="feature-icon">$</div>
       <h3>Total trip cost, ranked</h3>
-      <p>Every result is flight + hotel for your exact family — 2 adults, 3 kids, your dates — ranked together. We tell you when prices are estimates, and route you to live rates when you click through.</p>
+      <p>Every result is flight + hotel for your exact family — 2 adults, 3 kids, your dates — ranked together. Every price you see is a live partner rate, and you book directly with that partner when you click through.</p>
     </div>
   </div>
 </section>
@@ -664,9 +667,9 @@
       </div>
     </details>
     <details class="faq-item">
-      <summary>Are KindredTrips prices live or estimates?</summary>
+      <summary>Are KindredTrips prices live?</summary>
       <div class="faq-answer">
-        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding live prices…" placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout.</p>
+        <p>KindredTrips only shows live partner rates — flight prices from real carriers and hotel rates from booking partners. When the search is still warming up, those rows render a "finding real prices…" placeholder instead of a number. Prices on screen reflect live rates for your dates; the partner completes the booking, and prices can change before checkout.</p>
       </div>
     </details>
   </div>
@@ -728,7 +731,7 @@
         <div class="dest-meta">St. James · Christ Church</div>
       </div>
     </button>
-    <button class="dest" data-country="Antigua">
+    <button class="dest" data-country="Antigua and Barbuda">
       <img src="https://static.cupid.travel/hotels/ex_d1527777_z.jpg" alt="Antigua coastline — KindredTrips searches family resorts in Antigua and Barbuda" loading="lazy" />
       <div class="dest-content">
         <div class="dest-name">Antigua &amp; Barbuda</div>
@@ -1239,13 +1242,15 @@
     });
   });
 
-  // List of major Caribbean destinations (top countries by family resort count)
-  // Populated dynamically from the data once we have results, falls back to this list otherwise
+  // Pre-search fallback for the "+ More destinations" picker. Once a search
+  // returns, homepageDestinations() rebuilds this from the live results.
+  // Every entry MUST equal a resorts.country value that has eligible
+  // inventory, or the chip silently returns zero results.
   const DEFAULT_DESTINATIONS = [
     "Mexico", "Dominican Republic", "Jamaica", "Bahamas",
     "Turks and Caicos", "Aruba", "Barbados", "Saint Lucia",
-    "Cayman Islands", "Antigua and Barbuda", "Grenada", "Curacao",
-    "Puerto Rico", "Trinidad and Tobago", "Saint Vincent and the Grenadines",
+    "Grand Cayman", "Antigua and Barbuda", "Grenada", "Curaçao",
+    "Puerto Rico", "Sint Maarten", "Saint Kitts and Nevis", "Anguilla",
     "Belize", "Costa Rica", "Honduras", "Panama",
   ];
 
@@ -1651,12 +1656,22 @@
   }
   window.KT_trackEvent = trackEvent;
 
-  // Honest price label. A package is "live" only when BOTH suppliers are
-  // LiteAPI (real bookable rates). Anything else is still an estimate while
-  // pricing settles — say so, instead of the old no-op `? "Live price" :
-  // "Live price"` that labelled everything live.
-  function priceLabel(isLivePkg) {
-    return isLivePkg ? "Live partner rate" : "Estimate · confirming";
+  // A package is "live" only when BOTH suppliers are LiteAPI (real, bookable
+  // rates). That is a HARD precondition for drawing any price: a package
+  // that isn't live shows NO dollar figure at all — no placeholder number —
+  // only pendingPriceHtml(). Product policy: users are only ever shown real
+  // partner prices.
+  //
+  // Label above a live price. Only ever rendered inside an isLive branch.
+  function priceLabel() {
+    return "Live partner rate";
+  }
+
+  // Rendered in place of every price block until the package is fully live
+  // (e.g. while the search is still warming up and the prepaint cards are on
+  // screen). Deliberately carries no dollar amount.
+  function pendingPriceHtml(cls = "price-from") {
+    return `<div class="${cls} pending">Finding real prices…</div>`;
   }
 
   // Edge-function warming is handled SERVER-SIDE by the pg_cron job
@@ -3155,8 +3170,8 @@
     // and show the empty "no results" state, which is exactly the
     // "trips don't show up on first run" bug. So: if strict-live yields
     // zero packages but packages actually exist for this search, fall
-    // back to the prepaint view (resort cards with pending/estimate price
-    // slots) so the user keeps seeing trips. Subsequent polls replace
+    // back to the prepaint view (resort cards whose price slot reads
+    // "Finding real prices…", no dollar figure) so the user keeps seeing trips. Subsequent polls replace
     // these with live cards as pricing settles.
     const liveCount = (data?.packages || []).length;
     const totalExist = Number(data?.summary?.total_packages) || 0;
@@ -3453,14 +3468,17 @@
     // hunt for the card. One-shot — cleared after firing.
     if (pendingAutoOpenResortId) {
       const target = allPackages.find((p) => p.resort_id === pendingAutoOpenResortId);
-      // Direct-trip mode: open as soon as the package has a usable total
-      // (hotel + total present). We deliberately DON'T require the stricter
-      // full-leg isPricesPending() here — for some origin/route pairs that
-      // can stay true indefinitely, which would trap the loader until the
-      // safety timeout and dump the user on the grid. The trip detail
-      // itself shows live rooms/flights once open. Outside direct mode keep
-      // the old eager behavior.
-      const directReady = target && target.hotel_price != null && target.total_price != null;
+      // Direct-trip mode: open only once the package is LIVE (hotel AND
+      // flight from LiteAPI) with a usable total. Live-ness is a hard
+      // precondition — a non-null total alone may not be a real rate, and we
+      // never auto-open a trip on a price that isn't real. Trade-off: for the
+      // rare route where a flight leg never prices live, the loader waits for
+      // the existing safety timeout and then shows the grid (where that card
+      // reads "Finding real prices…") instead of auto-opening. Outside direct
+      // mode keep the old eager behavior.
+      const directReady = target
+        && target.hotel_supplier === "liteapi" && target.flight_supplier === "liteapi"
+        && target.hotel_price != null && target.total_price != null;
       const ready = target && (!directTripMode || directReady);
       if (ready) {
         pendingAutoOpenResortId = null;
@@ -4572,7 +4590,8 @@
           <p class="card-why-inline">${escapeHtml(whyLine)}</p>
         </div>
         <div class="card-price">
-          <div class="price-from${isLiveCard ? " live" : ""}">${escapeHtml(priceLabel(isLiveCard))}</div>
+          ${isLiveCard ? `
+          <div class="price-from live">${escapeHtml(priceLabel())}</div>
           <p class="price-total">${fmtMoney(p.total_price)}</p>
           <div class="price-sub">flights + hotel</div>
           <div class="price-breakdown-inline">
@@ -4580,7 +4599,7 @@
             <span class="dot">·</span>
             <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
           </div>
-          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}` : pendingPriceHtml()}
           <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
           <div class="card-sub-actions">
             <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
@@ -4643,7 +4662,8 @@
             ${reasonsHtml}
           </div>
           <div class="hero-card-pricing">
-            <div class="hero-price-eyebrow${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
+            ${isLive ? `
+            <div class="hero-price-eyebrow live">${escapeHtml(priceLabel())}</div>
             <p class="hero-price-total">${fmtMoney(p.total_price)}</p>
             <div class="hero-price-sub">total · flights + hotel</div>
             <div class="hero-price-split">
@@ -4651,7 +4671,7 @@
               <span class="dot">·</span>
               <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
             </div>
-            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}
+            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}` : pendingPriceHtml("hero-price-eyebrow")}
             <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
             <div class="card-sub-actions">
               <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
@@ -5139,21 +5159,22 @@
     const room = roomFitInfo(pkg);
     const isLive = pkg.flight_supplier === "liteapi" && pkg.hotel_supplier === "liteapi";
 
-    const tripFitTotal = `
+    const tripFitTotal = isLive ? `
       <div class="trip-fit-total">
-        <div class="price-from${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
+        <div class="price-from live">${escapeHtml(priceLabel())}</div>
         <div class="price-total">${fmtMoney(pkg.total_price)}</div>
         <div class="price-suffix">flights + hotel · for your family</div>
         <div class="trip-fit-breakdown">
           <span>${renderFlightCostBreakdown(pkg)}</span>
           <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
         </div>
-      </div>`;
+      </div>` : `
+      <div class="trip-fit-total">${pendingPriceHtml()}</div>`;
     const tripFitBudget = budget != null ? `
       <div class="trip-fit-budget">
         <div class="price-from">Your budget</div>
         <div class="trip-fit-budget-value">${fmtMoney(budget)}</div>
-        ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+        ${isLive && delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
       </div>` : "";
 
     const fitPills = `
@@ -5422,19 +5443,20 @@
     const adultsRail = lastSearchSummary?.adults || 2;
     const kidsRail = lastSearchSummary?.child_ages?.length || 0;
     const fmtRailDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—";
-    const trailingDelta = delta
+    const trailingDelta = isLive && delta
       ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>`
       : "";
     const rail = `
       <aside class="trip-side-col">
         <div class="trip-rail trip-fit-summary">
-          <div class="price-from${isLive ? " live" : ""}">${escapeHtml(priceLabel(isLive))}</div>
+          ${isLive ? `
+          <div class="price-from live">${escapeHtml(priceLabel())}</div>
           <p class="price-total">${fmtMoney(pkg.total_price)}</p>
           <div class="trip-rail-sub">flights + hotel · family of ${adultsRail + kidsRail}</div>
           <div class="trip-fit-breakdown">
             <span>${renderFlightCostBreakdown(pkg)}</span>
             <span><b>${fmtMoney(pkg.hotel_price)}</b> hotel</span>
-          </div>
+          </div>` : pendingPriceHtml()}
           ${trailingDelta}
           <div class="trip-rail-dates">
             <div><span>Check-in</span><b>${fmtRailDate(lastSearchSummary?.date_start)}</b></div>
@@ -5602,7 +5624,7 @@
 
       <p class="modal-footer-note">${isLive
         ? "Prices are live flight + hotel rates for your party and dates, pulled from our booking partners. The partner completes the booking; we don't add fees or markups, though partner prices can change before checkout."
-        : "Live rates are still loading for this trip — the price shown is an estimate based on rating tier, country, and party size. The exact fare is confirmed by the booking partner when you click through."}</p>
+        : "Live rates are still loading for this trip. We only show a price once our booking partners return a real rate for your party and dates — check back in a moment."}</p>
 
       <div class="trip-mobile-cta">
         <div class="trip-mobile-cta-info">
