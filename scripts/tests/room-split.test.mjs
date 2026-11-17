@@ -91,3 +91,31 @@ test("legacy combo names are parsed for a readable fallback", () => {
   );
   assert.equal(S.parseComboName("Junior Suite King"), null);
 });
+
+const catalog = [
+  { room_id: "4992002", room_name: "Junior Suite Partial Ocean View King Bed" },
+  { room_id: "4992006", room_name: "Preferred Club Junior Suite Ocean View Double" },
+  { room_id: "1459443180", room_name: "Junior Suite Tropical View Double Beds" },
+  { room_id: "4992009", room_name: "Preferred Club Master Suite Ocean View" },
+  { room_id: "4992011", room_name: "Preferred Club Master Suite Ocean Front" },
+];
+
+test("catalog match: mapped room id wins over the name", () => {
+  assert.equal(S.matchCatalogRoom(catalog, { mapped_room_id: "4992009", name: "Something else" }).room_id, "4992009");
+});
+
+test("catalog match: exact name, ignoring a trailing Bed/Beds/Room", () => {
+  assert.equal(S.matchCatalogRoom(catalog, { name: "Junior Suite Partial Ocean View King" }).room_id, "4992002");
+  assert.equal(S.matchCatalogRoom(catalog, { name: "Preferred Club Junior Suite Ocean View Double " }).room_id, "4992006");
+  assert.equal(S.matchCatalogRoom(catalog, { name: "Junior Suite Tropical View Double" }).room_id, "1459443180");
+});
+
+test("catalog match: no fuzzy guesses", () => {
+  // Shares most words with two catalog rooms but equals neither.
+  assert.equal(S.matchCatalogRoom(catalog, { name: "Preferred Club Master Suite" }), null);
+  assert.equal(S.matchCatalogRoom(catalog, { name: "Junior Suite Partial Ocean View" }), null);
+  assert.equal(S.matchCatalogRoom(catalog, { name: "" }), null);
+  // Ambiguous (two catalog rows normalize the same): no match.
+  const dup = [...catalog, { room_id: "x", room_name: "Junior Suite Partial Ocean View King Beds" }];
+  assert.equal(S.matchCatalogRoom(dup, { name: "Junior Suite Partial Ocean View King" }), null);
+});

@@ -125,7 +125,29 @@
     return { rooms: Number(m[2]), types: types };
   }
 
+  // Room photos live on the hotel's room catalog (resort_rooms), keyed by
+  // LiteAPI's mapped room id. Match by that id first. Without it, accept
+  // only an exact name match after ignoring case, punctuation and a
+  // trailing "Bed"/"Beds"/"Room" ("…Ocean View King" = "…Ocean View King
+  // Bed"), and only when exactly one catalog room matches. No fuzzy
+  // guessing: a wrong photo is worse than none.
+  function normRoomName(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+      .replace(/\s+(bed|beds|room)$/, "").trim();
+  }
+  function matchCatalogRoom(catalog, ref) {
+    var list = catalog || [];
+    if (ref && ref.mapped_room_id != null) {
+      for (var i = 0; i < list.length; i++) if (String(list[i].room_id) === String(ref.mapped_room_id)) return list[i];
+    }
+    var n = normRoomName(ref && ref.name);
+    if (!n) return null;
+    var hits = list.filter(function (c) { return normRoomName(c.room_name) === n; });
+    return hits.length === 1 ? hits[0] : null;
+  }
+
   var api = {
+    matchCatalogRoom: matchCatalogRoom, normRoomName: normRoomName,
     buildRoomOptions: buildRoomOptions, defaultPicks: defaultPicks, totalFor: totalFor,
     matchingOffer: matchingOffer, optionFor: optionFor, guestsLabel: guestsLabel,
     parseComboName: parseComboName, optionKey: optionKey,
