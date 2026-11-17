@@ -18,7 +18,7 @@
 // Built-in Deno.serve (no deno.land/std import) for bundler reliability.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "top_up_hotels_worker_v14_group_rooms";
+const VERSION = "top_up_hotels_worker_v15_room_parts";
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
 const HOTEL_BATCH_SIZE = 25;
 // v12: 2 -> 6 (matches start_pricing v20). 429 backoff self-limits.
@@ -148,6 +148,18 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number, roomsReq
       const roomName = `${names.join(" + ") || "Room combo"} (${roomsRequested} rooms)`;
       const maxOcc = sum((r) => Number(r?.maxOccupancy ?? 0)) || null;
       const rateId = parts.map((r) => String(r?.rateId ?? "r0")).join("+");
+      const roomParts = Array.from(byOcc.entries()).sort((a, b) => a[0] - b[0]).map(([occ, r]) => ({
+        occ,
+        name: r?.name ?? null,
+        total: Number(r?.retailRate?.total?.[0]?.amount ?? 0),
+        adults: Number.isFinite(Number(r?.adultCount)) ? Number(r.adultCount) : null,
+        children_ages: Array.isArray(r?.childrenAges) ? r.childrenAges.map(Number) : [],
+        max_occupancy: Number.isFinite(Number(r?.maxOccupancy)) ? Number(r.maxOccupancy) : null,
+        board_type: String(r?.boardType ?? "").toUpperCase() || null,
+        board_name: r?.boardName ?? null,
+        refundable_tag: r?.cancellationPolicies?.refundableTag ?? null,
+        mapped_room_id: r?.mappedRoomId != null ? String(r.mappedRoomId) : null,
+      }));
       const offerId = `${hotelId}_${shortHash(liteOfferId + "|" + rateId)}`;
       out.push({
         offer_id: offerId,
@@ -185,6 +197,10 @@ function extractRateOffers(hotel: any, hotelId: string, nights: number, roomsReq
           _liteapi_room_type_id: roomTypeId,
           _liteapi_rate_id: rateId,
           _rooms: roomsRequested,
+          // Per-room breakdown (one entry per occupancy, in occupancy order)
+          // so the trip page can show what each room costs and let a family
+          // swap one room for a nicer type. total_price above is their sum.
+          _room_parts: roomParts,
           board_type: boardType,
           board_name: boardName,
           refundable_tag: tags[0] ?? null,
