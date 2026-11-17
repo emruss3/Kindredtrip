@@ -9680,3 +9680,42 @@ body.body-lock {
   line-height: 1.4;
 }
 .party-notice[hidden] { display: none; }
+
+/* ---- Multi-room stays: one row per room (room-split.js) ---- */
+.mr-builder { display: flex; flex-direction: column; gap: 14px; }
+.mr-intro { margin: 0; color: var(--ink-1); font-size: 15px; line-height: 1.5; }
+.mr-rooms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.mr-room { background: #fff; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; }
+.mr-room-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+.mr-room-photo { width: 88px; height: 66px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; }
+.mr-room-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mr-room-label { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.mr-room-guests { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.mr-room-name { font-size: 16px; font-weight: 600; color: var(--ink); }
+.mr-room-sleeps { font-size: 13px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.mr-room-chips, .mr-option-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mr-room-price { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
+.mr-room-price b { font-size: 18px; color: var(--ink); white-space: nowrap; }
+.mr-change { background: none; border: 1px solid var(--line-soft); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.mr-change:hover, .mr-change[aria-expanded="true"] { border-color: var(--ink); }
+.mr-only { font-size: 12px; color: var(--ink-3); }
+.mr-options { list-style: none; margin: 0; padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.mr-option { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; background: var(--bg); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; font: inherit; color: var(--ink); cursor: pointer; }
+.mr-option:hover { border-color: var(--ink-4); }
+.mr-option.current { border-color: var(--ink); background: #fff; }
+.mr-option-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mr-option-name { font-weight: 600; }
+.mr-option-price { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+.mr-option-diff { font-size: 12px; color: #1F6F3B; font-weight: 600; }
+.mr-option-diff.up { color: var(--ink-2); }
+.mr-option.current .mr-option-diff { color: var(--ink-3); }
+.mr-total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px; border-radius: 12px; background: var(--bg-soft); font-weight: 600; color: var(--ink); }
+.mr-total b { font-size: 20px; }
+.mr-book-note { margin: 0; font-size: 13px; color: var(--ink-2); }
+.room-v2-combo { margin: 4px 0 6px; padding-left: 18px; color: var(--ink-1); font-size: 14px; }
+.room-v2-combo-note { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
+@media (max-width: 640px) {
+  .mr-room-row { flex-wrap: wrap; }
+  .mr-room-photo { width: 64px; height: 48px; }
+  .mr-room-price { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+}
