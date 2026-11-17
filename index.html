@@ -60,7 +60,7 @@
 <link rel="preload" as="image" fetchpriority="high" media="(max-width: 720px)"
       href="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=70" />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20261117-flex-dates" />
+<link rel="stylesheet" href="/styles.css?v=20261117-rooms-flex" />
 <meta name="kt-build" content="20260520-score-retune" />
 
 <!-- Structured data -->
@@ -835,6 +835,8 @@
 
 <script src="/party.js"></script>
 <script src="/flex-dates.js"></script>
+<script src="/room-split.js"></script>
+<script src="/rich-text.js"></script>
 <script>
   const SUPABASE_URL = "https://wyqbtcuoorclmirepkuo.supabase.co";
   const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5cWJ0Y3Vvb3JjbG1pcmVwa3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3MzQ0MDMsImV4cCI6MjA4NjMxMDQwM30.LfZX0hMgJJQ5f-euBE4nRZnPQ4Kpc7IN3c1t9ht4Zbc";
@@ -6532,6 +6534,10 @@
   // delta all update in place — pure client-side preview, no DB writes.
   let currentModalRooms = [];
   let currentModalSelectedRoomId = null;
+  // Multi-room stays: which option is picked for each room (option keys
+  // from KTRoomSplit), and which rooms have their "Change room" list open.
+  let currentModalRoomPicks = null;
+  let currentModalRoomOpen = new Set();
   // Standalone room catalog (resort_rooms) from get_hotel_offers. The
   // Rooms section uses this as the canonical card identity and groups
   // matching rate offers under each catalog room as bookable variants.
@@ -6578,13 +6584,19 @@
       }
     }
     if (descEl) {
-      const desc = (resort.liteapi_description || "").trim();
+      // LiteAPI descriptions are often HTML ("<p><strong>…</strong><br>…",
+      // "&amp;"). Measure and preview the plain text; "Read more" shows the
+      // partner's formatting through the allowlist in rich-text.js.
+      const raw = (resort.liteapi_description || "").trim();
+      const RT = window.KTRichText;
+      const desc = RT ? RT.plainText(raw) : raw;
       if (desc.length >= 80) {
-        const preview = desc.length > 360 ? desc.slice(0, 360).replace(/\s+\S*$/, "") + "…" : desc;
         const truncated = desc.length > 360;
+        const preview = truncated ? desc.slice(0, 360).replace(/\s+\S*$/, "") + "…" : desc;
+        const bodyHtml = truncated || !RT ? escapeHtml(preview) : RT.richText(raw);
         descEl.innerHTML = `
           <h3 class="trip-resort-desc-h">About this resort</h3>
-          <p class="trip-resort-desc-p" id="trip-resort-desc-p">${escapeHtml(preview)}</p>
+          <div class="trip-resort-desc-p${truncated || !RT ? " is-plain" : ""}" id="trip-resort-desc-p">${bodyHtml}</div>
           ${truncated ? `<button type="button" class="trip-resort-desc-more" id="trip-resort-desc-more">Read more</button>` : ""}
         `;
         descEl.hidden = false;
@@ -6597,7 +6609,8 @@
           const p = document.getElementById("trip-resort-desc-p");
           if (btn && p) {
             btn.addEventListener("click", () => {
-              p.textContent = desc;
+              if (RT) { p.innerHTML = RT.richText(raw); p.classList.remove("is-plain"); }
+              else p.textContent = desc;
               btn.remove();
             });
           }
@@ -6950,7 +6963,8 @@
       // them again.)
       const partyTotal = partyTotalForFit();
       const priceOf = (o) => Number(o.price_min ?? o.total_price) || Infinity;
-      const fits = (o) => !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
+      const isCombo = (o) => !!(window.KTRoomSplit && window.KTRoomSplit.parseComboName(o.room_name));
+      const fits = (o) => isCombo(o) || !o.max_occupancy || partyTotal === 0 || Number(o.max_occupancy) >= partyTotal;
       const fittingCount = offers.filter(fits).length;
       if (countEl) countEl.textContent = fittingCount === 0
         ? "No rooms fit your family"
@@ -6961,6 +6975,8 @@
         return priceOf(a) - priceOf(b);
       });
       currentModalRooms = sortedOffers;
+      currentModalRoomPicks = null;
+      currentModalRoomOpen = new Set();
       // Pre-compute what's unique about each room vs the cheapest one
       // so the cards can call it out (Sleeps 6, Ocean view, AI, etc.)
       currentModalRoomDiffs = computeRoomDiffs(sortedOffers);
@@ -7020,6 +7036,19 @@
     if (!grid || currentModalRooms.length === 0) return;
     const partyTotal = partyTotalForFit();
 
+    // Big parties are priced as several separate rooms. When the offers
+    // carry a per-room breakdown, show the stay room by room (guests,
+    // room type, live price) with a picker per room instead of one
+    // merged "A + B (4 rooms)" card per combination.
+    const splitRooms = window.KTRoomSplit ? window.KTRoomSplit.buildRoomOptions(currentModalRooms) : [];
+    if (splitRooms.length > 1) {
+      grid.innerHTML = renderMultiRoomBuilder(splitRooms);
+      bindRoomThumbs(grid);
+      const countEl = document.getElementById("room-options-count");
+      if (countEl) countEl.textContent = `${splitRooms.length} rooms`;
+      return;
+    }
+
     // Group strictly on the backend-supplied group_key (cat:<room_id>
     // for mapped_id or fuzzy_name matches, synth:<...> otherwise). We
     // ALSO seed catalog rooms with empty rates lists so we render the
@@ -7059,6 +7088,9 @@
     const infCount = partyInfantCount();
     const fits = (g) => {
       if (partyTotal === 0) return true;
+      // Multi-room offers are priced for the party's exact room split, so
+      // they fit by construction (same rule as start_pricing).
+      if (window.KTRoomSplit && window.KTRoomSplit.parseComboName(g.name)) return true;
       const catMax = Number(g.catalog?.max_occupancy);
       if (Number.isFinite(catMax) && catMax > 0) {
         if (catMax >= partyTotal) return true;
@@ -7125,22 +7157,27 @@
       </div>`;
     // Thumb strip: delegate clicks so the main image swaps per card.
     // Rebound on every rerender because innerHTML wipes prior handlers.
-    if (!grid.dataset.thumbDelegationBound) {
-      grid.addEventListener("click", (ev) => {
-        const btn = ev.target.closest(".rv-thumb");
-        if (!btn) return;
-        const strip = btn.closest(".rv-thumbs");
-        if (!strip) return;
-        const mainId = strip.dataset.mainId;
-        const main = mainId ? document.getElementById(mainId) : null;
-        const src = btn.dataset.src;
-        if (!main || !src) return;
-        main.src = src;
-        for (const sib of strip.querySelectorAll(".rv-thumb")) sib.classList.remove("active");
-        btn.classList.add("active");
-      });
-      grid.dataset.thumbDelegationBound = "1";
-    }
+    bindRoomThumbs(grid);
+  }
+
+  // Thumb strip: delegate clicks so the main image swaps per card.
+  // Bound once per grid (innerHTML re-renders keep the grid element).
+  function bindRoomThumbs(grid) {
+    if (grid.dataset.thumbDelegationBound) return;
+    grid.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".rv-thumb");
+      if (!btn) return;
+      const strip = btn.closest(".rv-thumbs");
+      if (!strip) return;
+      const mainId = strip.dataset.mainId;
+      const main = mainId ? document.getElementById(mainId) : null;
+      const src = btn.dataset.src;
+      if (!main || !src) return;
+      main.src = src;
+      for (const sib of strip.querySelectorAll(".rv-thumb")) sib.classList.remove("active");
+      btn.classList.add("active");
+    });
+    grid.dataset.thumbDelegationBound = "1";
   }
 
   // One card per room type. Catalog data drives the left "what is this
@@ -7164,6 +7201,15 @@
     catalogPhotoUrls(cat).forEach(pushPhoto);
     const offerPhotos = (g.rates[0] && Array.isArray(g.rates[0].photos)) ? g.rates[0].photos : [];
     for (const p of offerPhotos) pushPhoto(p?.hd_url || p?.url);
+    // No id join: try the room's own catalog entry by exact name (each
+    // listed type for a multi-room combo) before any generic fallback.
+    if (groupPhotos.length === 0 && window.KTRoomSplit) {
+      const combo0 = window.KTRoomSplit.parseComboName(g.name);
+      for (const n of (combo0 ? combo0.types : [g.name])) {
+        const m = window.KTRoomSplit.matchCatalogRoom(currentModalCatalogRooms, { name: n });
+        if (m) catalogPhotoUrls(m).slice(0, combo0 ? 3 : 6).forEach(pushPhoto);
+      }
+    }
     if (groupPhotos.length === 0) {
       // Synthetic / no-match fallback: any catalog room photo on the
       // resort, then the modal hero refs. Single-photo only — we don't
@@ -7217,6 +7263,14 @@
     } else if (Number(g.rates[0]?.max_occupancy) > 0) {
       sleepsHead = `Sleeps ${Number(g.rates[0].max_occupancy)}`;
     }
+    // Multi-room offer cached before per-room prices existed: say plainly
+    // that it's N rooms and the price covers all of them.
+    const combo = window.KTRoomSplit ? window.KTRoomSplit.parseComboName(g.name) : null;
+    if (combo) {
+      const occ = Number(g.rates[0]?.max_occupancy);
+      sleepsHead = `${combo.rooms} separate rooms${Number.isFinite(occ) && occ > 0 ? ` · sleeps ${occ} in total` : ""}`;
+      sleepsSub = "";
+    }
 
     const meta = catalogRowMetaNoBeds(cat);
     const bedsHtml = catalogBedsHtml(cat);
@@ -7241,7 +7295,7 @@
     const fitTag = partyTotal > 0
       ? (infantRelaxed
           ? `<div class="rv-fit rv-infant-relax">⚠ Sleeps ${partyTotal - infCountForCard} in beds — your ${infCountForCard === 1 ? "infant isn't counted toward room occupancy and will need a crib" : `${infCountForCard} infants aren't counted toward room occupancy and will need cribs`}. Request ${infCountForCard === 1 ? "one" : "them"} from the hotel (some charge a small fee) and confirm before booking.</div>`
-          : `<div class="rv-fit fits">✓ Fits your family</div>`)
+          : `<div class="rv-fit fits">✓ Fits your family${combo ? ` across ${combo.rooms} rooms` : ""}</div>`)
       : "";
 
     const isBookable = g.rates.length > 0;
@@ -7287,7 +7341,15 @@
           ${thumbStrip}
         </div>
         <div class="room-v2-main">
-          <h4 class="room-v2-name">${escapeHtml(g.name || "Room")}</h4>
+          ${combo
+            ? `<h4 class="room-v2-name">${combo.rooms} rooms</h4>
+          <ul class="room-v2-combo">${combo.types.map((t) => {
+            const m = window.KTRoomSplit.matchCatalogRoom(currentModalCatalogRooms, { name: t });
+            const u = m ? catalogPhotoUrls(m)[0] : null;
+            return `<li>${u ? `<img class="room-v2-combo-photo" src="${escapeHtml(u)}" alt="" loading="lazy" />` : ""}<span>${escapeHtml(t)}</span></li>`;
+          }).join("")}</ul>
+          <p class="room-v2-combo-note">Price covers all ${combo.rooms} rooms together. A room-by-room breakdown appears the next time prices refresh.</p>`
+            : `<h4 class="room-v2-name">${escapeHtml(g.name || "Room")}</h4>`}
           ${sleepsHead ? `<div class="room-v2-sleeps"><b>${escapeHtml(sleepsHead)}</b>${sleepsSub ? ` <span class="rv-sub">(${escapeHtml(sleepsSub)})</span>` : ""}</div>` : ""}
           ${meta ? `<div class="room-v2-meta">${escapeHtml(meta)}</div>` : ""}
           ${bedsHtml}
@@ -7338,6 +7400,132 @@
         <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"} rv-rate-cta" onclick="selectRoomOffer('${safeId}')">${isActive ? "✓ Selected" : "Select"}</button>
       </div>`;
   }
+
+  // ---- Multi-room stays: one row per room ----
+  // Each option is a live per-room rate from the partner (KTRoomSplit);
+  // the stay total is the sum of the picked rooms. Swapping one room
+  // updates the trip total like selecting any other room does.
+  function multiRoomChips(opt) {
+    const ai = opt.board_type === "AI" || /all\s+inclusive/i.test(String(opt.board_name || ""));
+    const board = boardLabel({ is_all_inclusive: ai, board_name: opt.board_name, board_type: opt.board_type });
+    const chips = [`<span class="rv-rate-chip${ai ? " ai" : ""}">${ai ? "✓ " : ""}${escapeHtml(board)}</span>`];
+    if (opt.refundable === true) chips.push(`<span class="rv-rate-chip refund">Free cancellation</span>`);
+    else if (opt.refundable === false) chips.push(`<span class="rv-rate-chip warn">Non-refundable</span>`);
+    return chips.join("");
+  }
+
+  // Room-level photos from the hotel's room catalog (id match, else an
+  // exact name match — see KTRoomSplit.matchCatalogRoom).
+  function multiRoomPhotos(opt) {
+    const cat = window.KTRoomSplit.matchCatalogRoom(currentModalCatalogRooms, opt);
+    return cat ? catalogPhotoUrls(cat) : [];
+  }
+
+  function renderMultiRoomBuilder(rooms) {
+    const S = window.KTRoomSplit;
+    if (!currentModalRoomPicks || currentModalRoomPicks.length !== rooms.length) {
+      const sel = currentModalRooms.find((o) => o.offer_id === currentModalSelectedRoomId);
+      currentModalRoomPicks = S.defaultPicks(rooms, sel);
+    }
+    const picks = currentModalRoomPicks;
+    const total = S.totalFor(rooms, picks);
+    const guests = rooms.reduce((n, r) => n + (Number(r.adults) || 0) + (r.children_ages || []).length, 0);
+
+    const rows = rooms.map((room, k) => {
+      const cur = S.optionFor(room, picks[k]);
+      if (!cur) return "";
+      const photos = multiRoomPhotos(cur);
+      const mainId = `mr-photo-${k}`;
+      const photoHtml = photos.length
+        ? `<div class="mr-room-media">
+            <img id="${mainId}" class="mr-room-photo" src="${escapeHtml(photos[0])}" alt="${escapeHtml(cur.name)}" loading="lazy" />
+            ${photos.length > 1 ? `<div class="rv-thumbs mr-thumbs" data-main-id="${mainId}">${
+              photos.slice(0, 5).map((u, i) => `<button type="button" class="rv-thumb${i === 0 ? " active" : ""}" data-src="${escapeHtml(u)}" aria-label="Photo ${i + 1} of ${escapeHtml(cur.name)}"><img src="${escapeHtml(u)}" alt="" loading="lazy" /></button>`).join("")
+            }</div>` : ""}
+          </div>`
+        : `<div class="mr-room-media mr-room-media-empty" aria-hidden="true"></div>`;
+      const open = currentModalRoomOpen.has(k);
+      const alts = room.options.length - 1;
+      const list = open ? `
+        <ul class="mr-options" role="radiogroup" aria-label="Room ${k + 1} options">
+          ${room.options.map((opt, j) => {
+            const isCur = opt.key === cur.key;
+            const diff = Math.round(opt.total - cur.total);
+            const diffLabel = isCur ? "Current" : `${diff > 0 ? "+" : "−"}${fmtMoney(Math.abs(diff))}`;
+            return `
+              <li>
+                <button type="button" class="mr-option${isCur ? " current" : ""}" role="radio" aria-checked="${isCur}" onclick="pickMultiRoom(${k}, ${j})">
+                  ${(() => { const u = multiRoomPhotos(opt)[0]; return u ? `<img class="mr-option-photo" src="${escapeHtml(u)}" alt="" loading="lazy" />` : `<span class="mr-option-photo mr-option-photo-empty"></span>`; })()}
+                  <span class="mr-option-main">
+                    <span class="mr-option-name">${escapeHtml(opt.name)}</span>
+                    <span class="mr-option-chips">${multiRoomChips(opt)}</span>
+                  </span>
+                  <span class="mr-option-price"><b>${fmtMoney(opt.total)}</b><span class="mr-option-diff${!isCur && diff > 0 ? " up" : ""}">${diffLabel}</span></span>
+                </button>
+              </li>`;
+          }).join("")}
+        </ul>` : "";
+      return `
+        <li class="mr-room">
+          <div class="mr-room-row">
+            ${photoHtml}
+            <div class="mr-room-main">
+              <div class="mr-room-label">Room ${k + 1} <span class="mr-room-guests">· ${escapeHtml(S.guestsLabel(room))}</span></div>
+              <div class="mr-room-name">${escapeHtml(cur.name)}${cur.max_occupancy ? ` <span class="mr-room-sleeps">sleeps ${cur.max_occupancy}</span>` : ""}</div>
+              <div class="mr-room-chips">${multiRoomChips(cur)}</div>
+            </div>
+            <div class="mr-room-price">
+              <b>${fmtMoney(cur.total)}</b>
+              ${alts > 0
+                ? `<button type="button" class="mr-change" aria-expanded="${open}" onclick="toggleMultiRoomOpen(${k})">${open ? "Done" : `Change room (${alts} other${alts === 1 ? "" : "s"})`}</button>`
+                : `<span class="mr-only">Only option for this room</span>`}
+            </div>
+          </div>
+          ${list}
+        </li>`;
+    }).join("");
+
+    return `
+      <div class="mr-builder">
+        <p class="mr-intro">Your party of ${guests} is priced as <b>${rooms.length} separate rooms</b>. Each room has its own live rate. Change any room to upgrade just that room.</p>
+        <ol class="mr-rooms">${rows}</ol>
+        <div class="mr-total">
+          <span>Hotel total for ${rooms.length} rooms</span>
+          <b>${total != null ? fmtMoney(total) : "—"}</b>
+        </div>
+        <p class="mr-book-note">These are separate rooms, not guaranteed to be next to each other. When you book, choose the same room type for each room listed here.</p>
+      </div>`;
+  }
+
+  function toggleMultiRoomOpen(k) {
+    if (currentModalRoomOpen.has(k)) currentModalRoomOpen.delete(k);
+    else currentModalRoomOpen.add(k);
+    rerenderRoomGrid();
+  }
+  window.toggleMultiRoomOpen = toggleMultiRoomOpen;
+
+  function pickMultiRoom(k, j) {
+    const S = window.KTRoomSplit;
+    const rooms = S.buildRoomOptions(currentModalRooms);
+    const opt = rooms[k] && rooms[k].options[j];
+    if (!opt || !currentModalRoomPicks || !currentModalPackage) return;
+    currentModalRoomPicks[k] = opt.key;
+    currentModalRoomOpen.delete(k);
+    const total = S.totalFor(rooms, currentModalRoomPicks);
+    if (total == null) { rerenderRoomGrid(); return; }
+    // Keep a stored offer id when the picks match one exactly; a custom
+    // mix of rooms has no single offer id.
+    const match = S.matchingOffer(currentModalRooms, rooms, currentModalRoomPicks);
+    currentModalSelectedRoomId = match ? match.offer_id : null;
+    let flightPrice = Math.round(Number(currentModalPackage.flight_price) || 0);
+    if (currentModalSelectedOfferId) {
+      const f = currentModalFlights.find((x) => x.offer_id === currentModalSelectedOfferId);
+      if (f) flightPrice = Math.round(Number(f.total_price) || 0);
+    }
+    updateTotalsInPlace(flightPrice, Math.round(total));
+    rerenderRoomGrid();
+  }
+  window.pickMultiRoom = pickMultiRoom;
 
   function toggleRoomVariantsExpand(key) {
     if (currentModalExpandedRates.has(key)) currentModalExpandedRates.delete(key);

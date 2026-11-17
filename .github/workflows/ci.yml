@@ -61,11 +61,13 @@ jobs:
           console.log(`index.html inline JS OK (${blocks.length} blocks checked; app script = ${largest} chars)`);
           EOF
 
-      - name: Syntax-check resort-booking.js, party.js and flex-dates.js
+      - name: Syntax-check resort-booking.js, party.js and the shared front-end modules
         run: |
           node --check resort-booking.js
           node --check party.js
           node --check flex-dates.js
+          node --check room-split.js
+          node --check rich-text.js
 
       - name: Regenerate SEO pages (must not error)
         run: node scripts/generate-seo-pages.mjs
