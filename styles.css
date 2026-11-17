@@ -9681,6 +9681,39 @@ body.body-lock {
 }
 .party-notice[hidden] { display: none; }
 
+/* ---- Flexible dates (±1 day) strip + card note (flex-dates.js) ---- */
+.flex-strip { margin: 0 0 16px; }
+.flex-strip-cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.flex-cell { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font: inherit; color: var(--ink); }
+button.flex-cell { cursor: pointer; }
+button.flex-cell:hover { border-color: var(--ink-3); }
+.flex-cell.is-base { background: var(--bg-soft); border-color: var(--ink); }
+.flex-cell.is-cheapest { border-color: #1F6F3B; box-shadow: 0 0 0 1px #1F6F3B inset; }
+.flex-cell-label { font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.flex-cell-best { text-transform: none; letter-spacing: 0; font-size: 11px; color: #1F6F3B; background: #F0F8F2; border: 1px solid #C8E6CF; border-radius: 999px; padding: 0 6px; }
+.flex-cell-dates { font-size: 14px; font-weight: 600; }
+.flex-cell-price { font-size: 14px; color: var(--ink-1); }
+.flex-cell-price b { font-size: 16px; color: var(--ink); }
+.flex-cell-price.pending, .flex-cell-price.none { color: var(--ink-3); }
+.flex-strip-note { margin: 6px 0 0; font-size: 12px; color: var(--ink-3); }
+.flex-note { display: block; margin: 6px 0 0; padding: 0; background: none; border: 0; font: inherit; font-size: 13px; font-weight: 600; color: #1F6F3B; text-align: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 640px) {
+  .flex-strip-cells { gap: 6px; }
+  .flex-cell { padding: 8px; }
+  .flex-cell-label { font-size: 10px; }
+  .flex-cell-dates { font-size: 12px; }
+  .flex-cell-price, .flex-cell-price b { font-size: 13px; }
+}
+/* Date flexibility choice inside the calendar */
+.kt-cal-flex { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.kt-cal-flex-opt {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-1);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.kt-cal-flex-opt:hover { border-color: var(--line-strong); }
+.kt-cal-flex-opt.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.kt-cal-flex-hint { font-size: 12px; color: var(--ink-3); margin-left: 4px; }
+
 /* ---- Multi-room stays: one row per room (room-split.js) ---- */
 .mr-builder { display: flex; flex-direction: column; gap: 14px; }
 .mr-intro { margin: 0; color: var(--ink-1); font-size: 15px; line-height: 1.5; }

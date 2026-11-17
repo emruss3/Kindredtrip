@@ -60,7 +60,7 @@
 <link rel="preload" as="image" fetchpriority="high" media="(max-width: 720px)"
       href="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=70" />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css?v=20261117-room-split" />
+<link rel="stylesheet" href="/styles.css?v=20261117-rooms-flex" />
 <meta name="kt-build" content="20260520-score-retune" />
 
 <!-- Structured data -->
@@ -834,6 +834,7 @@
 </footer>
 
 <script src="/party.js"></script>
+<script src="/flex-dates.js"></script>
 <script src="/room-split.js"></script>
 <script src="/rich-text.js"></script>
 <script>
@@ -938,6 +939,10 @@
   var KT_pickers = [];
   var KT_cal = null, KT_backdrop = null, KT_calCtx = null, KT_viewMonth = null, KT_closeTimer = null;
   var KT_sel = { start: null, end: null };
+  // Date flexibility, chosen in the calendar ("Exact dates" / "±1 day").
+  // One setting shared by the homepage and edit-search pickers; ±1 day
+  // re-prices the top trips a day either side after the main search.
+  var KT_flexDates = true;
   const KT_MS_DAY = 86400000;
   function KT_fmtLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
   function KT_parse(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
@@ -949,7 +954,7 @@
   function KT_shortLabel(s) { const d = KT_parse(s); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; }
   function KT_nights(a, b) { const da = KT_parse(a), db = KT_parse(b); return (da && db) ? Math.round((db - da) / KT_MS_DAY) : 0; }
   function KT_triggerLabel(sStr, eStr) {
-    if (sStr && eStr) { const n = KT_nights(sStr, eStr); return `${KT_shortLabel(sStr)} – ${KT_shortLabel(eStr)}  ·  ${n} night${n === 1 ? "" : "s"}`; }
+    if (sStr && eStr) { const n = KT_nights(sStr, eStr); return `${KT_shortLabel(sStr)} – ${KT_shortLabel(eStr)}  ·  ${n} night${n === 1 ? "" : "s"}${KT_flexDates ? "  ·  ±1 day" : ""}`; }
     if (sStr) return `${KT_shortLabel(sStr)} – Add check-out`;
     return "Add dates";
   }
@@ -979,6 +984,11 @@
         '<div class="kt-cal-months" id="kt-cal-months"></div>' +
         '<button type="button" class="kt-cal-nav" data-nav="1" aria-label="Next month">›</button>' +
       '</div>' +
+      '<div class="kt-cal-flex" role="radiogroup" aria-label="How flexible are your dates?">' +
+        '<button type="button" class="kt-cal-flex-opt" role="radio" data-flex="0">Exact dates</button>' +
+        '<button type="button" class="kt-cal-flex-opt" role="radio" data-flex="1">± 1 day</button>' +
+        '<span class="kt-cal-flex-hint" id="kt-cal-flex-hint"></span>' +
+      '</div>' +
       '<div class="kt-cal-foot">' +
         '<div class="kt-cal-nights" id="kt-cal-nights"></div>' +
         '<div class="kt-cal-presets" id="kt-cal-presets"></div>' +
@@ -995,6 +1005,22 @@
       pc.appendChild(b);
     });
     KT_cal.querySelector("#kt-cal-done").addEventListener("click", KT_closeCal);
+    KT_cal.querySelectorAll("[data-flex]").forEach((b) => b.addEventListener("click", () => {
+      KT_flexDates = b.dataset.flex === "1";
+      KT_syncFlexUI();
+      KT_refreshDatePickers();
+    }));
+  }
+
+  function KT_syncFlexUI() {
+    if (!KT_cal) return;
+    KT_cal.querySelectorAll("[data-flex]").forEach((b) => {
+      const on = (b.dataset.flex === "1") === KT_flexDates;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const hint = KT_cal.querySelector("#kt-cal-flex-hint");
+    if (hint) hint.textContent = KT_flexDates ? "We'll also check a day earlier and later" : "";
   }
 
   function KT_renderMonth(first) {
@@ -1102,6 +1128,7 @@
     KT_viewMonth = KT_firstOfMonth(base);
     KT_cal.hidden = false;
     KT_renderCal();
+    KT_syncFlexUI();
     KT_positionCal(ctx.trigger);
     ctx.trigger.setAttribute("aria-expanded", "true");
     setTimeout(() => document.addEventListener("mousedown", KT_outside, true), 0);
@@ -2507,7 +2534,7 @@
     const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const parts = [
       `<b>${escapeHtml(body.origin_iata)}</b>`,
-      `${fmt(body.date_start)} – ${fmt(body.date_end)}`,
+      `${fmt(body.date_start)} – ${fmt(body.date_end)}${KT_flexDates ? " (±1 day)" : ""}`,
       `${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}`,
     ];
     line.innerHTML = parts.join(" · ");
@@ -2724,6 +2751,143 @@
     else document.addEventListener("DOMContentLoaded", run);
   })();
 
+  // ---- Flexible dates (±1 day) ----
+  // After the main search renders live results, re-price its top resorts
+  // with the whole trip one day earlier and one day later (scoped searches,
+  // same party/airport/nights). flexState drives the date strip above the
+  // results and the "save $X" note on cards. flexRunId guards against a
+  // newer search: stale runs are dropped.
+  const FLEX_TOP_N = 12;
+  let flexRunId = 0;
+  let flexState = null;
+
+  async function runFlexWindow(baseBody, win, resortIds, runId) {
+    const body = {
+      ...baseBody,
+      date_start: win.date_start,
+      date_end: win.date_end,
+      included_resort_ids: resortIds,
+      // The chosen resorts are already filtered by the main search; don't
+      // let a flag drop one of them in a neighbouring window.
+      require_kids_club: false,
+      require_all_inclusive: false,
+      require_direct_flight: false,
+    };
+    const search = await callFn("Search", { method: "POST", body: JSON.stringify(body) });
+    const sid = search && search.search_id;
+    if (!sid) throw new Error("no search_id");
+    // Wait for the scoped packages, then price them.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 30000) {
+      if (runId !== flexRunId) return null;
+      const d = await callFn(`get_packages?search_id=${sid}&limit=1`, { method: "GET" });
+      if ((d?.summary?.total_packages ?? 0) > 0) break;
+      await sleep(1000);
+    }
+    callFn("start_pricing", { method: "POST", body: JSON.stringify({ search_id: sid }) }).catch(() => {});
+    let live = [];
+    let stable = 0;
+    const t1 = Date.now();
+    while (Date.now() - t1 < 90000) {
+      await sleep(2500);
+      if (runId !== flexRunId) return null;
+      const d = await callFn(`get_packages?search_id=${sid}&limit=200&only_priced=true&strict_live_only=true`, { method: "GET" });
+      const prev = live.length;
+      live = (d?.packages || []).filter(KTFlexDates.isLive);
+      // Stop when pricing has settled, every resort is live, or the live
+      // count has held steady for ~10s (a straggler that never prices
+      // shouldn't keep the strip on "Checking…").
+      if (d?.summary?.pricing_settled === true || live.length >= resortIds.length) break;
+      stable = live.length > 0 && live.length === prev ? stable + 1 : 0;
+      if (stable >= 4) break;
+    }
+    return live;
+  }
+
+  async function startFlexDates(baseBody) {
+    if (!window.KTFlexDates) return;
+    const runId = flexRunId;
+    const resortIds = KTFlexDates.pickResorts(applyClientSort(allPackages.slice()), FLEX_TOP_N);
+    const today = new Date().toISOString().slice(0, 10);
+    const windows = KTFlexDates.flexWindows(baseBody.date_start, baseBody.date_end, today);
+    if (resortIds.length === 0 || windows.length === 0) return;
+    flexState = {
+      base: { date_start: baseBody.date_start, date_end: baseBody.date_end },
+      resortIds, windows: windows.map((w) => ({ ...w, status: "loading", packages: [] })),
+      rows: null, savings: {},
+    };
+    const recompute = () => {
+      if (runId !== flexRunId || !flexState) return;
+      const basePkgs = allPackages;
+      flexState.rows = KTFlexDates.summarize({ ...flexState.base, packages: basePkgs }, flexState.windows, resortIds);
+      const done = flexState.windows.filter((w) => w.status === "done");
+      flexState.savings = KTFlexDates.savingsByResort(basePkgs, done, resortIds, 25);
+      renderResults();
+    };
+    recompute();
+    await Promise.all(flexState.windows.map(async (w) => {
+      try {
+        const pkgs = await runFlexWindow(baseBody, w, resortIds, runId);
+        if (pkgs == null) return;
+        w.packages = pkgs;
+        w.status = "done";
+      } catch (e) {
+        console.warn("[flex-dates] window failed:", w.offset, e?.message || e);
+        w.status = "error";
+      }
+      recompute();
+    }));
+  }
+
+  function renderFlexStrip() {
+    if (!flexState || !flexState.rows || !window.KTFlexDates) return "";
+    const F = KTFlexDates;
+    const cells = flexState.rows.map((r) => {
+      const isBase = r.offset === 0;
+      const label = r.offset === 0 ? "Your dates" : (r.offset < 0 ? "1 day earlier" : "1 day later");
+      const win = r.offset === 0 ? r : flexState.windows.find((w) => w.offset === r.offset);
+      const status = r.offset === 0 ? "done" : (win ? win.status : "done");
+      let price;
+      if (status === "loading") price = `<span class="flex-cell-price pending">Checking…</span>`;
+      else if (r.cheapest) price = `<span class="flex-cell-price">from <b>${fmtMoney(r.cheapest.total)}</b></span>`;
+      else price = `<span class="flex-cell-price none">No live price</span>`;
+      const tag = `${isBase ? "div" : "button type=\"button\""}`;
+      const close = isBase ? "div" : "button";
+      const click = isBase ? "" : ` onclick="pickFlexWindow('${r.date_start}', '${r.date_end}')" aria-label="Search ${escapeHtml(F.dayLabel(r.date_start))} to ${escapeHtml(F.dayLabel(r.date_end))}"`;
+      return `<${tag} class="flex-cell${isBase ? " is-base" : ""}${r.isCheapest ? " is-cheapest" : ""}"${click}>
+          <span class="flex-cell-label">${label}${r.isCheapest ? ` <span class="flex-cell-best">Cheapest</span>` : ""}</span>
+          <span class="flex-cell-dates">${escapeHtml(F.dayLabel(r.date_start))} – ${escapeHtml(F.dayLabel(r.date_end))}</span>
+          ${price}
+        </${close}>`;
+    }).join("");
+    return `
+      <div class="flex-strip" role="group" aria-label="Prices one day either side of your dates">
+        <div class="flex-strip-cells">${cells}</div>
+        <p class="flex-strip-note">Lowest live total among your top ${flexState.resortIds.length} trips, same nights and party. Tap a date to search it.</p>
+      </div>`;
+  }
+
+  function flexNoteHtml(p) {
+    const s = flexState && flexState.savings ? flexState.savings[p.resort_id] : null;
+    if (!s || !window.KTFlexDates) return "";
+    const when = s.offset < 0 ? "a day earlier" : "a day later";
+    return `<button type="button" class="flex-note" onclick="event.stopPropagation(); pickFlexWindow('${s.date_start}', '${s.date_end}')" title="Search ${escapeHtml(KTFlexDates.dayLabel(s.date_start))} – ${escapeHtml(KTFlexDates.dayLabel(s.date_end))}">Save ${fmtMoney(s.saving)} leaving ${when} (${escapeHtml(KTFlexDates.dayLabel(s.date_start))})</button>`;
+  }
+
+  // Re-run the full search on a neighbouring window.
+  function pickFlexWindow(dateStart, dateEnd) {
+    const ds = document.getElementById("date_start"), de = document.getElementById("date_end");
+    if (!ds || !de) return;
+    ds.value = dateStart; de.value = dateEnd;
+    const pds = document.getElementById("po_date_start"), pde = document.getElementById("po_date_end");
+    if (pds) pds.value = dateStart;
+    if (pde) pde.value = dateEnd;
+    try { KT_refreshDatePickers(); } catch (_) {}
+    trackEvent("filter_applied", { filter: "flex_dates_window" });
+    runSearch();
+  }
+  window.pickFlexWindow = pickFlexWindow;
+
   async function runSearch() {
     // Phase-level timing so we can pinpoint where any future user-perceived
     // slowness lives. Open DevTools → Performance panel → recorded marks, or
@@ -2761,6 +2925,12 @@
       const flagInputs = document.querySelectorAll(".search-extras input[type=checkbox]");
       const flags = {};
       flagInputs.forEach((cb) => { flags[cb.dataset.flag] = cb.checked; });
+      // ±1 day comes from the date picker (KT_flexDates). It's a
+      // client-side option (extra scoped searches after this one), never
+      // part of the Search request.
+      const flexDates = KT_flexDates === true;
+      flexRunId++;
+      flexState = null;
 
       const dateStart = document.getElementById("date_start").value;
       const dateEnd = document.getElementById("date_end").value;
@@ -2948,6 +3118,7 @@
       // already (LiteAPI batches it completed, or price_flights_for_search
       // ran in parallel).
       try { await fetchAndRender(); } catch (e) { console.error("[fetchAndRender] error:", e); }
+      if (flexDates && !directTripMode) startFlexDates(body);
 
       if (pricingError) {
         // Soft warning instead of a hard error wall. The user still sees
@@ -3617,7 +3788,7 @@
         : renderListRest(visible, rankBadges, budgetBadges);
     }
 
-    main.innerHTML = headerHtml + filterPills + body;
+    main.innerHTML = headerHtml + filterPills + renderFlexStrip() + body;
 
     // Funnel: first time we actually paint result cards for this search.
     // This is the "did the user survive the wait" milestone, and it ends
@@ -4791,7 +4962,8 @@
             <span class="dot">·</span>
             <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
           </div>
-          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}` : pendingPriceHtml()}
+          ${delta ? `<div class="budget-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} budget</div>` : ""}
+          ${flexNoteHtml(p)}` : pendingPriceHtml()}
           <button class="btn btn-primary" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
           <div class="card-sub-actions">
             <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
@@ -4863,7 +5035,8 @@
               <span class="dot">·</span>
               <span><b>${fmtMoney(p.hotel_price)}</b> hotel</span>
             </div>
-            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}` : pendingPriceHtml("hero-price-eyebrow")}
+            ${delta ? `<div class="hero-delta ${delta.under ? "under" : "over"}">${fmtMoney(delta.diff)} ${delta.under ? "under" : "over"} your budget</div>` : ""}
+            ${flexNoteHtml(p)}` : pendingPriceHtml("hero-price-eyebrow")}
             <button class="btn btn-primary hero-cta" onclick="event.stopPropagation(); openResortModal('${p.package_id}')">See trip details →</button>
             <div class="card-sub-actions">
               <button class="btn-compare-link${isCompared ? " active" : ""}" onclick="toggleCompare('${p.package_id}', event)">${isCompared ? "✓ In compare" : "+ Compare"}</button>
