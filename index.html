@@ -942,7 +942,8 @@
   // Date flexibility, chosen in the calendar ("Exact dates" / "±1 day").
   // One setting shared by the homepage and edit-search pickers; ±1 day
   // re-prices the top trips a day either side after the main search.
-  var KT_flexDates = true;
+  // Exact dates by default; ±1 day is opt-in.
+  var KT_flexDates = false;
   const KT_MS_DAY = 86400000;
   function KT_fmtLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
   function KT_parse(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
