@@ -214,7 +214,6 @@
       <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
       <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
       <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights only</label>
-      <label class="toggle active" title="Also price the top trips one day earlier and one day later"><input type="checkbox" data-flag="flex_dates" checked />±1 day</label>
     </div>
   </form>
 </div>
@@ -399,7 +398,6 @@
         <label class="toggle"><input type="checkbox" data-flag="require_kids_club" />Kids club</label>
         <label class="toggle"><input type="checkbox" data-flag="require_all_inclusive" />All-inclusive</label>
         <label class="toggle"><input type="checkbox" data-flag="require_direct_flight" />Direct flights</label>
-        <label class="toggle active" title="Also price the top trips one day earlier and one day later"><input type="checkbox" data-flag="flex_dates" checked />±1 day</label>
         <label class="toggle toggle-select" for="max_flight_hours">
           <span class="toggle-select-label">Max travel time:</span>
           <select id="max_flight_hours" aria-label="Max travel time">
@@ -939,6 +937,10 @@
   var KT_pickers = [];
   var KT_cal = null, KT_backdrop = null, KT_calCtx = null, KT_viewMonth = null, KT_closeTimer = null;
   var KT_sel = { start: null, end: null };
+  // Date flexibility, chosen in the calendar ("Exact dates" / "±1 day").
+  // One setting shared by the homepage and edit-search pickers; ±1 day
+  // re-prices the top trips a day either side after the main search.
+  var KT_flexDates = true;
   const KT_MS_DAY = 86400000;
   function KT_fmtLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
   function KT_parse(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
@@ -950,7 +952,7 @@
   function KT_shortLabel(s) { const d = KT_parse(s); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; }
   function KT_nights(a, b) { const da = KT_parse(a), db = KT_parse(b); return (da && db) ? Math.round((db - da) / KT_MS_DAY) : 0; }
   function KT_triggerLabel(sStr, eStr) {
-    if (sStr && eStr) { const n = KT_nights(sStr, eStr); return `${KT_shortLabel(sStr)} – ${KT_shortLabel(eStr)}  ·  ${n} night${n === 1 ? "" : "s"}`; }
+    if (sStr && eStr) { const n = KT_nights(sStr, eStr); return `${KT_shortLabel(sStr)} – ${KT_shortLabel(eStr)}  ·  ${n} night${n === 1 ? "" : "s"}${KT_flexDates ? "  ·  ±1 day" : ""}`; }
     if (sStr) return `${KT_shortLabel(sStr)} – Add check-out`;
     return "Add dates";
   }
@@ -980,6 +982,11 @@
         '<div class="kt-cal-months" id="kt-cal-months"></div>' +
         '<button type="button" class="kt-cal-nav" data-nav="1" aria-label="Next month">›</button>' +
       '</div>' +
+      '<div class="kt-cal-flex" role="radiogroup" aria-label="How flexible are your dates?">' +
+        '<button type="button" class="kt-cal-flex-opt" role="radio" data-flex="0">Exact dates</button>' +
+        '<button type="button" class="kt-cal-flex-opt" role="radio" data-flex="1">± 1 day</button>' +
+        '<span class="kt-cal-flex-hint" id="kt-cal-flex-hint"></span>' +
+      '</div>' +
       '<div class="kt-cal-foot">' +
         '<div class="kt-cal-nights" id="kt-cal-nights"></div>' +
         '<div class="kt-cal-presets" id="kt-cal-presets"></div>' +
@@ -996,6 +1003,22 @@
       pc.appendChild(b);
     });
     KT_cal.querySelector("#kt-cal-done").addEventListener("click", KT_closeCal);
+    KT_cal.querySelectorAll("[data-flex]").forEach((b) => b.addEventListener("click", () => {
+      KT_flexDates = b.dataset.flex === "1";
+      KT_syncFlexUI();
+      KT_refreshDatePickers();
+    }));
+  }
+
+  function KT_syncFlexUI() {
+    if (!KT_cal) return;
+    KT_cal.querySelectorAll("[data-flex]").forEach((b) => {
+      const on = (b.dataset.flex === "1") === KT_flexDates;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const hint = KT_cal.querySelector("#kt-cal-flex-hint");
+    if (hint) hint.textContent = KT_flexDates ? "We'll also check a day earlier and later" : "";
   }
 
   function KT_renderMonth(first) {
@@ -1103,6 +1126,7 @@
     KT_viewMonth = KT_firstOfMonth(base);
     KT_cal.hidden = false;
     KT_renderCal();
+    KT_syncFlexUI();
     KT_positionCal(ctx.trigger);
     ctx.trigger.setAttribute("aria-expanded", "true");
     setTimeout(() => document.addEventListener("mousedown", KT_outside, true), 0);
@@ -2508,7 +2532,7 @@
     const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const parts = [
       `<b>${escapeHtml(body.origin_iata)}</b>`,
-      `${fmt(body.date_start)} – ${fmt(body.date_end)}`,
+      `${fmt(body.date_start)} – ${fmt(body.date_end)}${KT_flexDates ? " (±1 day)" : ""}`,
       `${adults} adult${adults === 1 ? "" : "s"}${kids > 0 ? `, ${kids} kid${kids === 1 ? "" : "s"}` : ""}`,
     ];
     line.innerHTML = parts.join(" · ");
@@ -2899,10 +2923,10 @@
       const flagInputs = document.querySelectorAll(".search-extras input[type=checkbox]");
       const flags = {};
       flagInputs.forEach((cb) => { flags[cb.dataset.flag] = cb.checked; });
-      // ±1 day is a client-side option (extra scoped searches after this
-      // one), not a Search filter — keep it out of the request body.
-      const flexDates = flags.flex_dates === true;
-      delete flags.flex_dates;
+      // ±1 day comes from the date picker (KT_flexDates). It's a
+      // client-side option (extra scoped searches after this one), never
+      // part of the Search request.
+      const flexDates = KT_flexDates === true;
       flexRunId++;
       flexState = null;
 

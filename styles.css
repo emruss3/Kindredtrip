@@ -9704,3 +9704,12 @@ button.flex-cell:hover { border-color: var(--ink-3); }
   .flex-cell-dates { font-size: 12px; }
   .flex-cell-price, .flex-cell-price b { font-size: 13px; }
 }
+/* Date flexibility choice inside the calendar */
+.kt-cal-flex { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.kt-cal-flex-opt {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-1);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.kt-cal-flex-opt:hover { border-color: var(--line-strong); }
+.kt-cal-flex-opt.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.kt-cal-flex-hint { font-size: 12px; color: var(--ink-3); margin-left: 4px; }
